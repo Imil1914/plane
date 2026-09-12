@@ -1,0 +1,20 @@
+{
+  "name": "PPM — проектный интеллект",
+  "short_name": "PPM",
+  "description": "Единое пространство для проектов, знаний и решений команды.",
+  "lang": "ru",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0E0F12",
+  "theme_color": "#0E0F12",
+  "icons": [
+    {
+      "src": "/ppm-brand/mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

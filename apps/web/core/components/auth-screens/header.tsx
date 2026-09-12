@@ -10,9 +10,12 @@ import Link from "next/link";
 import { AUTH_TRACKER_ELEMENTS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { PlaneLockup } from "@plane/propel/icons";
+import { isPpmBrandEnabled, PPM_BRAND } from "@ppm/brand";
 import { PageHead } from "@/components/core/page-title";
 import { EAuthModes } from "@/helpers/authentication.helper";
 import { useInstance } from "@/hooks/store/use-instance";
+
+const IS_PPM_BRAND_ENABLED = isPpmBrandEnabled(process.env.PPM_BRAND_ENABLED);
 
 const authContentMap = {
   [EAuthModes.SIGN_IN]: {
@@ -70,10 +73,14 @@ export function AuthHeaderBase(props: TAuthHeaderBase) {
   const { pageTitle, additionalAction } = props;
   return (
     <>
-      <PageHead title={pageTitle + " - Plane"} />
+      <PageHead title={`${pageTitle} - ${IS_PPM_BRAND_ENABLED ? PPM_BRAND.name : "Plane"}`} />
       <div className="sticky top-0 flex w-full flex-shrink-0 items-center justify-between gap-6">
         <Link href="/">
-          <PlaneLockup height={20} width={95} className="text-primary" />
+          {IS_PPM_BRAND_ENABLED ? (
+            <img alt={PPM_BRAND.name} className="h-8 w-auto text-primary" height={32} src={PPM_BRAND.assets.logo} />
+          ) : (
+            <PlaneLockup height={20} width={95} className="text-primary" />
+          )}
         </Link>
         {additionalAction}
       </div>

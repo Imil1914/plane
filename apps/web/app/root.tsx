@@ -12,6 +12,7 @@ import { ThemeProvider, useTheme } from "next-themes";
 // plane imports
 import { SITE_DESCRIPTION, SITE_NAME } from "@plane/constants";
 import { cn } from "@plane/utils";
+import { isPpmBrandEnabled, PPM_BRAND } from "@ppm/brand";
 // types
 // assets
 import favicon16 from "@/app/assets/favicon/favicon-16x16.png?url";
@@ -32,44 +33,60 @@ import { AppProvider } from "./provider";
 // fonts
 import "@fontsource-variable/inter";
 import interVariableWoff2 from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
+import "@fontsource-variable/ibm-plex-sans";
+import "@fontsource-variable/jetbrains-mono";
 import "@fontsource/material-symbols-rounded";
 import "@fontsource/ibm-plex-mono";
 
-const APP_TITLE = "Plane | Simple, extensible, open-source project management tool.";
+const IS_PPM_BRAND_ENABLED = isPpmBrandEnabled(process.env.PPM_BRAND_ENABLED);
+const PLANE_APP_TITLE = "Plane | Simple, extensible, open-source project management tool.";
 
-export const links: LinksFunction = () => [
-  { rel: "icon", type: "image/png", sizes: "32x32", href: favicon32 },
-  { rel: "icon", type: "image/png", sizes: "16x16", href: favicon16 },
-  { rel: "shortcut icon", href: faviconIco },
-  { rel: "manifest", href: "/site.webmanifest.json" },
-  { rel: "apple-touch-icon", href: icon512 },
-  { rel: "apple-touch-icon", sizes: "180x180", href: icon180 },
-  { rel: "apple-touch-icon", sizes: "512x512", href: icon512 },
-  { rel: "manifest", href: "/manifest.json" },
-  { rel: "stylesheet", href: globalStyles },
-  {
-    rel: "preload",
-    href: interVariableWoff2,
-    as: "font",
-    type: "font/woff2",
-    crossOrigin: "anonymous",
-  },
-];
+export const links: LinksFunction = () => {
+  const brandLinks = IS_PPM_BRAND_ENABLED
+    ? [
+        { rel: "icon", type: "image/svg+xml", href: PPM_BRAND.assets.mark },
+        { rel: "shortcut icon", type: "image/svg+xml", href: PPM_BRAND.assets.mark },
+        { rel: "apple-touch-icon", href: PPM_BRAND.assets.mark },
+        { rel: "manifest", href: PPM_BRAND.assets.manifest },
+      ]
+    : [
+        { rel: "icon", type: "image/png", sizes: "32x32", href: favicon32 },
+        { rel: "icon", type: "image/png", sizes: "16x16", href: favicon16 },
+        { rel: "shortcut icon", href: faviconIco },
+        { rel: "manifest", href: "/site.webmanifest.json" },
+        { rel: "apple-touch-icon", href: icon512 },
+        { rel: "apple-touch-icon", sizes: "180x180", href: icon180 },
+        { rel: "apple-touch-icon", sizes: "512x512", href: icon512 },
+        { rel: "manifest", href: "/manifest.json" },
+      ];
+
+  return [
+    ...brandLinks,
+    { rel: "stylesheet", href: globalStyles },
+    {
+      rel: "preload",
+      href: interVariableWoff2,
+      as: "font",
+      type: "font/woff2",
+      crossOrigin: "anonymous",
+    },
+  ];
+};
 
 export function Layout({ children }: { children: ReactNode }) {
   const isSessionRecorderEnabled = parseInt(process.env.VITE_ENABLE_SESSION_RECORDER || "0");
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html data-ppm-brand={IS_PPM_BRAND_ENABLED ? "enabled" : "disabled"} lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="theme-color" content="#fff" />
+        <meta name="theme-color" content={IS_PPM_BRAND_ENABLED ? PPM_BRAND.themeColor : "#fff"} />
         {/* Meta info for PWA */}
-        <meta name="application-name" content="Plane" />
+        <meta name="application-name" content={IS_PPM_BRAND_ENABLED ? PPM_BRAND.name : "Plane"} />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content={SITE_NAME} />
+        <meta name="apple-mobile-web-app-title" content={IS_PPM_BRAND_ENABLED ? PPM_BRAND.name : SITE_NAME} />
         <meta name="format-detection" content="telephone=no" />
         <meta name="mobile-web-app-capable" content="yes" />
         <Meta />
@@ -78,7 +95,10 @@ export function Layout({ children }: { children: ReactNode }) {
       <body suppressHydrationWarning>
         <div id="context-menu-portal" />
         <div id="editor-portal" />
-        <ThemeProvider themes={["light", "dark", "light-contrast", "dark-contrast", "custom"]} defaultTheme="system">
+        <ThemeProvider
+          themes={["light", "dark", "light-contrast", "dark-contrast", "custom"]}
+          defaultTheme={IS_PPM_BRAND_ENABLED ? "dark" : "system"}
+        >
           {children}
         </ThemeProvider>
         <Scripts />
@@ -96,31 +116,45 @@ export function Layout({ children }: { children: ReactNode }) {
   );
 }
 
-export const meta: Route.MetaFunction = () => [
-  { title: APP_TITLE },
-  { name: "description", content: SITE_DESCRIPTION },
-  { property: "og:title", content: APP_TITLE },
-  {
-    property: "og:description",
-    content: "Open-source project management tool to manage work items, cycles, and product roadmaps easily",
-  },
-  { property: "og:url", content: "https://app.plane.so/" },
-  { property: "og:image", content: ogImage },
-  { property: "og:image:width", content: "1200" },
-  { property: "og:image:height", content: "630" },
-  { property: "og:image:alt", content: "Plane - Modern project management" },
-  {
-    name: "keywords",
-    content:
-      "software development, plan, ship, software, accelerate, code management, release management, project management, work item tracking, agile, scrum, kanban, collaboration",
-  },
-  { name: "twitter:site", content: "@planepowers" },
-  { name: "twitter:card", content: "summary_large_image" },
-  { name: "twitter:image", content: ogImage },
-  { name: "twitter:image:width", content: "1200" },
-  { name: "twitter:image:height", content: "630" },
-  { name: "twitter:image:alt", content: "Plane - Modern project management" },
-];
+export const meta: Route.MetaFunction = () =>
+  IS_PPM_BRAND_ENABLED
+    ? [
+        { title: PPM_BRAND.title },
+        { name: "description", content: PPM_BRAND.description },
+        { property: "og:title", content: PPM_BRAND.title },
+        { property: "og:description", content: PPM_BRAND.description },
+        { property: "og:image", content: PPM_BRAND.assets.mark },
+        { property: "og:image:alt", content: PPM_BRAND.name },
+        { name: "keywords", content: "проекты, знания, решения, управление проектами, PPM" },
+        { name: "twitter:card", content: "summary" },
+        { name: "twitter:image", content: PPM_BRAND.assets.mark },
+        { name: "twitter:image:alt", content: PPM_BRAND.name },
+      ]
+    : [
+        { title: PLANE_APP_TITLE },
+        { name: "description", content: SITE_DESCRIPTION },
+        { property: "og:title", content: PLANE_APP_TITLE },
+        {
+          property: "og:description",
+          content: "Open-source project management tool to manage work items, cycles, and product roadmaps easily",
+        },
+        { property: "og:url", content: "https://app.plane.so/" },
+        { property: "og:image", content: ogImage },
+        { property: "og:image:width", content: "1200" },
+        { property: "og:image:height", content: "630" },
+        { property: "og:image:alt", content: "Plane - Modern project management" },
+        {
+          name: "keywords",
+          content:
+            "software development, plan, ship, software, accelerate, code management, release management, project management, work item tracking, agile, scrum, kanban, collaboration",
+        },
+        { name: "twitter:site", content: "@planepowers" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:image", content: ogImage },
+        { name: "twitter:image:width", content: "1200" },
+        { name: "twitter:image:height", content: "630" },
+        { name: "twitter:image:alt", content: "Plane - Modern project management" },
+      ];
 
 export default function Root() {
   return (

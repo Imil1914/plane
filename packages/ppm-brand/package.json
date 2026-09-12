@@ -1,0 +1,35 @@
+{
+  "name": "@ppm/brand",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json",
+    "./tokens.css": "./src/tokens.css",
+    "./assets/mark.svg": "./assets/mark.svg",
+    "./assets/logo.svg": "./assets/logo.svg"
+  },
+  "scripts": {
+    "dev": "tsdown --watch --no-clean",
+    "build": "tsdown",
+    "test": "vitest run",
+    "check:lint": "oxlint .",
+    "check:types": "tsc --noEmit",
+    "check:format": "oxfmt --check src tsdown.config.ts package.json tsconfig.json build-manifest.json",
+    "fix:lint": "oxlint --fix .",
+    "fix:format": "oxfmt src tsdown.config.ts package.json tsconfig.json build-manifest.json",
+    "clean": "rm -rf .turbo node_modules dist"
+  },
+  "devDependencies": {
+    "@plane/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

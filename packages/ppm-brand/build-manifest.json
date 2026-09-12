@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "brand": "PPM",
+  "plane": {
+    "component": "Plane Community",
+    "version": "1.4.2",
+    "releaseTag": "v1.4.2",
+    "baselineCommit": "5f7d92784c403f76284f0f16718f320221dc7fec",
+    "upstreamRepository": "https://github.com/makeplane/plane",
+    "forkRepository": "https://github.com/Imil1914/plane",
+    "license": "AGPL-3.0-only"
+  }
+}

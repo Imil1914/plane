@@ -15,6 +15,10 @@ export const coreRoutes: RouteConfigEntry[] = [
   // Home - Sign In
   layout("./(home)/layout.tsx", [index("./(home)/page.tsx")]),
 
+  // PPM brand foundation and open-source attribution
+  route("about/open-source", "./(home)/about/open-source/page.tsx"),
+  route("about/brand-foundation", "./(home)/about/brand-foundation/page.tsx"),
+
   // Sign Up
   layout("./(all)/sign-up/layout.tsx", [route("sign-up", "./(all)/sign-up/page.tsx")]),
 

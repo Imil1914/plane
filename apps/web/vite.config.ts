@@ -6,13 +6,15 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 
-// Expose only vars starting with VITE_
+// Expose public Vite vars and the non-secret PPM brand rollback flag.
 const viteEnv = Object.keys(process.env)
   .filter((k) => k.startsWith("VITE_"))
   .reduce<Record<string, string>>((a, k) => {
     a[k] = process.env[k] ?? "";
     return a;
   }, {});
+
+viteEnv.PPM_BRAND_ENABLED = process.env.PPM_BRAND_ENABLED ?? "1";
 
 export default defineConfig(() => ({
   define: {
