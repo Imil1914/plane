@@ -22,6 +22,7 @@ import { NewTabIcon, WorkItemsIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
 import { EIssuesStoreType } from "@plane/types";
 import { Breadcrumbs, Header } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { CountChip } from "@/components/common/count-chip";
@@ -35,6 +36,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 
@@ -48,6 +50,8 @@ export const IssuesHeader = observer(function IssuesHeader() {
   } = useIssues(EIssuesStoreType.PROJECT);
   // i18n
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
   const { currentProjectDetails, loader } = useProject();
 
@@ -75,7 +79,7 @@ export const IssuesHeader = observer(function IssuesHeader() {
             <Breadcrumbs.Item
               component={
                 <BreadcrumbLink
-                  label="Work Items"
+                  label={isPpmShell ? ppmT("work_item.breadcrumb") : "Work Items"}
                   href={`/${workspaceSlug}/projects/${projectId}/issues/`}
                   icon={<WorkItemsIcon className="h-4 w-4 text-tertiary" />}
                   isLast
@@ -87,7 +91,11 @@ export const IssuesHeader = observer(function IssuesHeader() {
           {issuesCount && issuesCount > 0 ? (
             <Tooltip
               isMobile={isMobile}
-              tooltipContent={`There are ${issuesCount} ${issuesCount > 1 ? "work items" : "work item"} in this project`}
+              tooltipContent={
+                isPpmShell
+                  ? `${ppmT("work_item.count")} ${issuesCount}`
+                  : `There are ${issuesCount} ${issuesCount > 1 ? "work items" : "work item"} in this project`
+              }
               position="bottom"
             >
               <CountChip count={issuesCount} />

@@ -12,7 +12,7 @@ export type TResponsiveTabLayout = {
   overflowItems: TNavigationItem[];
   hasOverflow: boolean;
   itemRefs: React.MutableRefObject<(HTMLDivElement | null)[]>;
-  containerRef: (node: HTMLDivElement | null) => void;
+  containerRef: (node: HTMLElement | null) => void;
 };
 
 type UseResponsiveTabLayoutProps = {
@@ -49,7 +49,7 @@ export const useResponsiveTabLayout = ({
   const overflowButtonWidth = 40;
 
   // Callback ref that sets up ResizeObserver when element is attached
-  const containerRef = useCallback((node: HTMLDivElement | null) => {
+  const containerRef = useCallback((node: HTMLElement | null) => {
     // Clean up previous observer if it exists
     if (resizeObserverRef.current) {
       resizeObserverRef.current.disconnect();

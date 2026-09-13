@@ -8,6 +8,8 @@ import React, { useState, useCallback, useMemo } from "react";
 import { LockIcon, ChevronDownIcon } from "@plane/propel/icons";
 import { PasswordInput, PasswordStrengthIndicator } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 interface PasswordState {
   password: string;
@@ -21,6 +23,8 @@ interface SetPasswordRootProps {
 }
 
 export function SetPasswordRoot({ onPasswordChange, onConfirmPasswordChange, disabled = false }: SetPasswordRootProps) {
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   const [isExpanded, setIsExpanded] = useState(false);
   const [passwordState, setPasswordState] = useState<PasswordState>({
     password: "",
@@ -77,9 +81,12 @@ export function SetPasswordRoot({ onPasswordChange, onConfirmPasswordChange, dis
 
   return (
     <div className={`flex flex-col overflow-hidden rounded-lg bg-surface-2 transition-all duration-300 ease-in-out`}>
-      <div
+      <button
+        type="button"
+        disabled={disabled}
+        aria-expanded={isExpanded}
         className={cn(
-          "flex items-center justify-between px-3 py-2 text-13 transition-colors duration-200",
+          "flex w-full items-center justify-between bg-transparent px-3 py-2 text-left text-13 transition-colors duration-200",
           disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer",
           isExpanded && "pb-1"
         )}
@@ -87,13 +94,13 @@ export function SetPasswordRoot({ onPasswordChange, onConfirmPasswordChange, dis
       >
         <div className="flex items-center gap-1 text-tertiary">
           <LockIcon className="size-3" />
-          <span className="font-medium">Set a password</span>
-          <span>{`(Optional)`}</span>
+          <span className="font-medium">{isPpmShell ? ppmT("onboarding.password_set") : "Set a password"}</span>
+          <span>({isPpmShell ? ppmT("onboarding.password_optional") : "Optional"})</span>
         </div>
         <div className="flex items-center gap-2 text-placeholder">
           <ChevronDownIcon className={chevronIconClasses} />
         </div>
-      </div>
+      </button>
 
       <div className={expandedContentClasses}>
         {/* Password input */}
@@ -102,7 +109,7 @@ export function SetPasswordRoot({ onPasswordChange, onConfirmPasswordChange, dis
             id="password"
             value={passwordState.password}
             onChange={(value) => handlePasswordChange("password", value)}
-            placeholder="Set a password"
+            placeholder={isPpmShell ? ppmT("onboarding.password_set") : "Set a password"}
             className="transition-all duration-200"
           />
           {passwordState.password.length > 0 && <PasswordStrengthIndicator password={passwordState.password} />}
@@ -111,7 +118,7 @@ export function SetPasswordRoot({ onPasswordChange, onConfirmPasswordChange, dis
         <div className="flex flex-col gap-2 pb-2">
           {/* Confirm password label */}
           <div className="transform text-13 font-medium text-tertiary transition-all delay-75 duration-300 ease-in-out">
-            Confirm password
+            {isPpmShell ? ppmT("onboarding.password_confirm") : "Confirm password"}
           </div>
 
           {/* Confirm password input */}
@@ -120,11 +127,19 @@ export function SetPasswordRoot({ onPasswordChange, onConfirmPasswordChange, dis
               id="confirm-password"
               value={passwordState.confirmPassword}
               onChange={(value) => handlePasswordChange("confirmPassword", value)}
-              placeholder="Confirm password"
+              placeholder={isPpmShell ? ppmT("onboarding.password_confirm") : "Confirm password"}
               className="transition-all duration-200"
             />
-            {hasPasswordMismatch && <p className="mt-1 text-11 text-danger-primary">Passwords do not match</p>}
-            {isPasswordValid && <p className="mt-1 text-11 text-success-primary">✓ Passwords match</p>}
+            {hasPasswordMismatch && (
+              <p className="mt-1 text-11 text-danger-primary">
+                {isPpmShell ? ppmT("onboarding.password_mismatch") : "Passwords do not match"}
+              </p>
+            )}
+            {isPasswordValid && (
+              <p className="mt-1 text-11 text-success-primary">
+                ✓ {isPpmShell ? ppmT("onboarding.password_match") : "Passwords match"}
+              </p>
+            )}
           </div>
         </div>
       </div>

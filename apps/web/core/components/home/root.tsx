@@ -4,11 +4,13 @@
  * See the LICENSE file for details.
  */
 
+import { useEffect } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import useSWR from "swr";
 // plane imports
 import { ContentWrapper } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useHome } from "@/hooks/store/use-home";
 import { useUserProfile, useUser } from "@/hooks/store/user";
@@ -44,10 +46,20 @@ export const WorkspaceHomeView = observer(function WorkspaceHomeView() {
     }
   };
 
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+
+  useEffect(() => {
+    if (isPpmShell && currentUserProfile && !currentUserProfile.is_tour_completed) {
+      void handleTourCompleted();
+    }
+    // The PPM shell replaces the legacy Plane product tour.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserProfile?.is_tour_completed, isPpmShell]);
+
   // TODO: refactor loader implementation
   return (
     <>
-      {currentUserProfile && !currentUserProfile.is_tour_completed && (
+      {!isPpmShell && currentUserProfile && !currentUserProfile.is_tour_completed && (
         <div className="fixed top-0 left-0 z-20 grid h-full w-full place-items-center overflow-y-auto bg-backdrop transition-opacity">
           <TourRoot onComplete={handleTourCompleted} />
         </div>

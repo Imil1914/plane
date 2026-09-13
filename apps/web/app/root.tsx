@@ -8,11 +8,11 @@ import type { ReactNode } from "react";
 import Script from "next/script";
 import { Links, Meta, Outlet, Scripts } from "react-router";
 import type { LinksFunction } from "react-router";
-import { ThemeProvider, useTheme } from "next-themes";
+import { ThemeProvider } from "next-themes";
 // plane imports
 import { SITE_DESCRIPTION, SITE_NAME } from "@plane/constants";
 import { cn } from "@plane/utils";
-import { isPpmBrandEnabled, PPM_BRAND } from "@ppm/brand";
+import { isPpmBrandEnabled, isPpmShellEnabled, PPM_BRAND } from "@ppm/brand";
 // types
 // assets
 import favicon16 from "@/app/assets/favicon/favicon-16x16.png?url";
@@ -24,21 +24,27 @@ import ogImage from "@/app/assets/og-image.png?url";
 import globalStyles from "@/styles/globals.css?url";
 import type { Route } from "./+types/root";
 // components
-import { LogoSpinner } from "@/components/common/logo-spinner";
+import { PpmLocaleBootstrap } from "@/components/ppm-shell/locale-bootstrap";
 // lib
 import { isStaleAssetError, recoverFromStaleAsset } from "@/lib/stale-asset-error";
 // local
 import { CustomErrorComponent } from "./error";
 import { AppProvider } from "./provider";
 // fonts
+// oxlint-disable-next-line import/no-unassigned-import -- Fontsource registers the Inter font-face globally.
 import "@fontsource-variable/inter";
 import interVariableWoff2 from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
+// oxlint-disable-next-line import/no-unassigned-import -- Fontsource registers the PPM UI font-face globally.
 import "@fontsource-variable/ibm-plex-sans";
+// oxlint-disable-next-line import/no-unassigned-import -- Fontsource registers the PPM monospace font-face globally.
 import "@fontsource-variable/jetbrains-mono";
+// oxlint-disable-next-line import/no-unassigned-import -- Fontsource registers the icon font-face globally.
 import "@fontsource/material-symbols-rounded";
+// oxlint-disable-next-line import/no-unassigned-import -- Fontsource registers the editor monospace font-face globally.
 import "@fontsource/ibm-plex-mono";
 
 const IS_PPM_BRAND_ENABLED = isPpmBrandEnabled(process.env.PPM_BRAND_ENABLED);
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 const PLANE_APP_TITLE = "Plane | Simple, extensible, open-source project management tool.";
 
 export const links: LinksFunction = () => {
@@ -77,7 +83,12 @@ export function Layout({ children }: { children: ReactNode }) {
   const isSessionRecorderEnabled = parseInt(process.env.VITE_ENABLE_SESSION_RECORDER || "0");
 
   return (
-    <html data-ppm-brand={IS_PPM_BRAND_ENABLED ? "enabled" : "disabled"} lang="en" suppressHydrationWarning>
+    <html
+      data-ppm-brand={IS_PPM_BRAND_ENABLED ? "enabled" : "disabled"}
+      data-ppm-shell={IS_PPM_SHELL_ENABLED ? "enabled" : "disabled"}
+      lang={IS_PPM_SHELL_ENABLED ? "ru" : "en"}
+      suppressHydrationWarning
+    >
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -158,27 +169,26 @@ export const meta: Route.MetaFunction = () =>
 
 export default function Root() {
   return (
-    <AppProvider>
-      <div className={cn("relative flex h-screen w-full flex-col overflow-hidden bg-canvas", "desktop-app-container")}>
-        <main className="relative h-full w-full overflow-hidden">
-          <Outlet />
-        </main>
-      </div>
-    </AppProvider>
+    <PpmLocaleBootstrap>
+      <AppProvider>
+        <div
+          className={cn("relative flex h-screen w-full flex-col overflow-hidden bg-canvas", "desktop-app-container")}
+        >
+          <main className="relative h-full w-full overflow-hidden">
+            <Outlet />
+          </main>
+        </div>
+      </AppProvider>
+    </PpmLocaleBootstrap>
   );
 }
 
 export function HydrateFallback() {
-  const { resolvedTheme } = useTheme();
-
-  // if we are on the server or the theme is not resolved, return an empty div
-  if (typeof window === "undefined" || resolvedTheme === undefined) return <div />;
-
-  return (
-    <div className="relative flex h-screen w-full items-center justify-center bg-canvas">
-      <LogoSpinner />
-    </div>
-  );
+  // React Router's SPA shell hydrates without route content. Rendering a
+  // fallback here adds an unexpected element below <html> and forces React to
+  // discard the prerendered document. PpmLocaleBootstrap owns the visible
+  // loading state once the client route has mounted.
+  return null;
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

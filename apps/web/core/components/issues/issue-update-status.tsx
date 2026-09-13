@@ -9,6 +9,9 @@ import { observer } from "mobx-react";
 import { RefreshCw } from "lucide-react";
 // types
 import type { TNameDescriptionLoader } from "@plane/types";
+import { isPpmShellEnabled } from "@ppm/brand";
+// hooks
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type Props = {
   isSubmitting: TNameDescriptionLoader;
@@ -16,6 +19,8 @@ type Props = {
 
 export const NameDescriptionUpdateStatus = observer(function NameDescriptionUpdateStatus(props: Props) {
   const { isSubmitting } = props;
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
   return (
     <>
@@ -27,7 +32,15 @@ export const NameDescriptionUpdateStatus = observer(function NameDescriptionUpda
         {isSubmitting !== "submitted" && isSubmitting !== "saved" && (
           <RefreshCw className="size-3.5 animate-spin stroke-tertiary" />
         )}
-        <span className="text-13 text-tertiary">{isSubmitting === "submitting" ? "Saving..." : "Saved"}</span>
+        <span className="text-13 text-tertiary">
+          {isSubmitting === "submitting"
+            ? isPpmShell
+              ? ppmT("work_item.saving")
+              : "Saving..."
+            : isPpmShell
+              ? ppmT("work_item.saved")
+              : "Saved"}
+        </span>
       </div>
     </>
   );

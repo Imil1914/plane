@@ -16,12 +16,16 @@ import { useLocalStorage } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { MembersPropertyIcon, CheckIcon, ProjectIcon, CloseIcon } from "@plane/propel/icons";
 import { cn, getFileURL } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProject } from "@/hooks/store/use-project";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web constants
+
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 export const NoProjectsEmptyState = observer(function NoProjectsEmptyState() {
   // navigation
@@ -40,6 +44,7 @@ export const NoProjectsEmptyState = observer(function NoProjectsEmptyState() {
     visited_profile: false,
   });
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
   // derived values
   const canCreateProject = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
@@ -52,6 +57,8 @@ export const NoProjectsEmptyState = observer(function NoProjectsEmptyState() {
       id: "create-project",
       title: "home.empty.create_project.title",
       description: "home.empty.create_project.description",
+      ppmDescription: "home.create_project_description" as const,
+      ppmTitle: undefined,
       icon: <ProjectIcon className="size-4" />,
       flag: "projects",
       cta: {
@@ -69,6 +76,8 @@ export const NoProjectsEmptyState = observer(function NoProjectsEmptyState() {
       id: "invite-team",
       title: "home.empty.invite_team.title",
       description: "home.empty.invite_team.description",
+      ppmDescription: undefined,
+      ppmTitle: undefined,
       icon: <MembersPropertyIcon className="size-4" />,
       flag: "visited_members",
       cta: {
@@ -81,6 +90,8 @@ export const NoProjectsEmptyState = observer(function NoProjectsEmptyState() {
       id: "configure-workspace",
       title: "home.empty.configure_workspace.title",
       description: "home.empty.configure_workspace.description",
+      ppmDescription: undefined,
+      ppmTitle: undefined,
       icon: <Hotel className="size-4" />,
       flag: "visited_workspace",
       cta: {
@@ -93,6 +104,8 @@ export const NoProjectsEmptyState = observer(function NoProjectsEmptyState() {
       id: "personalize-account",
       title: "home.empty.personalize_account.title",
       description: "home.empty.personalize_account.description",
+      ppmDescription: undefined,
+      ppmTitle: "home.personalize_account_title" as const,
       icon:
         currentUser?.avatar_url && currentUser?.avatar_url.trim() !== "" ? (
           <Link href={`/${workspaceSlug}/profile/${currentUser?.id}`}>
@@ -161,8 +174,12 @@ export const NoProjectsEmptyState = observer(function NoProjectsEmptyState() {
               >
                 <span className="my-auto text-24">{item.icon}</span>
               </div>
-              <h3 className="mb-2 text-13 font-medium text-primary">{t(item.title)}</h3>
-              <p className="mb-2 text-11 text-tertiary">{t(item.description)}</p>
+              <h3 className="mb-2 text-13 font-medium text-primary">
+                {IS_PPM_SHELL_ENABLED && item.ppmTitle ? ppmT(item.ppmTitle) : t(item.title)}
+              </h3>
+              <p className="mb-2 text-11 text-tertiary">
+                {IS_PPM_SHELL_ENABLED && item.ppmDescription ? ppmT(item.ppmDescription) : t(item.description)}
+              </p>
               {isStateComplete ? (
                 <div className="flex w-fit items-center gap-2 rounded-full bg-[#17a34a] p-1">
                   <CheckIcon className="size-3 text-accent-primary text-on-color" />

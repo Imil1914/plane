@@ -15,11 +15,13 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IUser } from "@plane/types";
 import { EOnboardingSteps } from "@plane/types";
 import { cn, getFileURL, getPasswordStrength, validatePersonName } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { UserImageUploadModal } from "@/components/core/modals/user-image-upload-modal";
 // hooks
 import { useInstance } from "@/hooks/store/use-instance";
 import { useUser, useUserProfile } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // services
 import { AuthService } from "@/services/auth.service";
 // local components
@@ -54,12 +56,14 @@ const defaultValues: Partial<TProfileSetupFormValues> = {
 };
 
 export const ProfileSetupStep = observer(function ProfileSetupStep({ handleStepChange }: Props) {
+  const ppmT = usePpmTranslation();
   // states
   const [isImageUploadModalOpen, setIsImageUploadModalOpen] = useState(false);
   // store hooks
   const { data: user, updateCurrentUser } = useUser();
   const { updateUserProfile } = useUserProfile();
   const { config: instanceConfig } = useInstance();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // form info
   const {
     getValues,
@@ -99,8 +103,8 @@ export const ProfileSetupStep = observer(function ProfileSetupStep({ handleStepC
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error",
-        message: "User details update failed. Please try again!",
+        title: isPpmShell ? ppmT("onboarding.error") : "Error",
+        message: isPpmShell ? ppmT("onboarding.user_details_failed") : "User details update failed. Please try again!",
       });
     }
   };
@@ -141,13 +145,15 @@ export const ProfileSetupStep = observer(function ProfileSetupStep({ handleStepC
 
   // Check for all available fields validation and if password field is available, then checks for password validation (strength + confirmation).
   // Also handles the condition for optional password i.e if password field is optional it only checks for above validation if it's not empty.
-  const isButtonDisabled =
-    !isSubmitting && isValid ? (isPasswordAlreadySetup ? false : isValidPassword ? false : true) : true;
+  const isButtonDisabled = isSubmitting || !isValid || (!isPasswordAlreadySetup && !isValidPassword);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-10">
       {/* Header */}
-      <CommonOnboardingHeader title="Create your profile." description="This is how you will appear in Plane." />
+      <CommonOnboardingHeader
+        title={isPpmShell ? ppmT("onboarding.profile_title") : "Create your profile."}
+        description={isPpmShell ? ppmT("onboarding.profile_description") : "This is how you will appear in Plane."}
+      />
 
       {/* Profile Picture Section */}
       <Controller
@@ -175,7 +181,6 @@ export const ProfileSetupStep = observer(function ProfileSetupStep({ handleStepC
           {userAvatar ? (
             <img
               src={getFileURL(userAvatar ?? "")}
-              onClick={() => setIsImageUploadModalOpen(true)}
               alt={user?.display_name}
               className="h-full w-full rounded-full object-cover"
             />
@@ -190,7 +195,15 @@ export const ProfileSetupStep = observer(function ProfileSetupStep({ handleStepC
           onClick={() => setIsImageUploadModalOpen(true)}
         >
           <ImageIcon className="size-4" />
-          <span className="text-13">{userAvatar ? "Change image" : "Upload image"}</span>
+          <span className="text-13">
+            {userAvatar
+              ? isPpmShell
+                ? ppmT("onboarding.change_image")
+                : "Change image"
+              : isPpmShell
+                ? ppmT("onboarding.upload_image")
+                : "Upload image"}
+          </span>
         </button>
       </div>
 
@@ -201,17 +214,17 @@ export const ProfileSetupStep = observer(function ProfileSetupStep({ handleStepC
             className="block text-13 font-medium text-tertiary after:ml-0.5 after:text-danger-primary after:content-['*']"
             htmlFor="first_name"
           >
-            Name
+            {isPpmShell ? ppmT("onboarding.name") : "Name"}
           </label>
           <Controller
             control={control}
             name="first_name"
             rules={{
-              required: "Name is required",
+              required: isPpmShell ? ppmT("onboarding.name_required") : "Name is required",
               validate: validatePersonName,
               maxLength: {
                 value: 50,
-                message: "Name must be within 50 characters.",
+                message: isPpmShell ? ppmT("onboarding.name_too_long") : "Name must be within 50 characters.",
               },
             }}
             render={({ field: { value, onChange, ref } }) => (
@@ -222,7 +235,6 @@ export const ProfileSetupStep = observer(function ProfileSetupStep({ handleStepC
                 type="text"
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                autoFocus
                 className={cn(
                   "w-full rounded-md border border-strong bg-surface-1 px-3 py-2 text-secondary transition-all duration-200 placeholder:text-placeholder focus:border-transparent focus:ring-2 focus:ring-accent-strong focus:outline-none",
                   {
@@ -230,7 +242,7 @@ export const ProfileSetupStep = observer(function ProfileSetupStep({ handleStepC
                     "border-danger-strong": errors.first_name,
                   }
                 )}
-                placeholder="Enter your full name"
+                placeholder={isPpmShell ? ppmT("onboarding.name_placeholder") : "Enter your full name"}
                 autoComplete="on"
               />
             )}
@@ -248,7 +260,7 @@ export const ProfileSetupStep = observer(function ProfileSetupStep({ handleStepC
       </div>
       {/* Continue Button */}
       <Button variant="primary" type="submit" className="w-full" size="xl" disabled={isButtonDisabled}>
-        Continue
+        {isPpmShell ? ppmT("onboarding.continue") : "Continue"}
       </Button>
 
       {/* Marketing Consent */}

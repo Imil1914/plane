@@ -5,6 +5,7 @@
  */
 
 import { useTheme } from "next-themes";
+import { isPpmShellEnabled } from "@ppm/brand";
 // assets
 import maintenanceModeDarkModeImage from "@/app/assets/instance/maintenance-mode-dark.svg?url";
 import maintenanceModeLightModeImage from "@/app/assets/instance/maintenance-mode-light.svg?url";
@@ -18,6 +19,7 @@ export function MaintenanceView() {
   const { resolvedTheme } = useTheme();
   // derived values
   const maintenanceModeImage = resolvedTheme === "dark" ? maintenanceModeDarkModeImage : maintenanceModeLightModeImage;
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   return (
     <DefaultLayout>
       <div className="relative container mx-auto flex h-full w-full max-w-xl flex-col items-center justify-center gap-2 gap-y-6 bg-surface-1 text-center">
@@ -26,7 +28,7 @@ export function MaintenanceView() {
             src={maintenanceModeImage}
             height="176"
             width="288"
-            alt="ProjectSettingImg"
+            alt={isPpmShell ? "PPM" : "ProjectSettingImg"}
             className="h-full w-full object-fill object-center"
           />
         </div>

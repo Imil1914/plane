@@ -10,7 +10,7 @@ import { useParams, useLocation, Link, useNavigate } from "react-router";
 import { EUserPermissionsLevel, EUserPermissions } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TabNavigationList, TabNavigationItem } from "@plane/propel/tab-navigation";
-import type { EUserProjectRoles } from "@plane/types";
+import { getPpmTranslation } from "@ppm/brand";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
@@ -28,18 +28,10 @@ import { useProjectActions } from "./use-project-actions";
 import { useResponsiveTabLayout } from "./use-responsive-tab-layout";
 import { useTabPreferences } from "./use-tab-preferences";
 import { useNavigationItems } from "./use-navigation-items";
+import type { TProjectNavigationItem } from "./project-navigation-items";
 
 // Local type definition for navigation items with app-specific fields
-export type TNavigationItem = {
-  name: string;
-  href: string;
-  icon: React.ElementType;
-  access: EUserPermissions[] | EUserProjectRoles[];
-  shouldRender: boolean;
-  sortOrder: number;
-  i18n_key: string;
-  key: string;
-};
+export type TNavigationItem = TProjectNavigationItem;
 
 type TTabNavigationRootProps = {
   workspaceSlug: string;
@@ -52,7 +44,7 @@ export const TabNavigationRoot = observer(function TabNavigationRoot(props: TTab
   const location = useLocation();
   const pathname = location.pathname;
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { currentLocale, t } = useTranslation();
 
   // Store hooks
   const { getPartialProjectById } = useProject();
@@ -193,7 +185,11 @@ export const TabNavigationRoot = observer(function TabNavigationRoot(props: TTab
 
         <div className="h-5 w-1 shrink-0 border-l border-subtle" />
 
-        <div ref={containerRef} className="flex h-full min-w-0 flex-1 items-center overflow-hidden">
+        <nav
+          ref={containerRef}
+          aria-label={getPpmTranslation(currentLocale, "navigation.project")}
+          className="flex h-full min-w-0 flex-1 items-center overflow-hidden"
+        >
           <TabNavigationList className="h-full">
             {/* Render visible tab items */}
             {visibleItems.map((item) => {
@@ -228,7 +224,7 @@ export const TabNavigationRoot = observer(function TabNavigationRoot(props: TTab
           </TabNavigationList>
 
           {hasOverflow && (
-            <div className="pointer-events-none absolute -z-10 opacity-0">
+            <div aria-hidden="true" className="pointer-events-none absolute -z-10 opacity-0">
               {visibleNavigationItems.map((item: TNavigationItem) => {
                 const itemIsActive = isActive(item);
                 const originalIndex = allNavigationItems.indexOf(item);
@@ -240,9 +236,11 @@ export const TabNavigationRoot = observer(function TabNavigationRoot(props: TTab
                     }}
                     className="inline-block"
                   >
-                    <Link to={item.href}>
+                    <Link to={item.href} tabIndex={-1}>
                       <TabNavigationItem isActive={itemIsActive}>
-                        <span>{t(item.i18n_key)}</span>
+                        <span>
+                          {item.ppmLabelKey ? getPpmTranslation(currentLocale, item.ppmLabelKey) : t(item.i18n_key)}
+                        </span>
                       </TabNavigationItem>
                     </Link>
                   </div>
@@ -250,7 +248,7 @@ export const TabNavigationRoot = observer(function TabNavigationRoot(props: TTab
               })}
             </div>
           )}
-        </div>
+        </nav>
       </div>
     </>
   );

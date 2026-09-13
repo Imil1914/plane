@@ -4,6 +4,8 @@
  * See the LICENSE file for details.
  */
 
+import { isPpmShellEnabled } from "@ppm/brand";
+
 // Tab preferences type
 export type TTabPreferences = {
   defaultTab: string;
@@ -12,7 +14,9 @@ export type TTabPreferences = {
 
 // Constants
 export const TAB_PREFS_KEY = "plane_tab_prefs";
-export const DEFAULT_TAB_KEY = "work_items";
+export const DEFAULT_TAB_KEY = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED)
+  ? "brain"
+  : "work_items";
 
 /**
  * Get tab preferences for a specific project from localStorage
@@ -73,9 +77,13 @@ export const getTabUrl = (workspaceSlug: string, projectId: string, tabKey: stri
     pages: `${baseUrl}/pages`,
     intake: `${baseUrl}/intake`,
     overview: `${baseUrl}/overview`,
+    brain: `${baseUrl}/brain`,
+    knowledge: `${baseUrl}/knowledge`,
+    code: `${baseUrl}/code`,
+    settings: `/${workspaceSlug}/settings/projects/${projectId}`,
     epics: `${baseUrl}/epics`,
   };
-  return tabUrlMap[tabKey] || `${baseUrl}/issues`; // fallback to issues
+  return tabUrlMap[tabKey] || tabUrlMap[DEFAULT_TAB_KEY];
 };
 
 /**
@@ -112,6 +120,6 @@ export const getValidatedDefaultTab = (projectId: string, availableTabKeys: stri
     return defaultTab;
   }
 
-  // Fall back to work_items
+  // Fall back to the product default (Project brain in PPM, Work items in Plane).
   return DEFAULT_TAB_KEY;
 };

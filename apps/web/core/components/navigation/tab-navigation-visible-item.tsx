@@ -11,6 +11,7 @@ import { useTranslation } from "@plane/i18n";
 import { ContextMenu } from "@plane/propel/context-menu";
 import { SetAsDefaultIcon } from "@plane/propel/icons";
 import { TabNavigationItem } from "@plane/propel/tab-navigation";
+import { getPpmTranslation } from "@ppm/brand";
 // local imports
 import type { TNavigationItem } from "./tab-navigation-root";
 import type { TTabPreferences } from "./tab-navigation-utils";
@@ -36,8 +37,9 @@ export function TabNavigationVisibleItem({
   onHide,
   itemRef,
 }: TTabNavigationVisibleItemProps) {
-  const { t } = useTranslation();
+  const { currentLocale, t } = useTranslation();
   const isDefault = item.key === tabPreferences.defaultTab;
+  const label = item.ppmLabelKey ? getPpmTranslation(currentLocale, item.ppmLabelKey) : t(item.i18n_key);
 
   return (
     <div className="relative flex h-full items-center transition-all duration-300">
@@ -47,9 +49,14 @@ export function TabNavigationVisibleItem({
       <div key={`${item.key}-measure`} ref={itemRef}>
         <ContextMenu>
           <ContextMenu.Trigger>
-            <Link key={`${item.key}-${isActive ? "active" : "inactive"}`} to={item.href}>
+            <Link
+              key={`${item.key}-${isActive ? "active" : "inactive"}`}
+              to={item.href}
+              aria-current={isActive ? "page" : undefined}
+              className="focus-visible:outline-accent-primary block rounded-md focus-visible:outline-2 focus-visible:outline-offset-2"
+            >
               <TabNavigationItem isActive={isActive}>
-                <span>{t(item.i18n_key)}</span>
+                <span>{label}</span>
               </TabNavigationItem>
             </Link>
           </ContextMenu.Trigger>
@@ -63,7 +70,9 @@ export function TabNavigationVisibleItem({
                 className="flex cursor-pointer items-center gap-2 text-secondary transition-colors"
               >
                 <SetAsDefaultIcon className="size-3 shrink-0" />
-                <span className="text-11">{isDefault ? "Clear default" : "Set as default"}</span>
+                <span className="text-11">
+                  {getPpmTranslation(currentLocale, isDefault ? "actions.clear_default" : "actions.set_default")}
+                </span>
               </ContextMenu.Item>
               <ContextMenu.Item
                 onClick={(e) => {
@@ -73,7 +82,7 @@ export function TabNavigationVisibleItem({
                 className="flex cursor-pointer items-center gap-2 text-secondary transition-colors"
               >
                 <PinOff className="size-3 shrink-0" />
-                <span className="text-11">Hide in more menu</span>
+                <span className="text-11">{getPpmTranslation(currentLocale, "actions.hide")}</span>
               </ContextMenu.Item>
             </ContextMenu.Content>
           </ContextMenu.Portal>

@@ -14,8 +14,11 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TUserProfile } from "@plane/types";
 import { EOnboardingSteps } from "@plane/types";
 import { cn } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
+import type { TPpmTranslationKey } from "@ppm/brand";
 // hooks
 import { useUserProfile } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // local imports
 import { CommonOnboardingHeader } from "../common";
 import type { TProfileSetupFormValues } from "../profile/root";
@@ -28,7 +31,17 @@ const defaultValues = {
   use_case: [] as string[],
 };
 
+const PPM_USE_CASE_LABELS: Record<string, TPpmTranslationKey> = {
+  "Plan and track product roadmaps": "onboarding.usecase.roadmaps",
+  "Manage engineering sprints": "onboarding.usecase.sprints",
+  "Coordinate cross-functional projects": "onboarding.usecase.cross_functional",
+  "Replace our current tool": "onboarding.usecase.replace_tool",
+  "Just exploring": "onboarding.usecase.exploring",
+};
+
 export const UseCaseSetupStep = observer(function UseCaseSetupStep({ handleStepChange }: Props) {
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // store hooks
   const { data: profile, updateUserProfile } = useUserProfile();
   // form info
@@ -50,20 +63,17 @@ export const UseCaseSetupStep = observer(function UseCaseSetupStep({ handleStepC
       use_case: formData.use_case && formData.use_case.length > 0 ? formData.use_case.join(". ") : undefined,
     };
     try {
-      await Promise.all([
-        updateUserProfile(profileUpdatePayload),
-        // totalSteps > 2 && stepChange({ profile_complete: true }),
-      ]);
+      await updateUserProfile(profileUpdatePayload);
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success",
-        message: "Profile setup completed!",
+        title: isPpmShell ? ppmT("onboarding.success") : "Success",
+        message: isPpmShell ? ppmT("onboarding.profile_saved") : "Profile setup completed!",
       });
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error",
-        message: "Profile setup failed. Please try again!",
+        title: isPpmShell ? ppmT("onboarding.error") : "Error",
+        message: isPpmShell ? ppmT("onboarding.profile_failed") : "Profile setup failed. Please try again!",
       });
     }
   };
@@ -81,23 +91,30 @@ export const UseCaseSetupStep = observer(function UseCaseSetupStep({ handleStepC
   };
 
   // derived values
-  const isButtonDisabled = !isSubmitting && isValid ? false : true;
+  const isButtonDisabled = isSubmitting || !isValid;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-10">
       {/* Header */}
-      <CommonOnboardingHeader title="What brings you to Plane?" description="Tell us your goals and team size." />
+      <CommonOnboardingHeader
+        title={isPpmShell ? ppmT("onboarding.usecase_title") : "What brings you to Plane?"}
+        description={isPpmShell ? ppmT("onboarding.usecase_description") : "Tell us your goals and team size."}
+      />
 
       {/* Use Case Selection */}
       <div className="flex flex-col gap-3">
-        <p className="text-body-sm-semibold text-placeholder">Select one or more</p>
+        <p className="text-body-sm-semibold text-placeholder">
+          {isPpmShell ? ppmT("onboarding.select_many") : "Select one or more"}
+        </p>
 
         <Controller
           control={control}
           name="use_case"
           rules={{
-            required: "Please select at least one option",
-            validate: (value) => (value && value.length > 0) || "Please select at least one option",
+            required: isPpmShell ? ppmT("onboarding.selection_required") : "Please select at least one option",
+            validate: (value) =>
+              (value && value.length > 0) ||
+              (isPpmShell ? ppmT("onboarding.selection_required") : "Please select at least one option"),
           }}
           render={({ field: { value, onChange } }) => (
             <div className="flex flex-col gap-3">
@@ -106,6 +123,8 @@ export const UseCaseSetupStep = observer(function UseCaseSetupStep({ handleStepC
                 return (
                   <button
                     key={useCase}
+                    type="button"
+                    aria-pressed={isSelected}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -138,7 +157,9 @@ export const UseCaseSetupStep = observer(function UseCaseSetupStep({ handleStepC
                       />
                     </span>
 
-                    <span className="text-body-sm-regular">{useCase}</span>
+                    <span className="text-body-sm-regular">
+                      {isPpmShell ? ppmT(PPM_USE_CASE_LABELS[useCase]) : useCase}
+                    </span>
                   </button>
                 );
               })}
@@ -151,10 +172,10 @@ export const UseCaseSetupStep = observer(function UseCaseSetupStep({ handleStepC
       {/* Action Buttons */}
       <div className="space-y-3">
         <Button variant="primary" type="submit" className="w-full" size="xl" disabled={isButtonDisabled}>
-          Continue
+          {isPpmShell ? ppmT("onboarding.continue") : "Continue"}
         </Button>
         <Button variant="ghost" onClick={handleSkip} className="w-full" size="xl">
-          Skip
+          {isPpmShell ? ppmT("onboarding.skip") : "Skip"}
         </Button>
       </div>
     </form>

@@ -137,6 +137,23 @@ export const coreRoutes: RouteConfigEntry[] = [
 
         // Project Detail
         layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/layout.tsx", [
+          // PPM project shell
+          route(
+            ":workspaceSlug/projects/:projectId/overview",
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/overview/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/projects/:projectId/brain",
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/brain/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/projects/:projectId/knowledge",
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/knowledge/page.tsx"
+          ),
+          route(
+            ":workspaceSlug/projects/:projectId/code",
+            "./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/code/page.tsx"
+          ),
           // Project Issues List
           layout("./(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/issues/(list)/layout.tsx", [
             route(

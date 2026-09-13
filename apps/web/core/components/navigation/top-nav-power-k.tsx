@@ -20,6 +20,9 @@ import { usePowerK } from "@/hooks/store/use-power-k";
 import { useUser } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useExpandableSearch } from "@/hooks/use-expandable-search";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+
+const COMMAND_LIST_ID = "top-nav-command-list";
 
 export const TopNavPowerK = observer(() => {
   // router
@@ -36,6 +39,7 @@ export const TopNavPowerK = observer(() => {
   // store hooks
   const { activeContext, setActivePage, activePage, setTopNavInputRef } = usePowerK();
   const { data: currentUser } = useUser();
+  const ppmT = usePpmTranslation();
 
   const handleOnClose = useCallback(() => {
     setSearchTerm("");
@@ -101,7 +105,7 @@ export const TopNavPowerK = observer(() => {
     return () => {
       setTopNavInputRef(null);
     };
-  }, [setTopNavInputRef]);
+  }, [setTopNavInputRef, inputRef]);
 
   const handleClear = () => {
     setSearchTerm("");
@@ -203,7 +207,7 @@ export const TopNavPowerK = observer(() => {
         return;
       }
     },
-    [searchTerm, activePage, context, shouldShowContextBasedActions, setActivePage, closePanel]
+    [searchTerm, activePage, context, shouldShowContextBasedActions, setActivePage, closePanel, isOpen, containerRef]
   );
 
   return (
@@ -213,19 +217,19 @@ export const TopNavPowerK = observer(() => {
           "w-[554px]": isOpen,
         })}
       >
-        <div
+        <label
+          htmlFor="top-nav-command-input"
           className={cn(
-            "flex h-7 w-full items-center rounded-lg border border-subtle-1 bg-layer-2 p-2 transition-colors duration-200",
+            "flex h-7 w-full items-center rounded-lg border border-subtle-1 bg-layer-2 p-2 transition-colors duration-200 focus-within:border-accent-strong focus-within:ring-1 focus-within:ring-accent-strong",
             {
               "bg-layer-1": isOpen,
             }
           )}
-          onClick={() => inputRef.current?.focus()}
-          role="button"
         >
-          <SearchIcon className="mr-2 size-3.5 shrink-0 text-placeholder" />
+          <SearchIcon aria-hidden="true" className="mr-2 size-3.5 shrink-0 text-placeholder" />
           <input
             ref={inputRef}
+            id="top-nav-command-input"
             type="text"
             value={searchTerm}
             onChange={(e) => {
@@ -235,15 +239,25 @@ export const TopNavPowerK = observer(() => {
             onMouseDown={handleMouseDown}
             onFocus={handleFocus}
             onKeyDown={handleKeyDown}
-            placeholder="Search commands..."
+            role="combobox"
+            aria-autocomplete="list"
+            aria-controls={COMMAND_LIST_ID}
+            aria-expanded={isOpen}
+            aria-label={ppmT("navigation.search_commands")}
+            placeholder={ppmT("navigation.search_commands")}
             className="placeholder-text-placeholder min-w-0 flex-1 bg-transparent text-13 text-primary outline-none"
           />
           {searchTerm && (
-            <button type="button" onClick={handleClear} className="ml-2 shrink-0">
-              <CloseIcon className="size-3.5 text-placeholder hover:text-primary" />
+            <button
+              type="button"
+              aria-label={ppmT("actions.clear_search")}
+              onClick={handleClear}
+              className="focus-visible:outline-accent-primary ml-2 shrink-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+            >
+              <CloseIcon aria-hidden="true" className="size-3.5 text-placeholder hover:text-primary" />
             </button>
           )}
-        </div>
+        </label>
       </div>
       <div
         className={cn(
@@ -253,6 +267,7 @@ export const TopNavPowerK = observer(() => {
             "h-0 w-0 opacity-0": !isOpen,
           }
         )}
+        aria-hidden={!isOpen}
       >
         {isOpen && (
           <Command
@@ -269,7 +284,10 @@ export const TopNavPowerK = observer(() => {
                      but we might need the context indicator if we want that feature.
                      For now, let's just render the list. */}
 
-            <Command.List className="vertical-scrollbar scrollbar-sm max-h-[60vh] overflow-y-auto px-2 pb-4 outline-none">
+            <Command.List
+              id={COMMAND_LIST_ID}
+              className="vertical-scrollbar scrollbar-sm max-h-[60vh] overflow-y-auto px-2 pb-4 outline-none"
+            >
               <ProjectsAppPowerKCommandsList
                 activePage={activePage}
                 context={context}

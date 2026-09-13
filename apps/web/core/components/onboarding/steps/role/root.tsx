@@ -13,8 +13,10 @@ import { CheckIcon, ViewsIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TUserProfile } from "@plane/types";
 import { EOnboardingSteps } from "@plane/types";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useUserProfile } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // local components
 import { CommonOnboardingHeader } from "../common";
 import type { TProfileSetupFormValues } from "../profile/root";
@@ -24,20 +26,32 @@ type Props = {
 };
 
 const ROLES = [
-  { id: "product-manager", label: "Product Manager", icon: Box },
-  { id: "engineering-manager", label: "Engineering Manager", icon: ViewsIcon },
-  { id: "designer", label: "Designer", icon: PenTool },
-  { id: "developer", label: "Developer", icon: Monitor },
-  { id: "founder-executive", label: "Founder/Executive", icon: Rocket },
-  { id: "operations-manager", label: "Operations Manager", icon: RefreshCw },
-  { id: "others", label: "Others", icon: Box },
-];
+  { id: "product-manager", label: "Product Manager", labelKey: "onboarding.role.product_manager", icon: Box },
+  {
+    id: "engineering-manager",
+    label: "Engineering Manager",
+    labelKey: "onboarding.role.engineering_manager",
+    icon: ViewsIcon,
+  },
+  { id: "designer", label: "Designer", labelKey: "onboarding.role.designer", icon: PenTool },
+  { id: "developer", label: "Developer", labelKey: "onboarding.role.developer", icon: Monitor },
+  { id: "founder-executive", label: "Founder/Executive", labelKey: "onboarding.role.founder", icon: Rocket },
+  {
+    id: "operations-manager",
+    label: "Operations Manager",
+    labelKey: "onboarding.role.operations_manager",
+    icon: RefreshCw,
+  },
+  { id: "others", label: "Others", labelKey: "onboarding.role.other", icon: Box },
+] as const;
 
 const defaultValues = {
   role: "",
 };
 
 export const RoleSetupStep = observer(function RoleSetupStep({ handleStepChange }: Props) {
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // store hooks
   const { data: profile, updateUserProfile } = useUserProfile();
   // form info
@@ -59,20 +73,17 @@ export const RoleSetupStep = observer(function RoleSetupStep({ handleStepChange 
       role: formData.role,
     };
     try {
-      await Promise.all([
-        updateUserProfile(profileUpdatePayload),
-        // totalSteps > 2 && stepChange({ profile_complete: true }),
-      ]);
+      await updateUserProfile(profileUpdatePayload);
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success",
-        message: "Profile setup completed!",
+        title: isPpmShell ? ppmT("onboarding.success") : "Success",
+        message: isPpmShell ? ppmT("onboarding.profile_saved") : "Profile setup completed!",
       });
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error",
-        message: "Profile setup failed. Please try again!",
+        title: isPpmShell ? ppmT("onboarding.error") : "Error",
+        message: isPpmShell ? ppmT("onboarding.profile_failed") : "Profile setup failed. Please try again!",
       });
     }
   };
@@ -87,20 +98,25 @@ export const RoleSetupStep = observer(function RoleSetupStep({ handleStepChange 
     handleStepChange(EOnboardingSteps.ROLE_SETUP);
   };
 
-  const isButtonDisabled = !isSubmitting && isValid ? false : true;
+  const isButtonDisabled = isSubmitting || !isValid;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-10">
       {/* Header */}
-      <CommonOnboardingHeader title="What's your role?" description="Let's set up Plane for how you work." />
+      <CommonOnboardingHeader
+        title={isPpmShell ? ppmT("onboarding.role_title") : "What's your role?"}
+        description={isPpmShell ? ppmT("onboarding.role_description") : "Let's set up Plane for how you work."}
+      />
       {/* Role Selection */}
       <div className="flex flex-col gap-3">
-        <p className="text-body-sm-semibold text-placeholder">Select one</p>
+        <p className="text-body-sm-semibold text-placeholder">
+          {isPpmShell ? ppmT("onboarding.select_one") : "Select one"}
+        </p>
         <Controller
           control={control}
           name="role"
           rules={{
-            required: "This field is required",
+            required: isPpmShell ? ppmT("onboarding.selection_required") : "This field is required",
           }}
           render={({ field: { value, onChange } }) => (
             <div className="flex flex-col gap-3">
@@ -111,6 +127,8 @@ export const RoleSetupStep = observer(function RoleSetupStep({ handleStepChange 
                 return (
                   <button
                     key={role.id}
+                    type="button"
+                    aria-pressed={isSelected}
                     onClick={(e) => {
                       e.stopPropagation();
                       e.preventDefault();
@@ -124,16 +142,15 @@ export const RoleSetupStep = observer(function RoleSetupStep({ handleStepChange 
                   >
                     <div className="flex items-center space-x-3">
                       <Icon className="size-3.5" />
-                      <span className="text-body-sm-semibold">{role.label}</span>
+                      <span className="text-body-sm-semibold">{isPpmShell ? ppmT(role.labelKey) : role.label}</span>
                     </div>
                     {isSelected && (
-                      <>
-                        <button
-                          className={`border-blue-500 flex size-4 items-center justify-center rounded-sm border-2 bg-accent-primary`}
-                        >
-                          <CheckIcon className="h-3 w-3 text-on-color" />
-                        </button>
-                      </>
+                      <span
+                        className="border-blue-500 flex size-4 items-center justify-center rounded-sm border-2 bg-accent-primary"
+                        aria-hidden="true"
+                      >
+                        <CheckIcon className="h-3 w-3 text-on-color" />
+                      </span>
                     )}
                   </button>
                 );
@@ -146,10 +163,10 @@ export const RoleSetupStep = observer(function RoleSetupStep({ handleStepChange 
       {/* Action Buttons */}
       <div className="space-y-3">
         <Button variant="primary" type="submit" className="w-full" size="xl" disabled={isButtonDisabled}>
-          Continue
+          {isPpmShell ? ppmT("onboarding.continue") : "Continue"}
         </Button>
         <Button variant="ghost" onClick={handleSkip} className="w-full text-tertiary" size="xl">
-          Skip
+          {isPpmShell ? ppmT("onboarding.skip") : "Skip"}
         </Button>
       </div>
     </form>

@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import { useSearchParams } from "next/navigation";
 // plane imports
 import { OAuthOptions } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // helpers
 import type { TAuthErrorInfo } from "@/helpers/authentication.helper";
 import {
@@ -21,6 +22,7 @@ import {
 // hooks
 import { useOAuthConfig } from "@/hooks/oauth";
 import { useInstance } from "@/hooks/store/use-instance";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // local imports
 import { TermsAndConditions } from "../terms-and-conditions";
 import { AuthBanner } from "./auth-banner";
@@ -31,7 +33,10 @@ type TAuthRoot = {
   authMode: EAuthModes;
 };
 
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+
 export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
+  const ppmT = usePpmTranslation();
   //router
   const searchParams = useSearchParams();
   // query params
@@ -49,7 +54,11 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
   // store hooks
   const { config } = useInstance();
   // derived values
-  const oAuthActionText = authMode === EAuthModes.SIGN_UP ? "Sign up" : "Sign in";
+  const oAuthActionText = IS_PPM_SHELL_ENABLED
+    ? ppmT(authMode === EAuthModes.SIGN_UP ? "auth.sign_up" : "auth.sign_in")
+    : authMode === EAuthModes.SIGN_UP
+      ? "Sign up"
+      : "Sign in";
   const { isOAuthEnabled, oAuthOptions } = useOAuthConfig(oAuthActionText);
   const isEmailBasedAuthEnabled = config?.is_email_password_enabled || config?.is_magic_login_enabled;
   const noAuthMethodsAvailable = !isOAuthEnabled && !isEmailBasedAuthEnabled;
@@ -106,8 +115,12 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
     return (
       <AuthContainer>
         <AuthHeaderBase
-          header="No authentication methods available"
-          subHeader="Please contact your administrator to enable authentication for your instance."
+          header={IS_PPM_SHELL_ENABLED ? ppmT("auth.no_methods_title") : "No authentication methods available"}
+          subHeader={
+            IS_PPM_SHELL_ENABLED
+              ? ppmT("auth.no_methods_description")
+              : "Please contact your administrator to enable authentication for your instance."
+          }
         />
       </AuthContainer>
     );
@@ -137,10 +150,10 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
           authStep={authStep}
           authMode={authMode}
           email={email}
-          setEmail={(email) => setEmail(email)}
-          setAuthMode={(authMode) => setAuthMode(authMode)}
-          setAuthStep={(authStep) => setAuthStep(authStep)}
-          setErrorInfo={(errorInfo) => setErrorInfo(errorInfo)}
+          setEmail={(nextEmail) => setEmail(nextEmail)}
+          setAuthMode={(nextAuthMode) => setAuthMode(nextAuthMode)}
+          setAuthStep={(nextAuthStep) => setAuthStep(nextAuthStep)}
+          setErrorInfo={(nextErrorInfo) => setErrorInfo(nextErrorInfo)}
           currentAuthMode={currentAuthMode}
         />
       )}

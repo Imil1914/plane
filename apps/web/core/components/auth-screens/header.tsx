@@ -9,13 +9,15 @@ import { observer } from "mobx-react";
 import Link from "next/link";
 import { AUTH_TRACKER_ELEMENTS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { PlaneLockup } from "@plane/propel/icons";
-import { isPpmBrandEnabled, PPM_BRAND } from "@ppm/brand";
+import { isPpmBrandEnabled, isPpmShellEnabled, PPM_BRAND } from "@ppm/brand";
+import { ProductLogo } from "@/components/ppm-shell/product-logo";
 import { PageHead } from "@/components/core/page-title";
 import { EAuthModes } from "@/helpers/authentication.helper";
 import { useInstance } from "@/hooks/store/use-instance";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 const IS_PPM_BRAND_ENABLED = isPpmBrandEnabled(process.env.PPM_BRAND_ENABLED);
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 const authContentMap = {
   [EAuthModes.SIGN_IN]: {
@@ -38,24 +40,34 @@ type AuthHeaderProps = {
 
 export const AuthHeader = observer(function AuthHeader({ type }: AuthHeaderProps) {
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
   // store
   const { config } = useInstance();
   // derived values
   const enableSignUpConfig = config?.enable_signup ?? false;
+  const pageTitle = IS_PPM_SHELL_ENABLED
+    ? ppmT(type === EAuthModes.SIGN_IN ? "auth.sign_in" : "auth.sign_up")
+    : t(authContentMap[type].pageTitle);
+  const prompt = IS_PPM_SHELL_ENABLED
+    ? ppmT(type === EAuthModes.SIGN_IN ? "auth.new_to_ppm" : "auth.already_have_account")
+    : t(authContentMap[type].text);
+  const linkText = IS_PPM_SHELL_ENABLED
+    ? ppmT(type === EAuthModes.SIGN_IN ? "auth.sign_up" : "auth.sign_in")
+    : t(authContentMap[type].linkText);
 
   return (
     <AuthHeaderBase
-      pageTitle={t(authContentMap[type].pageTitle)}
+      pageTitle={pageTitle}
       additionalAction={
         enableSignUpConfig && (
           <div className="flex flex-col items-end text-center text-13 font-medium text-tertiary sm:flex-row sm:items-center sm:gap-2">
-            <span className="text-body-sm-regular text-tertiary">{t(authContentMap[type].text)}</span>
+            <span className="text-body-sm-regular text-tertiary">{prompt}</span>
             <Link
               data-ph-element={AUTH_TRACKER_ELEMENTS.NAVIGATE_TO_SIGN_UP}
               href={authContentMap[type].linkHref}
               className="text-body-sm-semibold text-accent-primary hover:underline"
             >
-              {t(authContentMap[type].linkText)}
+              {linkText}
             </Link>
           </div>
         )
@@ -75,12 +87,8 @@ export function AuthHeaderBase(props: TAuthHeaderBase) {
     <>
       <PageHead title={`${pageTitle} - ${IS_PPM_BRAND_ENABLED ? PPM_BRAND.name : "Plane"}`} />
       <div className="sticky top-0 flex w-full flex-shrink-0 items-center justify-between gap-6">
-        <Link href="/">
-          {IS_PPM_BRAND_ENABLED ? (
-            <img alt={PPM_BRAND.name} className="h-8 w-auto text-primary" height={32} src={PPM_BRAND.assets.logo} />
-          ) : (
-            <PlaneLockup height={20} width={95} className="text-primary" />
-          )}
+        <Link href="/" aria-label={IS_PPM_BRAND_ENABLED ? PPM_BRAND.name : "Plane"}>
+          <ProductLogo />
         </Link>
         {additionalAction}
       </div>

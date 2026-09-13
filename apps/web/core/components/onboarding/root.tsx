@@ -10,10 +10,12 @@ import { observer } from "mobx-react";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IWorkspaceMemberInvitation, TOnboardingStep, TOnboardingSteps, TUserProfile } from "@plane/types";
 import { EOnboardingSteps } from "@plane/types";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useInstance } from "@/hooks/store/use-instance";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUser, useUserProfile } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // local components
 import { OnboardingHeader } from "./header";
 import { OnboardingStepRoot } from "./steps";
@@ -23,6 +25,8 @@ type Props = {
 };
 
 export const OnboardingRoot = observer(function OnboardingRoot({ invitations = [] }: Props) {
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   const [currentStep, setCurrentStep] = useState<TOnboardingStep>(EOnboardingSteps.PROFILE_SETUP);
   // store hooks
   const { data: user } = useUser();
@@ -44,11 +48,11 @@ export const OnboardingRoot = observer(function OnboardingRoot({ invitations = [
     } catch (_error) {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Failed",
-        message: "Failed to finish onboarding, Please try again later.",
+        title: isPpmShell ? ppmT("onboarding.error") : "Failed",
+        message: isPpmShell ? ppmT("onboarding.finish_failed") : "Failed to finish onboarding, Please try again later.",
       });
     }
-  }, [user, finishUserOnboarding]);
+  }, [user, finishUserOnboarding, isPpmShell, ppmT]);
 
   // handle step change
   const stepChange = useCallback(

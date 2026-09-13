@@ -27,8 +27,10 @@ import { PlusIcon, CheckIcon, ChevronDownIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EOnboardingSteps } from "@plane/types";
 import { Input, Spinner } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // services
 import { WorkspaceService } from "@/services/workspace.service";
 // components
@@ -96,8 +98,14 @@ const InviteMemberInput = observer(function InviteMemberInput(props: InviteMembe
   const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
 
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
   const email = watch(`emails.${index}.email`);
+  const getRoleLabel = (role: EUserPermissions) => {
+    const details = ROLE_DETAILS[role as keyof typeof ROLE_DETAILS];
+    return details ? t(details.i18n_title) : ROLE[role];
+  };
 
   const emailOnChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.value === "") {
@@ -192,7 +200,7 @@ const InviteMemberInput = observer(function InviteMemberInput(props: InviteMembe
                       !getValues(`emails.${index}.role_active`) ? "text-placeholder" : "text-primary"
                     } sm:text-13`}
                   >
-                    {ROLE[value]}
+                    {getRoleLabel(value)}
                   </span>
 
                   <ChevronDownIcon
@@ -209,7 +217,7 @@ const InviteMemberInput = observer(function InviteMemberInput(props: InviteMembe
                     style={styles.popper}
                     {...attributes.popper}
                   >
-                    {Object.entries(ROLE_DETAILS).map(([key, value]) => (
+                    {Object.entries(ROLE_DETAILS).map(([key, roleDetails]) => (
                       <Listbox.Option
                         as="div"
                         key={key}
@@ -223,8 +231,8 @@ const InviteMemberInput = observer(function InviteMemberInput(props: InviteMembe
                         {({ selected }) => (
                           <div className="flex items-center gap-2 p-1 text-wrap">
                             <div className="flex flex-col">
-                              <div className="text-13 font-medium">{t(value.i18n_title)}</div>
-                              <div className="flex text-11 text-tertiary">{t(value.i18n_description)}</div>
+                              <div className="text-13 font-medium">{t(roleDetails.i18n_title)}</div>
+                              <div className="flex text-11 text-tertiary">{t(roleDetails.i18n_description)}</div>
                             </div>
                             {selected && <CheckIcon className="h-4 w-4 shrink-0" />}
                           </div>
@@ -250,7 +258,9 @@ const InviteMemberInput = observer(function InviteMemberInput(props: InviteMembe
       {email && !emailRegex.test(email) && (
         <div className="mx-8 my-1">
           <span className="text-13">🤥</span>{" "}
-          <span className="mt-1 text-11 text-danger-primary">That doesn{"'"}t look like an email address.</span>
+          <span className="mt-1 text-11 text-danger-primary">
+            {isPpmShell ? ppmT("onboarding.invalid_email") : `That doesn't look like an email address.`}
+          </span>
         </div>
       )}
     </div>
@@ -259,6 +269,8 @@ const InviteMemberInput = observer(function InviteMemberInput(props: InviteMembe
 
 export const InviteTeamStep = observer(function InviteTeamStep(props: Props) {
   const { handleStepChange } = props;
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
   const [isInvitationDisabled, setIsInvitationDisabled] = useState(true);
 
@@ -290,28 +302,26 @@ export const InviteTeamStep = observer(function InviteTeamStep(props: Props) {
     let payload = { ...formData };
     payload = { emails: payload.emails.filter((email) => email.email !== "") };
 
-    await workspaceService
-      .inviteWorkspace(workspace.slug, {
+    try {
+      await workspaceService.inviteWorkspace(workspace.slug, {
         emails: payload.emails.map((email) => ({
           email: email.email,
           role: email.role,
         })),
-      })
-      .then(async () => {
-        setToast({
-          type: TOAST_TYPE.SUCCESS,
-          title: "Success!",
-          message: "Invitations sent successfully.",
-        });
-        await nextStep();
-      })
-      .catch((err) => {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.error,
-        });
       });
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: isPpmShell ? ppmT("onboarding.success") : "Success!",
+        message: isPpmShell ? ppmT("onboarding.invitations_sent") : "Invitations sent successfully.",
+      });
+      await nextStep();
+    } catch (error) {
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: isPpmShell ? ppmT("onboarding.error") : "Error!",
+        message: isPpmShell ? ppmT("onboarding.invitations_failed") : String(error),
+      });
+    }
   };
 
   const appendField = () => {
@@ -342,13 +352,21 @@ export const InviteTeamStep = observer(function InviteTeamStep(props: Props) {
       }}
     >
       <CommonOnboardingHeader
-        title="Invite your teammates"
-        description="Work in plane happens best with your team. Invite them now to use Plane to its potential."
+        title={isPpmShell ? ppmT("onboarding.team_title") : "Invite your teammates"}
+        description={
+          isPpmShell
+            ? ppmT("onboarding.team_description")
+            : "Work in plane happens best with your team. Invite them now to use Plane to its potential."
+        }
       />
       <div className="w-full py-4 text-13">
         <div className="group relative mx-8 grid grid-cols-10 gap-4 py-2">
-          <div className="col-span-6 px-1 text-13 font-medium text-secondary">Email</div>
-          <div className="col-span-4 px-1 text-13 font-medium text-secondary">Role</div>
+          <div className="col-span-6 px-1 text-13 font-medium text-secondary">
+            {isPpmShell ? ppmT("onboarding.email") : "Email"}
+          </div>
+          <div className="col-span-4 px-1 text-13 font-medium text-secondary">
+            {isPpmShell ? ppmT("onboarding.role") : "Role"}
+          </div>
         </div>
         <div className="mb-3 space-y-3 sm:space-y-4">
           {fields.map((field, index) => (
@@ -374,7 +392,7 @@ export const InviteTeamStep = observer(function InviteTeamStep(props: Props) {
           onClick={appendField}
         >
           <PlusIcon className="h-4 w-4" strokeWidth={2} />
-          Add another
+          {isPpmShell ? ppmT("onboarding.add_another") : "Add another"}
         </button>
       </div>
       <div className="mx-auto flex w-full flex-col items-center justify-center gap-4 px-8 sm:px-2">
@@ -385,10 +403,16 @@ export const InviteTeamStep = observer(function InviteTeamStep(props: Props) {
           className="w-full"
           disabled={isInvitationDisabled || !isValid || isSubmitting}
         >
-          {isSubmitting ? <Spinner height="20px" width="20px" /> : "Continue"}
+          {isSubmitting ? (
+            <Spinner height="20px" width="20px" />
+          ) : isPpmShell ? (
+            ppmT("onboarding.continue")
+          ) : (
+            "Continue"
+          )}
         </Button>
         <Button variant="ghost" size="xl" className="w-full" onClick={nextStep}>
-          I’ll do it later
+          {isPpmShell ? ppmT("onboarding.do_later") : "I’ll do it later"}
         </Button>
       </div>
     </form>

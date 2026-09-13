@@ -18,6 +18,7 @@ import {
 import { useTranslation } from "@plane/i18n";
 import { ChevronRightIcon } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
+import { getPpmTranslation, isPpmShellEnabled } from "@ppm/brand";
 // components
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 // store hooks
@@ -42,7 +43,8 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
   const { preferences: personalPreferences } = usePersonalNavigationPreferences();
   const { preferences: workspacePreferences } = useWorkspaceNavigationPreferences();
   // translation
-  const { t } = useTranslation();
+  const { currentLocale, t } = useTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
   const toggleListDisclosure = (isOpen: boolean) => {
     toggleWorkspaceMenu(isOpen);
@@ -109,13 +111,22 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
             type="button"
             className="flex w-full items-center gap-1 text-left text-13 font-semibold whitespace-nowrap text-placeholder"
             onClick={() => toggleListDisclosure(!isWorkspaceMenuOpen)}
-            aria-label={t(
-              isWorkspaceMenuOpen
-                ? "aria_labels.app_sidebar.close_workspace_menu"
-                : "aria_labels.app_sidebar.open_workspace_menu"
-            )}
+            aria-label={
+              isPpmShell
+                ? getPpmTranslation(
+                    currentLocale,
+                    isWorkspaceMenuOpen ? "navigation.close_workspace_menu" : "navigation.open_workspace_menu"
+                  )
+                : t(
+                    isWorkspaceMenuOpen
+                      ? "aria_labels.app_sidebar.close_workspace_menu"
+                      : "aria_labels.app_sidebar.open_workspace_menu"
+                  )
+            }
           >
-            <span className="text-13 font-semibold">{t("common.workspace")}</span>
+            <span className="text-13 font-semibold">
+              {isPpmShell ? getPpmTranslation(currentLocale, "global.workspace") : t("common.workspace")}
+            </span>
           </Disclosure.Button>
           <div className="pointer-events-none flex items-center opacity-0 group-hover:pointer-events-auto group-hover:opacity-100">
             <Disclosure.Button
@@ -123,11 +134,18 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
               type="button"
               className="flex-shrink-0 rounded-sm p-0.5 hover:bg-layer-1"
               onClick={() => toggleListDisclosure(!isWorkspaceMenuOpen)}
-              aria-label={t(
-                isWorkspaceMenuOpen
-                  ? "aria_labels.app_sidebar.close_workspace_menu"
-                  : "aria_labels.app_sidebar.open_workspace_menu"
-              )}
+              aria-label={
+                isPpmShell
+                  ? getPpmTranslation(
+                      currentLocale,
+                      isWorkspaceMenuOpen ? "navigation.close_workspace_menu" : "navigation.open_workspace_menu"
+                    )
+                  : t(
+                      isWorkspaceMenuOpen
+                        ? "aria_labels.app_sidebar.close_workspace_menu"
+                        : "aria_labels.app_sidebar.open_workspace_menu"
+                    )
+              }
             >
               <ChevronRightIcon
                 className={cn("size-3 flex-shrink-0 transition-all", {
@@ -163,14 +181,29 @@ export const SidebarMenuItems = observer(function SidebarMenuItems() {
                     onClick={() => toggleExtendedSidebar()}
                     className="flex flex-grow items-center gap-1.5 text-13 font-medium text-tertiary"
                     id="extended-sidebar-toggle"
-                    aria-label={t(
-                      isExtendedSidebarOpened
-                        ? "aria_labels.app_sidebar.close_extended_sidebar"
-                        : "aria_labels.app_sidebar.open_extended_sidebar"
-                    )}
+                    aria-label={
+                      isPpmShell
+                        ? getPpmTranslation(
+                            currentLocale,
+                            isExtendedSidebarOpened
+                              ? "navigation.close_extended_sidebar"
+                              : "navigation.open_extended_sidebar"
+                          )
+                        : t(
+                            isExtendedSidebarOpened
+                              ? "aria_labels.app_sidebar.close_extended_sidebar"
+                              : "aria_labels.app_sidebar.open_extended_sidebar"
+                          )
+                    }
                   >
                     <Ellipsis className="size-4 flex-shrink-0" />
-                    <span>{isExtendedSidebarOpened ? "Hide" : "More"}</span>
+                    <span>
+                      {isPpmShell
+                        ? getPpmTranslation(currentLocale, isExtendedSidebarOpened ? "global.hide" : "global.more")
+                        : isExtendedSidebarOpened
+                          ? "Hide"
+                          : "More"}
+                    </span>
                   </button>
                 </SidebarNavItem>
               </>

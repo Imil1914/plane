@@ -7,11 +7,13 @@
 import React, { useState } from "react";
 import { observer } from "mobx-react";
 import { copyUrlToClipboard, generateWorkItemLink } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // plane imports
 // helpers
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type TCreateIssueToastActionItems = {
   workspaceSlug: string;
@@ -26,6 +28,8 @@ export const CreateIssueToastActionItems = observer(function CreateIssueToastAct
   const { workspaceSlug, issueId, isEpic = false } = props;
   // state
   const [copied, setCopied] = useState(false);
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // store hooks
   const {
     issue: { getIssueById },
@@ -67,12 +71,14 @@ export const CreateIssueToastActionItems = observer(function CreateIssueToastAct
         rel="noopener noreferrer"
         className="rounded-sm px-2 py-1 font-medium text-accent-primary hover:bg-surface-2"
       >
-        {`View ${isEpic ? "epic" : "work item"}`}
+        {isPpmShell ? ppmT(isEpic ? "work_item.view_epic" : "work_item.view") : `View ${isEpic ? "epic" : "work item"}`}
       </a>
 
       {copied ? (
         <>
-          <span className="cursor-default px-2 py-1 text-secondary">Copied!</span>
+          <span className="cursor-default px-2 py-1 text-secondary">
+            {isPpmShell ? ppmT("actions.copied") : "Copied!"}
+          </span>
         </>
       ) : (
         <>
@@ -80,7 +86,7 @@ export const CreateIssueToastActionItems = observer(function CreateIssueToastAct
             className="hidden cursor-pointer rounded-sm px-2 py-1 text-tertiary group-hover:flex hover:bg-surface-2 hover:text-secondary"
             onClick={copyToClipboard}
           >
-            Copy link
+            {isPpmShell ? ppmT("actions.copy_link") : "Copy link"}
           </button>
         </>
       )}

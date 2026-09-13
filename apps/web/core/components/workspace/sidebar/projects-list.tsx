@@ -20,6 +20,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import { Loader } from "@plane/ui";
 import { copyUrlToClipboard, cn, orderJoinedProjects } from "@plane/utils";
+import { getPpmTranslation, isPpmShellEnabled } from "@ppm/brand";
 // components
 import { CreateProjectModal } from "@/components/project/create-project-modal";
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
@@ -42,7 +43,8 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
   // refs
   const containerRef = useRef<HTMLDivElement | null>(null);
   // store hooks
-  const { t } = useTranslation();
+  const { currentLocale, t } = useTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   const { toggleCreateProjectModal } = useCommandPalette();
   const { allowPermissions } = useUserPermissions();
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
@@ -75,6 +77,7 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
         title: t("link_copied"),
         message: t("project_link_copied_to_clipboard"),
       });
+      return undefined;
     });
   };
 
@@ -229,8 +232,8 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
             >
               {loader === "init-loader" && (
                 <Loader className="w-full space-y-1.5">
-                  {Array.from({ length: 4 }).map((_, index) => (
-                    <Loader.Item key={index} height="28px" />
+                  {["first", "second", "third", "fourth"].map((skeletonId) => (
+                    <Loader.Item key={skeletonId} height="28px" />
                   ))}
                 </Loader>
               )}
@@ -256,14 +259,32 @@ export const SidebarProjectsList = observer(function SidebarProjectsList() {
                           onClick={() => toggleExtendedProjectSidebar()}
                           className="flex flex-grow items-center gap-1.5 text-13 font-medium text-tertiary"
                           id="extended-project-sidebar-toggle"
-                          aria-label={t(
-                            isExtendedProjectSidebarOpened
-                              ? "aria_labels.app_sidebar.close_extended_sidebar"
-                              : "aria_labels.app_sidebar.open_extended_sidebar"
-                          )}
+                          aria-label={
+                            isPpmShell
+                              ? getPpmTranslation(
+                                  currentLocale,
+                                  isExtendedProjectSidebarOpened
+                                    ? "navigation.close_extended_sidebar"
+                                    : "navigation.open_extended_sidebar"
+                                )
+                              : t(
+                                  isExtendedProjectSidebarOpened
+                                    ? "aria_labels.app_sidebar.close_extended_sidebar"
+                                    : "aria_labels.app_sidebar.open_extended_sidebar"
+                                )
+                          }
                         >
                           <Ellipsis className="size-4 flex-shrink-0" />
-                          <span>{isExtendedProjectSidebarOpened ? "Hide" : "More"}</span>
+                          <span>
+                            {isPpmShell
+                              ? getPpmTranslation(
+                                  currentLocale,
+                                  isExtendedProjectSidebarOpened ? "global.hide" : "global.more"
+                                )
+                              : isExtendedProjectSidebarOpened
+                                ? "Hide"
+                                : "More"}
+                          </span>
                         </button>
                       </SidebarNavItem>
                     )}

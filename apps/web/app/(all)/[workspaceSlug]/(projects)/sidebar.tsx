@@ -8,6 +8,7 @@ import { isEmpty } from "lodash-es";
 import { observer } from "mobx-react";
 // plane helpers
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { isPpmShellEnabled, PPM_BRAND } from "@ppm/brand";
 // components
 import { SidebarWrapper } from "@/components/sidebar/sidebar-wrapper";
 import { SidebarFavoritesMenu } from "@/components/workspace/sidebar/favorites/favorites-menu";
@@ -32,7 +33,12 @@ export const AppSidebar = observer(function AppSidebar() {
   const isFavoriteEmpty = isEmpty(groupedFavorites);
 
   return (
-    <SidebarWrapper title="Projects" quickActions={<SidebarQuickActions />}>
+    <SidebarWrapper
+      title={
+        isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED) ? PPM_BRAND.name : "Projects"
+      }
+      quickActions={<SidebarQuickActions />}
+    >
       <SidebarMenuItems />
       {/* Favorites Menu */}
       {canPerformWorkspaceMemberActions && !isFavoriteEmpty && <SidebarFavoritesMenu />}

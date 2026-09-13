@@ -9,6 +9,7 @@ import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { Boxes, Share2, Star, User2 } from "lucide-react";
 import { CheckIcon, CloseIcon } from "@plane/propel/icons";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { LogoSpinner } from "@/components/common/logo-spinner";
 import { EmptySpace, EmptySpaceItem } from "@/components/ui/empty-space";
@@ -22,12 +23,14 @@ import { useAppRouter } from "@/hooks/use-app-router";
 // wrappers
 import { AuthenticationWrapper } from "@/lib/wrappers/authentication-wrapper";
 import { WorkspaceService } from "@/services/workspace.service";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // services
 
 // service initialization
 const workspaceService = new WorkspaceService();
 
 function WorkspaceInvitationPage() {
+  const ppmT = usePpmTranslation();
   // router
   const router = useAppRouter();
   // query params
@@ -37,6 +40,10 @@ function WorkspaceInvitationPage() {
   const token = searchParams.get("token");
   // store hooks
   const { data: currentUser } = useUser();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const invitationDescription = isPpmShell
+    ? ppmT("invitation.description")
+    : "Your workspace is where you'll create projects, collaborate on your work items, and organize different streams of work in your Plane account.";
 
   const { data: invitationDetail, error } = useSWR(
     invitation_id && slug && WORKSPACE_INVITATION(invitation_id.toString()),
@@ -47,7 +54,7 @@ function WorkspaceInvitationPage() {
 
   const handleAccept = () => {
     if (!invitationDetail) return;
-    workspaceService
+    void workspaceService
       .joinWorkspace(invitationDetail.workspace.slug, invitationDetail.id, {
         accepted: true,
         token: token,
@@ -58,6 +65,7 @@ function WorkspaceInvitationPage() {
         } else {
           router.push("/");
         }
+        return undefined;
       })
       .catch((err: unknown) => console.error(err));
   };
@@ -71,6 +79,7 @@ function WorkspaceInvitationPage() {
       })
       .then(() => {
         router.push("/");
+        return undefined;
       })
       .catch((err: unknown) => console.error(err));
   };
@@ -81,42 +90,81 @@ function WorkspaceInvitationPage() {
         {invitationDetail && !invitationDetail.responded_at ? (
           error ? (
             <div className="shadow-2xl flex w-full flex-col space-y-4 rounded-sm border border-subtle bg-surface-1 px-4 py-8 text-center md:w-1/3">
-              <h2 className="text-18 uppercase">INVITATION NOT FOUND</h2>
+              <h2 className="text-18 uppercase">
+                {isPpmShell ? ppmT("invitation.not_found") : "INVITATION NOT FOUND"}
+              </h2>
             </div>
           ) : (
             <EmptySpace
-              title={`You have been invited to ${invitationDetail.workspace.name}`}
-              description="Your workspace is where you'll create projects, collaborate on your work items, and organize different streams of work in your Plane account."
+              title={
+                isPpmShell
+                  ? `${ppmT("invitation.invited_to")} ${invitationDetail.workspace.name}`
+                  : `You have been invited to ${invitationDetail.workspace.name}`
+              }
+              description={invitationDescription}
             >
-              <EmptySpaceItem Icon={CheckIcon} title="Accept" action={handleAccept} />
-              <EmptySpaceItem Icon={CloseIcon} title="Ignore" action={handleReject} />
+              <EmptySpaceItem
+                Icon={CheckIcon}
+                title={isPpmShell ? ppmT("invitation.accept") : "Accept"}
+                action={handleAccept}
+              />
+              <EmptySpaceItem
+                Icon={CloseIcon}
+                title={isPpmShell ? ppmT("invitation.ignore") : "Ignore"}
+                action={handleReject}
+              />
             </EmptySpace>
           )
         ) : error || invitationDetail?.responded_at ? (
           invitationDetail?.accepted ? (
             <EmptySpace
-              title={`You are already a member of ${invitationDetail.workspace.name}`}
-              description="Your workspace is where you'll create projects, collaborate on your work items, and organize different streams of work in your Plane account."
+              title={
+                isPpmShell
+                  ? `${ppmT("invitation.already_member")} ${invitationDetail.workspace.name}`
+                  : `You are already a member of ${invitationDetail.workspace.name}`
+              }
+              description={invitationDescription}
             >
-              <EmptySpaceItem Icon={Boxes} title="Continue to home" href="/" />
+              <EmptySpaceItem
+                Icon={Boxes}
+                title={isPpmShell ? ppmT("invitation.continue_home") : "Continue to home"}
+                href="/"
+              />
             </EmptySpace>
           ) : (
             <EmptySpace
-              title="This invitation link is not active anymore."
-              description="Your workspace is where you'll create projects, collaborate on your work items, and organize different streams of work in your Plane account."
-              link={{ text: "Or start from an empty project", href: "/" }}
+              title={isPpmShell ? ppmT("invitation.inactive") : "This invitation link is not active anymore."}
+              description={invitationDescription}
+              link={{
+                text: isPpmShell ? ppmT("invitation.empty_project") : "Or start from an empty project",
+                href: "/",
+              }}
             >
               {!currentUser ? (
-                <EmptySpaceItem Icon={User2} title="Sign in to continue" href="/" />
+                <EmptySpaceItem
+                  Icon={User2}
+                  title={isPpmShell ? ppmT("invitation.sign_in") : "Sign in to continue"}
+                  href="/"
+                />
               ) : (
-                <EmptySpaceItem Icon={Boxes} title="Continue to home" href="/" />
+                <EmptySpaceItem
+                  Icon={Boxes}
+                  title={isPpmShell ? ppmT("invitation.continue_home") : "Continue to home"}
+                  href="/"
+                />
               )}
-              <EmptySpaceItem Icon={Star} title="Star us on GitHub" href="https://github.com/makeplane" />
-              <EmptySpaceItem
-                Icon={Share2}
-                title="Join our community of active creators"
-                href="https://forum.plane.so"
-              />
+              {isPpmShell ? (
+                <EmptySpaceItem Icon={Star} title={ppmT("brand.open_source")} href="/about/open-source" />
+              ) : (
+                <>
+                  <EmptySpaceItem Icon={Star} title="Star us on GitHub" href="https://github.com/makeplane" />
+                  <EmptySpaceItem
+                    Icon={Share2}
+                    title="Join our community of active creators"
+                    href="https://forum.plane.so"
+                  />
+                </>
+              )}
             </EmptySpace>
           )
         ) : (

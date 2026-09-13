@@ -8,6 +8,7 @@ import { observer } from "mobx-react";
 import useSWR from "swr";
 import { useTranslation } from "@plane/i18n";
 import type { IWorkspaceMemberInvitation } from "@plane/types";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { LogoSpinner } from "@/components/common/logo-spinner";
 import { WorkspaceLogo } from "@/components/workspace/logo";
@@ -15,6 +16,9 @@ import { WorkspaceLogo } from "@/components/workspace/logo";
 import { EAuthModes, EAuthSteps } from "@/helpers/authentication.helper";
 // services
 import { WorkspaceService } from "@/services/workspace.service";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 type TAuthHeader = {
   workspaceSlug: string | undefined;
@@ -61,6 +65,7 @@ export const AuthHeader = observer(function AuthHeader(props: TAuthHeader) {
   const { workspaceSlug, invitationId, invitationEmail, authMode, currentAuthStep } = props;
   // plane imports
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
 
   const { data: invitation, isLoading } = useSWR(
     workspaceSlug && invitationId ? `WORKSPACE_INVITATION_${workspaceSlug}_${invitationId}` : null,
@@ -74,25 +79,35 @@ export const AuthHeader = observer(function AuthHeader(props: TAuthHeader) {
   const getHeaderSubHeader = (
     step: EAuthSteps,
     mode: EAuthModes,
-    invitation: IWorkspaceMemberInvitation | undefined,
+    activeInvitation: IWorkspaceMemberInvitation | undefined,
     email: string | undefined
   ) => {
-    if (invitation && email && invitation.email === email && invitation.workspace) {
-      const workspace = invitation.workspace;
+    if (activeInvitation && email && activeInvitation.email === email && activeInvitation.workspace) {
+      const workspace = activeInvitation.workspace;
       return {
         header: (
           <div className="relative inline-flex items-center gap-2">
-            {t("common.join")}{" "}
+            {IS_PPM_SHELL_ENABLED ? ppmT("auth.join_workspace") : t("common.join")}{" "}
             <WorkspaceLogo logo={workspace?.logo_url} name={workspace?.name} classNames="size-9 flex-shrink-0" />{" "}
             {workspace.name}
           </div>
         ),
         subHeader:
           mode == EAuthModes.SIGN_UP
-            ? "Create an account to start managing work with your team."
-            : "Log in to start managing work with your team.",
+            ? IS_PPM_SHELL_ENABLED
+              ? ppmT("auth.invitation_sign_up")
+              : "Create an account to start managing work with your team."
+            : IS_PPM_SHELL_ENABLED
+              ? ppmT("auth.invitation_sign_in")
+              : "Log in to start managing work with your team.",
       };
     }
+
+    if (IS_PPM_SHELL_ENABLED)
+      return {
+        header: ppmT("auth.tagline"),
+        subHeader: ppmT(mode === EAuthModes.SIGN_IN ? "auth.welcome_back" : "auth.create_account_intro"),
+      };
 
     return Titles[mode][step];
   };

@@ -7,6 +7,7 @@
 import { enableStaticRendering } from "mobx-react";
 // plane imports
 import { FALLBACK_LANGUAGE, setLanguage } from "@plane/i18n";
+import { isPpmShellEnabled, PPM_DEFAULT_LANGUAGE } from "@ppm/brand";
 import type { IWorkItemFilterStore } from "@plane/shared-state";
 import { WorkItemFilterStore } from "@plane/shared-state";
 // plane web store
@@ -140,7 +141,10 @@ export class CoreRootStore {
   resetOnSignOut() {
     // handling the system theme when user logged out from the app
     localStorage.setItem("theme", "system");
-    void setLanguage(FALLBACK_LANGUAGE);
+    const language = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED)
+      ? PPM_DEFAULT_LANGUAGE
+      : FALLBACK_LANGUAGE;
+    void setLanguage(language);
     this.router = new RouterStore();
     this.commandPalette = new CommandPaletteStore();
     this.instance = new InstanceStore();

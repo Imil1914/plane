@@ -7,6 +7,10 @@
 import React from "react";
 import Link from "next/link";
 import { EAuthModes } from "@plane/constants";
+import { isPpmShellEnabled } from "@ppm/brand";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 interface TermsAndConditionsProps {
   authType?: EAuthModes;
@@ -33,6 +37,19 @@ function LegalLink({ href, children }: { href: string; children: React.ReactNode
 }
 
 export function TermsAndConditions({ authType = EAuthModes.SIGN_IN }: TermsAndConditionsProps) {
+  const ppmT = usePpmTranslation();
+
+  if (IS_PPM_SHELL_ENABLED)
+    return (
+      <div className="flex items-center justify-center">
+        <p className="text-center text-13 whitespace-pre-line text-tertiary">
+          {ppmT(authType === EAuthModes.SIGN_UP ? "auth.terms_sign_up" : "auth.terms_sign_in")}{" "}
+          <LegalLink href={LEGAL_LINKS.termsOfService}>{ppmT("auth.terms")}</LegalLink> {ppmT("auth.and")}{" "}
+          <LegalLink href={LEGAL_LINKS.privacyPolicy}>{ppmT("auth.privacy")}</LegalLink>.
+        </p>
+      </div>
+    );
+
   return (
     <div className="flex items-center justify-center">
       <p className="text-center text-13 whitespace-pre-line text-tertiary">

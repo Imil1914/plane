@@ -11,11 +11,13 @@ import { Button } from "@plane/propel/button";
 import type { IWorkspaceMemberInvitation } from "@plane/types";
 import { Checkbox, Spinner } from "@plane/ui";
 import { truncateText } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // constants
 import { WorkspaceLogo } from "@/components/workspace/logo";
 // hooks
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserSettings } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // services
 import { WorkspaceService } from "@/services/workspace.service";
 // local components
@@ -30,6 +32,8 @@ const workspaceService = new WorkspaceService();
 
 export function WorkspaceJoinInvitesStep(props: Props) {
   const { invitations, handleNextStep, handleCurrentViewChange } = props;
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // states
   const [isJoiningWorkspaces, setIsJoiningWorkspaces] = useState(false);
   const [invitationsRespond, setInvitationsRespond] = useState<string[]>([]);
@@ -48,9 +52,9 @@ export function WorkspaceJoinInvitesStep(props: Props) {
 
   // submit invitations
   const submitInvitations = async () => {
-    const invitation = invitations?.find((invitation) => invitation.id === invitationsRespond[0]);
+    const firstInvitation = invitations?.find((candidate) => candidate.id === invitationsRespond[0]);
 
-    if (invitationsRespond.length <= 0 && !invitation?.role) return;
+    if (invitationsRespond.length <= 0 && !firstInvitation?.role) return;
 
     setIsJoiningWorkspaces(true);
 
@@ -67,7 +71,10 @@ export function WorkspaceJoinInvitesStep(props: Props) {
 
   return invitations && invitations.length > 0 ? (
     <div className="flex flex-col gap-10">
-      <CommonOnboardingHeader title="Join invites or create a workspace" description="All your work — unified." />
+      <CommonOnboardingHeader
+        title={isPpmShell ? ppmT("onboarding.join_title") : "Join invites or create a workspace"}
+        description={isPpmShell ? ppmT("onboarding.workspace_description") : "All your work — unified."}
+      />
       <div className="flex flex-col gap-3">
         {invitations &&
           invitations.length > 0 &&
@@ -75,10 +82,10 @@ export function WorkspaceJoinInvitesStep(props: Props) {
             const isSelected = invitationsRespond.includes(invitation.id);
             const invitedWorkspace = invitation.workspace;
             return (
-              <div
+              <label
                 key={invitation.id}
+                htmlFor={`workspace-invitation-${invitation.id}`}
                 className={`flex cursor-pointer items-center gap-2 rounded-lg border border-subtle px-3 py-2 hover:bg-surface-2`}
-                onClick={() => handleInvitation(invitation, isSelected ? "withdraw" : "accepted")}
               >
                 <div className="flex-shrink-0">
                   <WorkspaceLogo
@@ -92,9 +99,13 @@ export function WorkspaceJoinInvitesStep(props: Props) {
                   <p className="text-11 text-secondary">{ROLE[invitation.role]}</p>
                 </div>
                 <span className={`flex-shrink-0`}>
-                  <Checkbox checked={isSelected} />
+                  <Checkbox
+                    id={`workspace-invitation-${invitation.id}`}
+                    checked={isSelected}
+                    onChange={() => handleInvitation(invitation, isSelected ? "withdraw" : "accepted")}
+                  />
                 </span>
-              </div>
+              </label>
             );
           })}
       </div>
@@ -106,7 +117,13 @@ export function WorkspaceJoinInvitesStep(props: Props) {
           onClick={submitInvitations}
           disabled={isJoiningWorkspaces || !invitationsRespond.length}
         >
-          {isJoiningWorkspaces ? <Spinner height="20px" width="20px" /> : "Continue"}
+          {isJoiningWorkspaces ? (
+            <Spinner height="20px" width="20px" />
+          ) : isPpmShell ? (
+            ppmT("onboarding.continue")
+          ) : (
+            "Continue"
+          )}
         </Button>
         <Button
           variant="ghost"
@@ -115,11 +132,11 @@ export function WorkspaceJoinInvitesStep(props: Props) {
           onClick={handleCurrentViewChange}
           disabled={isJoiningWorkspaces}
         >
-          Create new workspace
+          {isPpmShell ? ppmT("onboarding.create_new_workspace") : "Create new workspace"}
         </Button>
       </div>
     </div>
   ) : (
-    <div>No Invitations found</div>
+    <div>{isPpmShell ? ppmT("onboarding.no_invitations") : "No Invitations found"}</div>
   );
 }

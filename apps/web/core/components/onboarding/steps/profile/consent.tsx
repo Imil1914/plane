@@ -5,6 +5,7 @@
  */
 
 import { CheckIcon } from "@plane/propel/icons";
+import { isPpmShellEnabled, PPM_BRAND } from "@ppm/brand";
 
 type Props = {
   isChecked: boolean;
@@ -23,7 +24,11 @@ export function MarketingConsent({ isChecked, handleChange }: Props) {
       >
         {isChecked && <CheckIcon className="h-3 w-3 text-on-color" />}
       </button>
-      <span className="text-13 text-tertiary">I agree to Plane marketing communications</span>
+      <span className="text-13 text-tertiary">
+        I agree to{" "}
+        {isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED) ? PPM_BRAND.name : "Plane"}{" "}
+        marketing communications
+      </span>
     </div>
   );
 }

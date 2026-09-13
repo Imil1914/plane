@@ -10,6 +10,7 @@ import { useParams } from "next/navigation";
 // plane ui
 import { WorkItemsIcon } from "@plane/propel/icons";
 import { Breadcrumbs, Header } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { IssueDetailQuickActions } from "@/components/issues/issue-detail/issue-detail-quick-actions";
@@ -17,12 +18,14 @@ import { IssueDetailQuickActions } from "@/components/issues/issue-detail/issue-
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 
 export const WorkItemDetailsHeader = observer(function WorkItemDetailsHeader() {
   // router
   const router = useAppRouter();
+  const ppmT = usePpmTranslation();
   const { workspaceSlug, workItem } = useParams();
   // store hooks
   const { getProjectById, loader } = useProject();
@@ -44,7 +47,11 @@ export const WorkItemDetailsHeader = observer(function WorkItemDetailsHeader() {
           <Breadcrumbs.Item
             component={
               <BreadcrumbLink
-                label="Work Items"
+                label={
+                  isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED)
+                    ? ppmT("work_item.breadcrumb")
+                    : "Work Items"
+                }
                 href={`/${workspaceSlug}/projects/${projectId}/issues/`}
                 icon={<WorkItemsIcon className="h-4 w-4 text-tertiary" />}
               />

@@ -16,6 +16,7 @@ import { Button } from "@plane/propel/button";
 import { CloseIcon } from "@plane/propel/icons";
 import { Input, PasswordStrengthIndicator, Spinner } from "@plane/ui";
 import { getPasswordStrength } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { ForgotPasswordPopover } from "@/components/account/auth-forms/forgot-password-popover";
 // constants
@@ -23,6 +24,9 @@ import { ForgotPasswordPopover } from "@/components/account/auth-forms/forgot-pa
 import { EAuthModes, EAuthSteps } from "@/helpers/authentication.helper";
 // services
 import { AuthService } from "@/services/auth.service";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 type Props = {
   email: string;
@@ -50,6 +54,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
   const { email, isSMTPConfigured, handleAuthStep, handleEmailClear, mode, nextPath } = props;
   // plane imports
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
   // ref
   const formRef = useRef<HTMLFormElement>(null);
   // states
@@ -105,11 +110,11 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
 
   const isButtonDisabled = useMemo(
     () =>
-      !isSubmitting &&
-      !!passwordFormData.password &&
-      (mode === EAuthModes.SIGN_UP ? passwordFormData.password === passwordFormData.confirm_password : true)
-        ? false
-        : true,
+      !(
+        !isSubmitting &&
+        !!passwordFormData.password &&
+        (mode === EAuthModes.SIGN_UP ? passwordFormData.password === passwordFormData.confirm_password : true)
+      ),
     [isSubmitting, mode, passwordFormData.confirm_password, passwordFormData.password]
   );
 
@@ -172,7 +177,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
         {nextPath && <input type="hidden" value={nextPath} name="next_path" />}
         <div className="space-y-1">
           <label htmlFor="email" className="text-13 font-medium text-tertiary">
-            {t("auth.common.email.label")}
+            {IS_PPM_SHELL_ENABLED ? ppmT("auth.email") : t("auth.common.email.label")}
           </label>
           <div className={`relative flex items-center rounded-md border border-strong bg-surface-1`}>
             <Input
@@ -181,7 +186,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
               type="email"
               value={passwordFormData.email}
               onChange={(e) => handleFormChange("email", e.target.value)}
-              placeholder={t("auth.common.email.placeholder")}
+              placeholder={IS_PPM_SHELL_ENABLED ? ppmT("auth.email_placeholder") : t("auth.common.email.placeholder")}
               className={`h-10 w-full border-0 disable-autofill-style placeholder:text-placeholder`}
               disabled
             />
@@ -190,7 +195,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
                 type="button"
                 className="absolute right-3 size-5"
                 onClick={handleEmailClear}
-                aria-label={t("aria_labels.auth_forms.clear_email")}
+                aria-label={IS_PPM_SHELL_ENABLED ? ppmT("auth.clear_email") : t("aria_labels.auth_forms.clear_email")}
               >
                 <XCircle className="size-5 stroke-placeholder" />
               </button>
@@ -200,7 +205,11 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
 
         <div className="space-y-1">
           <label htmlFor="password" className="text-13 font-medium text-tertiary">
-            {mode === EAuthModes.SIGN_IN ? t("auth.common.password.label") : t("auth.common.password.set_password")}
+            {IS_PPM_SHELL_ENABLED
+              ? ppmT(mode === EAuthModes.SIGN_IN ? "auth.password" : "auth.set_password")
+              : mode === EAuthModes.SIGN_IN
+                ? t("auth.common.password.label")
+                : t("auth.common.password.set_password")}
           </label>
           <div className="relative flex items-center rounded-md bg-surface-1">
             <Input
@@ -209,20 +218,27 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
               name="password"
               value={passwordFormData.password}
               onChange={(e) => handleFormChange("password", e.target.value)}
-              placeholder={t("auth.common.password.placeholder")}
+              placeholder={
+                IS_PPM_SHELL_ENABLED ? ppmT("auth.password_placeholder") : t("auth.common.password.placeholder")
+              }
               className="h-10 w-full border border-strong !bg-surface-1 pr-12 disable-autofill-style placeholder:text-placeholder"
               onFocus={() => setIsPasswordInputFocused(true)}
               onBlur={() => setIsPasswordInputFocused(false)}
               autoComplete="off"
-              autoFocus
             />
             <button
               type="button"
               onClick={() => handleShowPassword("password")}
               className="absolute right-3 grid size-5 place-items-center"
-              aria-label={t(
-                showPassword?.password ? "aria_labels.auth_forms.hide_password" : "aria_labels.auth_forms.show_password"
-              )}
+              aria-label={
+                IS_PPM_SHELL_ENABLED
+                  ? ppmT(showPassword?.password ? "auth.hide_password" : "auth.show_password")
+                  : t(
+                      showPassword?.password
+                        ? "aria_labels.auth_forms.hide_password"
+                        : "aria_labels.auth_forms.show_password"
+                    )
+              }
             >
               {showPassword?.password ? (
                 <EyeOff className="size-5 stroke-placeholder" />
@@ -237,7 +253,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
         {mode === EAuthModes.SIGN_UP && (
           <div className="space-y-1">
             <label htmlFor="confirm-password" className="text-13 font-medium text-tertiary">
-              {t("auth.common.password.confirm_password.label")}
+              {IS_PPM_SHELL_ENABLED ? ppmT("auth.confirm_password") : t("auth.common.password.confirm_password.label")}
             </label>
             <div className="relative flex items-center rounded-md bg-surface-1">
               <Input
@@ -246,7 +262,11 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
                 name="confirm_password"
                 value={passwordFormData.confirm_password}
                 onChange={(e) => handleFormChange("confirm_password", e.target.value)}
-                placeholder={t("auth.common.password.confirm_password.placeholder")}
+                placeholder={
+                  IS_PPM_SHELL_ENABLED
+                    ? ppmT("auth.confirm_password_placeholder")
+                    : t("auth.common.password.confirm_password.placeholder")
+                }
                 className="h-10 w-full border border-strong !bg-surface-1 pr-12 disable-autofill-style placeholder:text-placeholder"
                 onFocus={() => setIsRetryPasswordInputFocused(true)}
                 onBlur={() => setIsRetryPasswordInputFocused(false)}
@@ -255,11 +275,15 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
               <button
                 type="button"
                 className="absolute right-3 grid size-5 place-items-center"
-                aria-label={t(
-                  showPassword?.retypePassword
-                    ? "aria_labels.auth_forms.hide_password"
-                    : "aria_labels.auth_forms.show_password"
-                )}
+                aria-label={
+                  IS_PPM_SHELL_ENABLED
+                    ? ppmT(showPassword?.retypePassword ? "auth.hide_password" : "auth.show_password")
+                    : t(
+                        showPassword?.retypePassword
+                          ? "aria_labels.auth_forms.hide_password"
+                          : "aria_labels.auth_forms.show_password"
+                      )
+                }
                 onClick={() => handleShowPassword("retypePassword")}
               >
                 {showPassword?.retypePassword ? (
@@ -272,7 +296,9 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
             {!!passwordFormData.confirm_password &&
               passwordFormData.password !== passwordFormData.confirm_password &&
               renderPasswordMatchError && (
-                <span className="text-13 text-danger-primary">{t("auth.common.password.errors.match")}</span>
+                <span className="text-13 text-danger-primary">
+                  {IS_PPM_SHELL_ENABLED ? ppmT("auth.password_mismatch") : t("auth.common.password.errors.match")}
+                </span>
               )}
           </div>
         )}
@@ -284,7 +310,13 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
                 {isSubmitting ? (
                   <Spinner height="20px" width="20px" />
                 ) : isSMTPConfigured ? (
-                  t("common.continue")
+                  IS_PPM_SHELL_ENABLED ? (
+                    ppmT("auth.continue")
+                  ) : (
+                    t("common.continue")
+                  )
+                ) : IS_PPM_SHELL_ENABLED ? (
+                  ppmT("auth.open_workspace")
                 ) : (
                   t("common.go_to_workspace")
                 )}
@@ -304,7 +336,13 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
             </>
           ) : (
             <Button type="submit" variant="primary" className="w-full" size="xl" disabled={isButtonDisabled}>
-              {isSubmitting ? <Spinner height="20px" width="20px" /> : "Create account"}
+              {isSubmitting ? (
+                <Spinner height="20px" width="20px" />
+              ) : IS_PPM_SHELL_ENABLED ? (
+                ppmT("auth.create_account")
+              ) : (
+                "Create account"
+              )}
             </Button>
           )}
         </div>

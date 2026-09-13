@@ -7,6 +7,9 @@
 import { useTheme } from "next-themes";
 // plane imports
 import { Button } from "@plane/propel/button";
+import { useTranslation } from "@plane/i18n";
+import { getPpmTranslation, isPpmShellEnabled } from "@ppm/brand";
+import { PpmState } from "@/components/ppm-shell/state";
 // assets
 import maintenanceModeDarkModeImage from "@/app/assets/instance/maintenance-mode-dark.svg?url";
 import maintenanceModeLightModeImage from "@/app/assets/instance/maintenance-mode-light.svg?url";
@@ -34,14 +37,38 @@ const linkMap = [
 // Production Error Component
 interface ProdErrorComponentProps {
   onGoHome: () => void;
+  onReload: () => void;
 }
 
-export function ProdErrorComponent({ onGoHome }: ProdErrorComponentProps) {
+export function ProdErrorComponent({ onGoHome, onReload }: ProdErrorComponentProps) {
   // hooks
   const { resolvedTheme } = useTheme();
+  const { currentLocale } = useTranslation();
 
   // derived values
   const maintenanceModeImage = resolvedTheme === "dark" ? maintenanceModeDarkModeImage : maintenanceModeLightModeImage;
+
+  if (isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-canvas">
+        <PpmState
+          variant="error"
+          title={getPpmTranslation(currentLocale, "state.error_title")}
+          description={getPpmTranslation(currentLocale, "state.error_description")}
+          actions={
+            <div className="flex flex-wrap justify-center gap-3">
+              <Button variant="primary" size="lg" onClick={onGoHome}>
+                {getPpmTranslation(currentLocale, "actions.go_home")}
+              </Button>
+              <Button variant="secondary" size="lg" onClick={onReload}>
+                {getPpmTranslation(currentLocale, "actions.reload")}
+              </Button>
+            </div>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <DefaultLayout>

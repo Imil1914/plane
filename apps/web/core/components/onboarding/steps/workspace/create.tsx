@@ -16,10 +16,12 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IUser, IWorkspace } from "@plane/types";
 import { Spinner } from "@plane/ui";
 import { cn, validateWorkspaceName, validateSlug } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useInstance } from "@/hooks/store/use-instance";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserProfile, useUserSettings } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // services
 import { WorkspaceService } from "@/services/workspace.service";
 // local components
@@ -40,6 +42,7 @@ export const WorkspaceCreateStep = observer(function WorkspaceCreateStep({
   handleCurrentViewChange,
   hasInvitations = false,
 }: Props) {
+  const ppmT = usePpmTranslation();
   // states
   const [slugError, setSlugError] = useState(false);
   const [invalidSlug, setInvalidSlug] = useState(false);
@@ -52,6 +55,7 @@ export const WorkspaceCreateStep = observer(function WorkspaceCreateStep({
   const { createWorkspace, fetchWorkspaces } = useWorkspace();
 
   const isWorkspaceCreationDisabled = config?.is_workspace_creation_disabled ?? false;
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
   // form info
   const {
@@ -132,7 +136,10 @@ export const WorkspaceCreateStep = observer(function WorkspaceCreateStep({
         void handleSubmit(handleCreateWorkspace)(e);
       }}
     >
-      <CommonOnboardingHeader title="Create your workspace" description="All your work — unified." />
+      <CommonOnboardingHeader
+        title={isPpmShell ? ppmT("onboarding.workspace_title") : "Create your workspace"}
+        description={isPpmShell ? ppmT("onboarding.workspace_description") : "All your work — unified."}
+      />
       <div className="flex flex-col gap-8">
         <div className="flex flex-col gap-2">
           <label
@@ -166,7 +173,7 @@ export const WorkspaceCreateStep = observer(function WorkspaceCreateStep({
                       shouldValidate: true,
                     });
                   }}
-                  placeholder="Enter workspace name"
+                  placeholder={isPpmShell ? ppmT("onboarding.workspace_name_placeholder") : "Enter workspace name"}
                   ref={ref}
                   className={cn(
                     "w-full rounded-md border border-strong bg-surface-1 px-3 py-2 text-secondary transition-all duration-200 placeholder:text-placeholder focus:border-transparent focus:ring-2 focus:ring-accent-strong focus:outline-none",
@@ -260,9 +267,16 @@ export const WorkspaceCreateStep = observer(function WorkspaceCreateStep({
                 <div className="flex flex-wrap gap-3">
                   {ORGANIZATION_SIZE.map((size) => {
                     const isSelected = value === size;
+                    const label = isPpmShell
+                      ? size === "Just myself"
+                        ? ppmT("onboarding.size.just_me")
+                        : `${size} ${ppmT("onboarding.size.people")}`
+                      : size;
                     return (
                       <button
                         key={size}
+                        type="button"
+                        aria-pressed={isSelected}
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -276,7 +290,7 @@ export const WorkspaceCreateStep = observer(function WorkspaceCreateStep({
                       >
                         <CircleCheck className={cn("size-4 text-placeholder", isSelected && "text-secondary")} />
 
-                        <span className="font-medium">{size}</span>
+                        <span className="font-medium">{label}</span>
                       </button>
                     );
                   })}
@@ -295,7 +309,7 @@ export const WorkspaceCreateStep = observer(function WorkspaceCreateStep({
         </Button>
         {hasInvitations && (
           <Button variant="ghost" size="xl" className="w-full" onClick={handleCurrentViewChange}>
-            Join existing workspace
+            {isPpmShell ? ppmT("onboarding.join_existing") : "Join existing workspace"}
           </Button>
         )}
       </div>

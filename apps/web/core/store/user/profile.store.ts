@@ -7,8 +7,9 @@
 import { cloneDeep, set } from "lodash-es";
 import { action, makeObservable, observable, runInAction } from "mobx";
 // plane imports
-import { setLanguage } from "@plane/i18n";
+import { LANGUAGE_STORAGE_KEY, setLanguage } from "@plane/i18n";
 import type { TLanguage } from "@plane/i18n";
+import { isPpmShellEnabled, PPM_DEFAULT_LANGUAGE, shouldInitializePpmProfileLanguage } from "@ppm/brand";
 // types
 import type { IUserTheme, TUserProfile } from "@plane/types";
 import { EStartOfTheWeek } from "@plane/types";
@@ -107,14 +108,27 @@ export class ProfileStore implements IUserProfileStore {
         this.error = undefined;
       });
       const userProfile = await this.userService.getCurrentUserProfile();
+      const shouldInitializeLanguage = shouldInitializePpmProfileLanguage({
+        isOnboarded: userProfile.is_onboarded,
+        profileLanguage: userProfile.language,
+        shellEnabled: isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED),
+        storedLanguage: typeof window === "undefined" ? null : localStorage.getItem(LANGUAGE_STORAGE_KEY),
+      });
+      const resolvedUserProfile = shouldInitializeLanguage
+        ? { ...userProfile, language: PPM_DEFAULT_LANGUAGE }
+        : userProfile;
+
+      if (shouldInitializeLanguage) {
+        await this.userService.updateCurrentUserProfile({ language: PPM_DEFAULT_LANGUAGE });
+      }
       runInAction(() => {
         this.isLoading = false;
-        this.data = userProfile;
+        this.data = resolvedUserProfile;
       });
-      if (userProfile.language) {
-        void setLanguage(userProfile.language as TLanguage);
+      if (resolvedUserProfile.language) {
+        void setLanguage(resolvedUserProfile.language as TLanguage);
       }
-      return userProfile;
+      return resolvedUserProfile;
     } catch (error) {
       runInAction(() => {
         this.isLoading = false;

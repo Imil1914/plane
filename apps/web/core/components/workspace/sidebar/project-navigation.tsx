@@ -8,10 +8,9 @@ import React, { useCallback, useMemo } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { EUserPermissionsLevel, EUserPermissions } from "@plane/constants";
+import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, ViewsIcon, WorkItemsIcon } from "@plane/propel/icons";
-import type { EUserProjectRoles } from "@plane/types";
+import { isPpmShellEnabled } from "@ppm/brand";
 // plane ui
 // components
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
@@ -20,17 +19,13 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import {
+  buildProjectNavigationItems,
+  type TProjectNavigationItem,
+} from "@/components/navigation/project-navigation-items";
 
-export type TNavigationItem = {
-  name: string;
-  href: string;
-  icon: React.ElementType;
-  access: EUserPermissions[] | EUserProjectRoles[];
-  shouldRender: boolean;
-  sortOrder: number;
-  i18n_key: string;
-  key: string;
-};
+export type TNavigationItem = TProjectNavigationItem;
 
 type TProjectItemsProps = {
   workspaceSlug: string;
@@ -43,6 +38,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
   const { workItem: workItemIdentifierFromRoute } = useParams();
   // store hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
   const { isExtendedProjectSidebarOpened, toggleExtendedProjectSidebar, toggleSidebar } = useAppTheme();
   const { getPartialProjectById } = useProject();
   const { allowPermissions } = useUserPermissions();
@@ -68,91 +64,27 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
     }
   };
 
-  const baseNavigation = useCallback(
-    (workspaceSlug: string, projectId: string): TNavigationItem[] => [
-      {
-        i18n_key: "sidebar.work_items",
-        key: "work_items",
-        name: "Work items",
-        href: `/${workspaceSlug}/projects/${projectId}/issues`,
-        icon: WorkItemsIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        shouldRender: true,
-        sortOrder: 1,
-      },
-      {
-        i18n_key: "sidebar.cycles",
-        key: "cycles",
-        name: "Cycles",
-        href: `/${workspaceSlug}/projects/${projectId}/cycles`,
-        icon: CycleIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-        shouldRender: project?.cycle_view ?? false,
-        sortOrder: 2,
-      },
-      {
-        i18n_key: "sidebar.modules",
-        key: "modules",
-        name: "Modules",
-        href: `/${workspaceSlug}/projects/${projectId}/modules`,
-        icon: ModuleIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-        shouldRender: project?.module_view ?? false,
-        sortOrder: 3,
-      },
-      {
-        i18n_key: "sidebar.views",
-        key: "views",
-        name: "Views",
-        href: `/${workspaceSlug}/projects/${projectId}/views`,
-        icon: ViewsIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        shouldRender: project?.issue_views_view ?? false,
-        sortOrder: 4,
-      },
-      {
-        i18n_key: "sidebar.pages",
-        key: "pages",
-        name: "Pages",
-        href: `/${workspaceSlug}/projects/${projectId}/pages`,
-        icon: PageIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        shouldRender: project?.page_view ?? false,
-        sortOrder: 5,
-      },
-      {
-        i18n_key: "sidebar.intake",
-        key: "intake",
-        name: "Intake",
-        href: `/${workspaceSlug}/projects/${projectId}/intake`,
-        icon: IntakeIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
-        shouldRender: project?.inbox_view ?? false,
-        sortOrder: 6,
-      },
-    ],
-    [project]
-  );
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
   // memoized navigation items and adding additional navigation items
   const navigationItemsMemo = useMemo(() => {
-    const navigationItems = (workspaceSlug: string, projectId: string): TNavigationItem[] => {
-      const navItems = baseNavigation(workspaceSlug, projectId);
+    const navigationItems = buildProjectNavigationItems({
+      workspaceSlug,
+      projectId,
+      project,
+      isPpmShellEnabled: isPpmShell,
+    });
 
-      if (additionalNavigationItems) {
-        navItems.push(...additionalNavigationItems(workspaceSlug, projectId));
-      }
-
-      return navItems;
-    };
+    if (additionalNavigationItems) {
+      navigationItems.push(...additionalNavigationItems(workspaceSlug, projectId));
+    }
 
     // sort navigation items by sortOrder
-    const sortedNavigationItems = navigationItems(workspaceSlug, projectId).sort(
-      (a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)
-    );
+    // oxlint-disable-next-line unicorn/no-array-sort -- the TypeScript target predates Array#toSorted
+    const sortedNavigationItems = [...navigationItems].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 
     return sortedNavigationItems;
-  }, [workspaceSlug, projectId, baseNavigation, additionalNavigationItems]);
+  }, [workspaceSlug, projectId, project, isPpmShell, additionalNavigationItems]);
 
   const isActive = useCallback(
     (item: TNavigationItem) => {
@@ -174,7 +106,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
   if (!project) return null;
 
   return (
-    <>
+    <nav aria-label={isPpmShell ? ppmT("navigation.project") : t("project")} className="flex flex-col gap-0.5">
       {navigationItemsMemo.map((item) => {
         if (!item.shouldRender) return;
 
@@ -182,16 +114,25 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         if (!hasAccess) return null;
 
         const shouldShowCount = item.key === "intake" && (project.intake_count ?? 0) > 0;
+        const itemIsActive = !!isActive(item);
 
         return (
-          <Link key={item.key} href={item.href} onClick={handleProjectClick}>
-            <SidebarNavItem isActive={!!isActive(item)}>
+          <Link
+            key={item.key}
+            href={item.href}
+            aria-current={itemIsActive ? "page" : undefined}
+            className="focus-visible:outline-accent-primary block rounded-md focus-visible:outline-2 focus-visible:outline-offset-2"
+            onClick={handleProjectClick}
+          >
+            <SidebarNavItem isActive={itemIsActive}>
               <div className="flex w-full items-center justify-between gap-1.5 py-[1px]">
                 <div className="flex items-center gap-1.5">
                   <item.icon
                     className={`size-4 flex-shrink-0 ${item.name === "Intake" ? "stroke-1" : "stroke-[1.5]"}`}
                   />
-                  <span className="text-11 font-medium">{t(item.i18n_key)}</span>
+                  <span className="text-11 font-medium">
+                    {item.ppmLabelKey ? ppmT(item.ppmLabelKey) : t(item.i18n_key)}
+                  </span>
                 </div>
                 {shouldShowCount && <span className="text-11 font-medium text-tertiary">{project.intake_count}</span>}
               </div>
@@ -199,6 +140,6 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
           </Link>
         );
       })}
-    </>
+    </nav>
   );
 });

@@ -4,7 +4,13 @@
  * See the LICENSE file for details.
  */
 
+import { isPpmShellEnabled } from "@ppm/brand";
+// hooks
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+
 export function MaintenanceMessage() {
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   const linkMap = [
     {
       key: "mail_to",
@@ -12,6 +18,15 @@ export function MaintenanceMessage() {
       value: "mailto:support@plane.so",
     },
   ];
+
+  if (isPpmShell) {
+    return (
+      <div className="flex flex-col gap-2.5">
+        <h1 className="text-left text-18 font-semibold text-primary">🚧 {ppmT("state.maintenance_title")}</h1>
+        <span className="text-left text-14 font-medium text-secondary">{ppmT("state.maintenance_description")}</span>
+      </div>
+    );
+  }
 
   return (
     <>

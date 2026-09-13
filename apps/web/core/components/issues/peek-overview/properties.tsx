@@ -22,6 +22,7 @@ import {
   ParentPropertyIcon,
 } from "@plane/propel/icons";
 import { cn, getDate, renderFormattedPayloadDate, shouldHighlightIssueDueDate } from "@plane/utils";
+import { isPpmShellEnabled, PPM_BRAND } from "@ppm/brand";
 // components
 import { DateDropdown } from "@/components/dropdowns/date";
 import { EstimateDropdown } from "@/components/dropdowns/estimate";
@@ -41,6 +42,10 @@ import type { TIssueOperations } from "../issue-detail";
 import { IssueCycleSelect } from "../issue-detail/cycle-select";
 import { IssueLabel } from "../issue-detail/label";
 import { IssueModuleSelect } from "../issue-detail/module-select";
+
+const INTAKE_AUTHOR_NAME = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED)
+  ? PPM_BRAND.name
+  : "Plane";
 
 interface IPeekOverviewProperties {
   workspaceSlug: string;
@@ -134,7 +139,9 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
               userIds={createdByDetails?.display_name?.includes("-intake") ? null : createdByDetails?.id}
             />
             <span className="grow truncate text-body-xs-medium leading-5 text-secondary">
-              {createdByDetails?.display_name?.includes("-intake") ? "Plane" : createdByDetails?.display_name}
+              {createdByDetails?.display_name?.includes("-intake")
+                ? INTAKE_AUTHOR_NAME
+                : createdByDetails?.display_name}
             </span>
           </SidebarPropertyListItem>
         )}

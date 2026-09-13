@@ -13,6 +13,8 @@ import type { IWorkspaceSidebarNavigationItem } from "@plane/constants";
 import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { joinUrlPath } from "@plane/utils";
+import { getPpmTranslation, isPpmShellEnabled } from "@ppm/brand";
+import type { TPpmTranslationKey } from "@ppm/brand";
 // components
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 // hooks
@@ -33,7 +35,7 @@ export const SidebarItemBase = observer(function SidebarItemBase({
   additionalRender,
   additionalStaticItems,
 }: Props) {
-  const { t } = useTranslation();
+  const { currentLocale, t } = useTranslation();
   const pathname = usePathname();
   const { workspaceSlug } = useParams();
   const { allowPermissions } = useUserPermissions();
@@ -66,13 +68,24 @@ export const SidebarItemBase = observer(function SidebarItemBase({
   const itemHref =
     item.key === "your_work" && data?.id ? joinUrlPath(slug, item.href, data?.id) : joinUrlPath(slug, item.href);
   const icon = getSidebarNavigationItemIcon(item.key);
+  const ppmLabelKeys: Partial<Record<string, TPpmTranslationKey>> = {
+    home: "global.home",
+    projects: "global.projects",
+    your_work: "global.my_tasks",
+    inbox: "global.inbox",
+  };
+  const ppmLabelKey = ppmLabelKeys[item.key];
+  const label =
+    isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED) && ppmLabelKey
+      ? getPpmTranslation(currentLocale, ppmLabelKey)
+      : t(item.labelTranslationKey);
 
   return (
     <Link href={itemHref} onClick={handleLinkClick}>
       <SidebarNavItem isActive={item.highlight(pathname, itemHref)}>
         <div className="flex items-center gap-1.5 py-[1px]">
           {icon}
-          <p className="text-13 leading-5 font-medium">{t(item.labelTranslationKey)}</p>
+          <p className="text-13 leading-5 font-medium">{label}</p>
         </div>
         {additionalRender?.(item.key, slug)}
       </SidebarNavItem>
