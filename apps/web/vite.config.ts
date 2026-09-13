@@ -15,6 +15,7 @@ const viteEnv = Object.keys(process.env)
   }, {});
 
 viteEnv.PPM_BRAND_ENABLED = process.env.PPM_BRAND_ENABLED ?? "1";
+viteEnv.PPM_CANVAS_ENABLED = process.env.PPM_CANVAS_ENABLED ?? "1";
 viteEnv.PPM_SHELL_ENABLED = process.env.PPM_SHELL_ENABLED ?? "1";
 
 export default defineConfig(() => ({

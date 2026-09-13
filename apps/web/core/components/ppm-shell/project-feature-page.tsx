@@ -9,6 +9,7 @@ import Link from "next/link";
 import { Navigate } from "react-router";
 import { isPpmShellEnabled, getPpmProjectPath } from "@ppm/brand";
 import type { TPpmTranslationKey } from "@ppm/brand";
+import { isPpmCanvasEnabled } from "@ppm/canvas";
 import { PageHead } from "@/components/core/page-title";
 import { useProject } from "@/hooks/store/use-project";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
@@ -59,6 +60,7 @@ export function PpmProjectFeaturePage({ feature, projectId, workspaceSlug }: TPp
   const { getPartialProjectById } = useProject();
   const project = getPartialProjectById(projectId);
   const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const isCanvasEnabled = isPpmCanvasEnabled(process.env.PPM_CANVAS_ENABLED, isPpmShell);
 
   if (!isPpmShell) return <Navigate replace to={getPpmProjectPath(workspaceSlug, projectId, "tasks")} />;
 
@@ -80,13 +82,16 @@ export function PpmProjectFeaturePage({ feature, projectId, workspaceSlug }: TPp
             status={ppmT("status.available")}
             available
           />
-          <FeatureCard
-            href={getPpmProjectPath(workspaceSlug, projectId, "brain")}
-            icon={BrainCircuit}
-            title={ppmT("project.brain")}
-            description={ppmT("brain.description")}
-            status={ppmT("status.planned")}
-          />
+          {isCanvasEnabled && (
+            <FeatureCard
+              href={getPpmProjectPath(workspaceSlug, projectId, "brain")}
+              icon={BrainCircuit}
+              title={ppmT("project.brain")}
+              description={ppmT("brain.description")}
+              status={ppmT("status.available")}
+              available
+            />
+          )}
           <FeatureCard
             href={getPpmProjectPath(workspaceSlug, projectId, "knowledge")}
             icon={FileText}

@@ -41,6 +41,7 @@
     "@plane/utils": "workspace:*",
     "@popperjs/core": "catalog:",
     "@ppm/brand": "workspace:*",
+    "@ppm/canvas": "workspace:*",
     "@react-pdf/renderer": "catalog:",
     "@react-router/node": "catalog:",
     "@tanstack/react-table": "catalog:",
@@ -74,6 +75,7 @@
     "serve": "catalog:",
     "smooth-scroll-into-view-if-needed": "catalog:",
     "swr": "catalog:",
+    "tldraw": "catalog:",
     "use-font-face-observer": "catalog:",
     "uuid": "catalog:"
   },

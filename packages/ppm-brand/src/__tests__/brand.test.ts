@@ -83,6 +83,8 @@ describe("PPM shell contract", () => {
     expect(getPpmTranslation("ru", "work_item.saved")).toBe("Сохранено");
     expect(getPpmTranslation("ru", "work_item.view")).toBe("Открыть задачу");
     expect(getPpmTranslation("ru", "navigation.open_workspace_menu")).toBe("Открыть меню пространства");
+    expect(getPpmTranslation("ru", "canvas.add_note")).toBe("Добавить заметку");
+    expect(getPpmTranslation("en", "canvas.permission_denied_title")).toBe("Canvas access denied");
   });
 
   it("builds reload-safe project routes", () => {
@@ -109,7 +111,6 @@ describe("PPM shell contract", () => {
     const plannedCapabilities = PPM_PROJECT_NAVIGATION_CONTRACT.filter(({ capability }) => capability === "planned");
 
     expect(plannedCapabilities).toEqual([
-      expect.objectContaining({ key: "brain", stage: "I0.4" }),
       expect.objectContaining({ key: "knowledge", stage: "I0.7" }),
       expect.objectContaining({ key: "code", stage: "G0.1" }),
     ]);

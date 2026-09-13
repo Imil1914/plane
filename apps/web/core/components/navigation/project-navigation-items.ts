@@ -28,6 +28,7 @@ export type TProjectNavigationItem = {
 };
 
 type TBuildProjectNavigationItems = {
+  isPpmCanvasEnabled: boolean;
   isPpmShellEnabled: boolean;
   project?: IPartialProject;
   projectId: string;
@@ -38,6 +39,7 @@ const ALL_PROJECT_MEMBERS = [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EU
 const PROJECT_EDITORS = [EUserPermissions.ADMIN, EUserPermissions.MEMBER];
 
 export function buildProjectNavigationItems({
+  isPpmCanvasEnabled,
   isPpmShellEnabled,
   project,
   projectId,
@@ -65,7 +67,7 @@ export function buildProjectNavigationItems({
       href: getPpmProjectPath(workspaceSlug, projectId, "brain"),
       icon: BrainCircuit,
       access: ALL_PROJECT_MEMBERS,
-      shouldRender: true,
+      shouldRender: isPpmCanvasEnabled,
       sortOrder: 2,
       ppmLabelKey: "project.brain",
       ppmSection: "context",

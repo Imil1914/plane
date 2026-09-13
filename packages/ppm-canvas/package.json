@@ -1,0 +1,34 @@
+{
+  "name": "@ppm/canvas",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run && node scripts/audit-browser-boundary.mjs",
+    "check:lint": "oxlint .",
+    "check:types": "tsc --noEmit",
+    "check:format": "oxfmt --check src scripts tsdown.config.ts package.json tsconfig.json",
+    "fix:lint": "oxlint --fix .",
+    "fix:format": "oxfmt src scripts tsdown.config.ts package.json tsconfig.json",
+    "clean": "rm -rf .turbo node_modules dist"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@plane/typescript-config": "workspace:*",
+    "@types/node": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -4,9 +4,9 @@
  * See the LICENSE file for details.
  */
 
-import { PpmProjectFeaturePage } from "@/components/ppm-shell/project-feature-page";
+import { PpmCanvasRoute } from "@/components/ppm-canvas/route";
 import type { Route } from "./+types/page";
 
 export default function ProjectBrainPage({ params }: Route.ComponentProps) {
-  return <PpmProjectFeaturePage feature="brain" {...params} />;
+  return <PpmCanvasRoute {...params} />;
 }

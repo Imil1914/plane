@@ -11,6 +11,7 @@ import { useParams, usePathname } from "next/navigation";
 import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { isPpmShellEnabled } from "@ppm/brand";
+import { isPpmCanvasEnabled } from "@ppm/canvas";
 // plane ui
 // components
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
@@ -65,6 +66,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
   };
 
   const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const isPpmCanvas = isPpmCanvasEnabled(process.env.PPM_CANVAS_ENABLED, isPpmShell);
 
   // memoized navigation items and adding additional navigation items
   const navigationItemsMemo = useMemo(() => {
@@ -73,6 +75,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
       projectId,
       project,
       isPpmShellEnabled: isPpmShell,
+      isPpmCanvasEnabled: isPpmCanvas,
     });
 
     if (additionalNavigationItems) {
@@ -84,7 +87,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
     const sortedNavigationItems = [...navigationItems].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
 
     return sortedNavigationItems;
-  }, [workspaceSlug, projectId, project, isPpmShell, additionalNavigationItems]);
+  }, [workspaceSlug, projectId, project, isPpmShell, isPpmCanvas, additionalNavigationItems]);
 
   const isActive = useCallback(
     (item: TNavigationItem) => {

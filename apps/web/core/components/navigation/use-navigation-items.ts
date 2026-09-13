@@ -9,6 +9,7 @@ import { useMemo } from "react";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
 import { isPpmShellEnabled } from "@ppm/brand";
+import { isPpmCanvasEnabled } from "@ppm/canvas";
 import type { TNavigationItem } from "@/components/navigation/tab-navigation-root";
 import { buildProjectNavigationItems } from "./project-navigation-items";
 
@@ -32,11 +33,13 @@ export const useNavigationItems = ({
 }: UseNavigationItemsProps): TNavigationItem[] => {
   // Combine, filter, and sort navigation items
   const navigationItems = useMemo(() => {
+    const ppmShellEnabled = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
     const navItems = buildProjectNavigationItems({
       workspaceSlug,
       projectId,
       project,
-      isPpmShellEnabled: isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED),
+      isPpmShellEnabled: ppmShellEnabled,
+      isPpmCanvasEnabled: isPpmCanvasEnabled(process.env.PPM_CANVAS_ENABLED, ppmShellEnabled),
     });
 
     // Filter by permissions and shouldRender

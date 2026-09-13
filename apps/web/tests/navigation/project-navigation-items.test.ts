@@ -25,15 +25,18 @@ const DISABLED_PROJECT_FEATURES = {
 } as IPartialProject;
 
 function visibleKeys({
+  isPpmCanvasEnabled = true,
   isPpmShellEnabled,
   project = ENABLED_PROJECT_FEATURES,
   role,
 }: {
+  isPpmCanvasEnabled?: boolean;
   isPpmShellEnabled: boolean;
   project?: IPartialProject;
   role: EUserPermissions;
 }): string[] {
   return buildProjectNavigationItems({
+    isPpmCanvasEnabled,
     isPpmShellEnabled,
     project,
     projectId: project.id,
@@ -95,6 +98,12 @@ describe("PPM project navigation capabilities", () => {
         role: EUserPermissions.ADMIN,
       })
     ).toEqual(["overview", "brain", "work_items", "knowledge", "code", "settings"]);
+  });
+
+  it("hides the Canvas route when its rollback flag is disabled", () => {
+    expect(
+      visibleKeys({ isPpmCanvasEnabled: false, isPpmShellEnabled: true, role: EUserPermissions.ADMIN })
+    ).not.toContain("brain");
   });
 
   it("preserves the upstream role boundary when the PPM shell is rolled back", () => {
