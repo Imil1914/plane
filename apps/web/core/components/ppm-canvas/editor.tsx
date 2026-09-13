@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BrainCircuit,
   Frame,
@@ -16,15 +16,29 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { Tldraw, createShapeId, useEditor, useValue, type Editor, type TLComponents, type TLShapeId } from "tldraw";
 import {
+  Tldraw,
+  createShapeId,
+  useEditor,
+  useValue,
+  type Editor,
+  type TLComponents,
+  type TLEditorSnapshot,
+  type TLShapeId,
+} from "tldraw";
+import {
+  PPM_CANVAS_AUTOSAVE_DELAY_MS,
+  PPM_CANVAS_SCHEMA_VERSION,
   createPpmCanvasNode,
-  getPpmCanvasPersistenceKey,
   parseSerializedPpmCanvasNode,
   serializePpmCanvasNode,
+  type TPpmCanvasSaveRequest,
   type TPpmCanvasNodeKind,
+  type TPpmCanvasSyncStatus,
 } from "@ppm/canvas";
+import type { TPpmTranslationKey } from "@ppm/brand";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { PpmCanvasService, PpmCanvasServiceError } from "@/services/ppm-canvas.service";
 import { PPM_CANVAS_SHAPE_TYPE, PpmCanvasNodeShapeUtil, type TPpmCanvasShape } from "./shape";
 // oxlint-disable-next-line import/no-unassigned-import -- tldraw owns the canvas interaction styles
 import "tldraw/tldraw.css";
@@ -35,8 +49,10 @@ type TPpmCanvasEditorProps = {
   authorId: string;
   canEdit: boolean;
   projectId: string;
-  workspaceSlug: string;
+  workspaceId: string;
 };
+
+type TPendingCanvasSave = Pick<TPpmCanvasSaveRequest, "base_version" | "client_operation_id" | "snapshot">;
 
 const HIDDEN_TLDRAW_UI: TLComponents = {
   ActionsMenu: null,
@@ -65,32 +81,183 @@ const HIDDEN_TLDRAW_UI: TLComponents = {
   ZoomMenu: null,
 };
 
-export default function PpmCanvasEditor({ authorId, canEdit, projectId, workspaceSlug }: TPpmCanvasEditorProps) {
+export default function PpmCanvasEditor({ authorId, canEdit, projectId, workspaceId }: TPpmCanvasEditorProps) {
+  const service = useMemo(() => new PpmCanvasService(), []);
+  const [editor, setEditor] = useState<Editor>();
+  const [effectiveCanEdit, setEffectiveCanEdit] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<TPpmCanvasSyncStatus>("loading");
+  const [copiedLocal, setCopiedLocal] = useState(false);
+  const editorRef = useRef<Editor>();
+  const versionRef = useRef(0);
+  const pendingSaveRef = useRef<TPendingCanvasSave>();
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const savingRef = useRef(false);
+  const dirtyRef = useRef(false);
+  const blockedRef = useRef(true);
+  const editableRef = useRef(false);
+
+  const scheduleSaveRef = useRef<() => void>(() => undefined);
+  const flushSave = useCallback(async () => {
+    const activeEditor = editorRef.current;
+    if (!activeEditor || !editableRef.current || blockedRef.current || savingRef.current) return;
+
+    let pending = pendingSaveRef.current;
+    if (!pending) {
+      const { document } = activeEditor.getSnapshot();
+      pending = {
+        base_version: versionRef.current,
+        client_operation_id: crypto.randomUUID(),
+        snapshot: { document },
+      };
+      pendingSaveRef.current = pending;
+      dirtyRef.current = false;
+    }
+
+    savingRef.current = true;
+    setSyncStatus("saving");
+    try {
+      const request: TPpmCanvasSaveRequest = {
+        schema_version: PPM_CANVAS_SCHEMA_VERSION,
+        base_version: pending.base_version,
+        client_operation_id: pending.client_operation_id,
+        snapshot: pending.snapshot,
+      };
+      const response = await service.saveCanvas(workspaceId, projectId, request);
+      versionRef.current = response.version;
+      pendingSaveRef.current = undefined;
+      savingRef.current = false;
+      setSyncStatus("saved");
+      if (dirtyRef.current) scheduleSaveRef.current();
+    } catch (error) {
+      savingRef.current = false;
+      if (error instanceof PpmCanvasServiceError && error.status === 409) {
+        blockedRef.current = true;
+        setSyncStatus("conflict");
+        return;
+      }
+      setSyncStatus("error");
+    }
+  }, [projectId, service, workspaceId]);
+
+  const scheduleSave = useCallback(() => {
+    dirtyRef.current = true;
+    if (blockedRef.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => void flushSave(), PPM_CANVAS_AUTOSAVE_DELAY_MS);
+  }, [flushSave]);
+  scheduleSaveRef.current = scheduleSave;
+
+  useEffect(() => {
+    if (!editor) return;
+    let active = true;
+    let stopListening: (() => void) | undefined;
+    editorRef.current = editor;
+    blockedRef.current = true;
+    editableRef.current = false;
+    pendingSaveRef.current = undefined;
+    dirtyRef.current = false;
+    versionRef.current = 0;
+    setCopiedLocal(false);
+    setEffectiveCanEdit(false);
+    setSyncStatus("loading");
+    editor.updateInstanceState({ isReadonly: true });
+
+    const initialize = async () => {
+      try {
+        const remoteCanvas = await service.getCanvas(workspaceId, projectId);
+        if (!active) return;
+        versionRef.current = remoteCanvas.version;
+        if (remoteCanvas.snapshot_status === "corrupt") {
+          setSyncStatus("corrupt");
+          return;
+        }
+        if (remoteCanvas.snapshot_status === "ready" && remoteCanvas.snapshot) {
+          editor.loadSnapshot(remoteCanvas.snapshot as unknown as Partial<TLEditorSnapshot>);
+        }
+        const mayEdit = canEdit && remoteCanvas.access === "edit";
+        blockedRef.current = !mayEdit;
+        editableRef.current = mayEdit;
+        setEffectiveCanEdit(mayEdit);
+        editor.updateInstanceState({ isReadonly: !mayEdit });
+        setSyncStatus("saved");
+        if (mayEdit) {
+          stopListening = editor.store.listen(scheduleSave, { scope: "document", source: "user" });
+        }
+      } catch {
+        if (!active) return;
+        setSyncStatus("error");
+      }
+    };
+    void initialize();
+
+    return () => {
+      active = false;
+      stopListening?.();
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      editableRef.current = false;
+      if (editorRef.current === editor) editorRef.current = undefined;
+    };
+  }, [canEdit, editor, projectId, scheduleSave, service, workspaceId]);
+
+  const copyLocalSnapshot = useCallback(async () => {
+    const activeEditor = editorRef.current;
+    if (!activeEditor) return;
+    const { document } = activeEditor.getSnapshot();
+    try {
+      await navigator.clipboard.writeText(JSON.stringify({ document }));
+      setCopiedLocal(true);
+    } catch {
+      setSyncStatus("error");
+    }
+  }, []);
+
   const components = useMemo<TLComponents>(
     () => ({
       ...HIDDEN_TLDRAW_UI,
-      InFrontOfTheCanvas: () => <CanvasControls authorId={authorId} canEdit={canEdit} />,
+      InFrontOfTheCanvas: () => (
+        <CanvasControls
+          authorId={authorId}
+          canEdit={effectiveCanEdit}
+          copiedLocal={copiedLocal}
+          onCopyLocal={() => void copyLocalSnapshot()}
+          onReload={() => window.location.reload()}
+          onRetry={() => (pendingSaveRef.current ? void flushSave() : window.location.reload())}
+          syncStatus={syncStatus}
+        />
+      ),
     }),
-    [authorId, canEdit]
+    [authorId, copiedLocal, copyLocalSnapshot, effectiveCanEdit, flushSave, syncStatus]
   );
-  const persistenceKey = getPpmCanvasPersistenceKey(workspaceSlug, projectId, authorId);
 
   return (
-    <div className="ppm-canvas-shell" data-ppm-canvas-mode={canEdit ? "edit" : "read"}>
+    <div className="ppm-canvas-shell" data-ppm-canvas-mode={effectiveCanEdit ? "edit" : "read"}>
       <Tldraw
         cameraOptions={{ wheelBehavior: "pan" }}
         components={components}
-        persistenceKey={persistenceKey}
         shapeUtils={[PpmCanvasNodeShapeUtil]}
-        onMount={(editor) => {
-          editor.updateInstanceState({ isReadonly: !canEdit });
-        }}
+        onMount={setEditor}
       />
     </div>
   );
 }
 
-function CanvasControls({ authorId, canEdit }: { authorId: string; canEdit: boolean }) {
+function CanvasControls({
+  authorId,
+  canEdit,
+  copiedLocal,
+  onCopyLocal,
+  onReload,
+  onRetry,
+  syncStatus,
+}: {
+  authorId: string;
+  canEdit: boolean;
+  copiedLocal: boolean;
+  onCopyLocal: () => void;
+  onReload: () => void;
+  onRetry: () => void;
+  syncStatus: TPpmCanvasSyncStatus;
+}) {
   const editor = useEditor();
   const ppmT = usePpmTranslation();
   const currentTool = useValue("current tool", () => editor.getCurrentToolId(), [editor]);
@@ -145,10 +312,33 @@ function CanvasControls({ authorId, canEdit }: { authorId: string; canEdit: bool
           </span>
           <div>
             <strong>{ppmT("project.brain")}</strong>
-            <span>{ppmT(canEdit ? "canvas.saved_local" : "canvas.read_only_title")}</span>
+            <span>
+              {ppmT(canEdit || syncStatus !== "saved" ? SYNC_STATUS_LABELS[syncStatus] : "canvas.read_only_title")}
+            </span>
           </div>
         </div>
-        {canEdit && <p className="ppm-canvas-status__notice">{ppmT("canvas.local_notice")}</p>}
+        <p className="ppm-canvas-status__notice" data-status={syncStatus}>
+          {ppmT(
+            canEdit || syncStatus !== "saved" ? SYNC_STATUS_DESCRIPTIONS[syncStatus] : "canvas.read_only_description"
+          )}
+        </p>
+        {(syncStatus === "conflict" || syncStatus === "error" || syncStatus === "corrupt") && (
+          <div className="ppm-canvas-status__actions">
+            {syncStatus === "error" && (
+              <button type="button" onClick={onRetry}>
+                {ppmT("canvas.retry_save")}
+              </button>
+            )}
+            {syncStatus === "conflict" && (
+              <button type="button" onClick={onCopyLocal}>
+                {ppmT(copiedLocal ? "canvas.copy_done" : "canvas.copy_local")}
+              </button>
+            )}
+            <button type="button" onClick={onReload}>
+              {ppmT("canvas.reload_server")}
+            </button>
+          </div>
+        )}
         <details>
           <summary>
             {ppmT("canvas.objects")} · {nodes.length}
@@ -191,6 +381,24 @@ function CanvasControls({ authorId, canEdit }: { authorId: string; canEdit: bool
     </>
   );
 }
+
+const SYNC_STATUS_LABELS: Record<TPpmCanvasSyncStatus, TPpmTranslationKey> = {
+  conflict: "canvas.sync_conflict",
+  corrupt: "canvas.sync_corrupt",
+  error: "canvas.sync_error",
+  loading: "canvas.sync_loading",
+  saved: "canvas.sync_saved",
+  saving: "canvas.sync_saving",
+};
+
+const SYNC_STATUS_DESCRIPTIONS: Record<TPpmCanvasSyncStatus, TPpmTranslationKey> = {
+  conflict: "canvas.sync_conflict_description",
+  corrupt: "canvas.sync_corrupt_description",
+  error: "canvas.sync_error_description",
+  loading: "canvas.sync_loading_description",
+  saved: "canvas.sync_saved_description",
+  saving: "canvas.sync_saving_description",
+};
 
 type TToolbarButtonProps = {
   active?: boolean;

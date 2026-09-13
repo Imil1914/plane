@@ -6,6 +6,9 @@ import {
   parseAndMigratePpmCanvasNode,
   parseSerializedPpmCanvasNode,
   PPM_CANVAS_NODE_REGISTRY,
+  ppmCanvasErrorResponseSchema,
+  ppmCanvasReadResponseSchema,
+  ppmCanvasSaveResponseSchema,
   updatePpmCanvasNode,
 } from "../index";
 
@@ -85,5 +88,74 @@ describe("PPM Canvas project boundary", () => {
     expect(isPpmCanvasEnabled(undefined, true)).toBe(true);
     expect(isPpmCanvasEnabled("0", true)).toBe(false);
     expect(isPpmCanvasEnabled("1", false)).toBe(false);
+  });
+});
+
+describe("PPM Canvas HTTP contract", () => {
+  const canvasId = "9ccca22c-1f55-4aed-873a-cf9a2f48ce07";
+  const workspaceId = "cb25e219-d0b2-491c-ad24-3430b1a2c6d3";
+  const projectId = "af7495ab-f952-4a89-9a24-6498d236584e";
+  const userId = "8e3389db-299c-4861-89d3-1003d8e36105";
+
+  it("accepts an empty first-open response", () => {
+    expect(
+      ppmCanvasReadResponseSchema.parse({
+        canvas_id: canvasId,
+        workspace_id: workspaceId,
+        project_id: projectId,
+        name: "Мозг проекта",
+        schema_version: 1,
+        version: 0,
+        snapshot: null,
+        snapshot_status: "empty",
+        content_hash: null,
+        saved_at: null,
+        saved_by: null,
+        access: "edit",
+      }).snapshot_status
+    ).toBe("empty");
+  });
+
+  it("rejects a ready response without a snapshot", () => {
+    expect(
+      ppmCanvasReadResponseSchema.safeParse({
+        canvas_id: canvasId,
+        workspace_id: workspaceId,
+        project_id: projectId,
+        name: "Мозг проекта",
+        schema_version: 1,
+        version: 1,
+        snapshot: null,
+        snapshot_status: "ready",
+        content_hash: "a".repeat(64),
+        saved_at: "2026-09-13T08:00:00.000Z",
+        saved_by: userId,
+        access: "read",
+      }).success
+    ).toBe(false);
+  });
+
+  it("validates save and error envelopes", () => {
+    expect(
+      ppmCanvasSaveResponseSchema.parse({
+        canvas_id: canvasId,
+        version: 1,
+        content_hash: "b".repeat(64),
+        saved_at: "2026-09-13T08:00:00.000Z",
+        saved_by: userId,
+        request_id: "f34502e2-ef58-475f-939f-6f835d7b94ec",
+        idempotent_replay: false,
+      }).version
+    ).toBe(1);
+    expect(
+      ppmCanvasErrorResponseSchema.parse({
+        error: {
+          code: "CANVAS_VERSION_CONFLICT",
+          message: "conflict",
+          request_id: "263d0111-03e4-4f7f-a655-b9b42e0a90fa",
+          details: { current_version: 2 },
+        },
+      }).error.code
+    ).toBe("CANVAS_VERSION_CONFLICT");
   });
 });

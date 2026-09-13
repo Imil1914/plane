@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const PPM_CANVAS_SCHEMA_VERSION = 1 as const;
+export const PPM_CANVAS_AUTOSAVE_DELAY_MS = 1_000;
 
 export const PPM_CANVAS_NODE_KINDS = ["note", "group"] as const;
 export type TPpmCanvasNodeKind = (typeof PPM_CANVAS_NODE_KINDS)[number];
@@ -44,6 +45,76 @@ export const ppmCanvasGroupSchema = z
 export const ppmCanvasNodeSchema = z.discriminatedUnion("kind", [ppmCanvasNoteSchema, ppmCanvasGroupSchema]);
 
 export type TPpmCanvasNode = z.infer<typeof ppmCanvasNodeSchema>;
+
+const ppmCanvasDocumentSchema = z.custom<object>(
+  (value) => typeof value === "object" && value !== null && !Array.isArray(value),
+  "Canvas document must be an object."
+);
+
+export const ppmCanvasSnapshotSchema = z.object({ document: ppmCanvasDocumentSchema }).passthrough();
+
+export const ppmCanvasReadResponseSchema = z
+  .object({
+    canvas_id: z.string().uuid(),
+    workspace_id: z.string().uuid(),
+    project_id: z.string().uuid(),
+    name: z.string(),
+    schema_version: z.literal(PPM_CANVAS_SCHEMA_VERSION),
+    version: z.number().int().nonnegative(),
+    snapshot: ppmCanvasSnapshotSchema.nullable(),
+    snapshot_status: z.enum(["empty", "ready", "corrupt"]),
+    content_hash: z.string().length(64).nullable(),
+    saved_at: z.string().datetime({ offset: true }).nullable(),
+    saved_by: z.string().uuid().nullable(),
+    access: z.enum(["edit", "read"]),
+  })
+  .superRefine((value, context) => {
+    if (value.snapshot_status === "ready" && value.snapshot === null) {
+      context.addIssue({
+        code: "custom",
+        message: "Ready Canvas response must include a snapshot.",
+        path: ["snapshot"],
+      });
+    }
+    if (value.snapshot_status !== "ready" && value.snapshot !== null) {
+      context.addIssue({
+        code: "custom",
+        message: "Empty or corrupt Canvas response must not include a snapshot.",
+        path: ["snapshot"],
+      });
+    }
+  });
+
+export const ppmCanvasSaveResponseSchema = z.object({
+  canvas_id: z.string().uuid(),
+  version: z.number().int().positive(),
+  content_hash: z.string().length(64),
+  saved_at: z.string().datetime({ offset: true }),
+  saved_by: z.string().uuid(),
+  request_id: z.string().uuid(),
+  idempotent_replay: z.boolean(),
+});
+
+export const ppmCanvasErrorResponseSchema = z.object({
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+    request_id: z.string().uuid(),
+    details: z.record(z.string(), z.unknown()),
+  }),
+});
+
+export type TPpmCanvasSnapshot = z.infer<typeof ppmCanvasSnapshotSchema>;
+export type TPpmCanvasReadResponse = z.infer<typeof ppmCanvasReadResponseSchema>;
+export type TPpmCanvasSaveResponse = z.infer<typeof ppmCanvasSaveResponseSchema>;
+export type TPpmCanvasSyncStatus = "conflict" | "corrupt" | "error" | "loading" | "saved" | "saving";
+
+export type TPpmCanvasSaveRequest = {
+  schema_version: typeof PPM_CANVAS_SCHEMA_VERSION;
+  base_version: number;
+  snapshot: TPpmCanvasSnapshot;
+  client_operation_id: string;
+};
 
 export const PPM_CANVAS_NODE_REGISTRY = {
   note: {

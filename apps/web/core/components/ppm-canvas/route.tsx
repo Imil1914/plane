@@ -12,6 +12,7 @@ import { getPpmProjectPath, isPpmShellEnabled, type TPpmTranslationKey } from "@
 import { isPpmCanvasEnabled } from "@ppm/canvas";
 import { PageHead } from "@/components/core/page-title";
 import { useProject } from "@/hooks/store/use-project";
+import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { resolvePpmCanvasAccess } from "./access";
@@ -29,14 +30,16 @@ const PROJECT_EDITORS = [EUserPermissions.ADMIN, EUserPermissions.MEMBER];
 export function PpmCanvasRoute({ projectId, workspaceSlug }: TPpmCanvasRouteProps) {
   const ppmT = usePpmTranslation();
   const { getPartialProjectById } = useProject();
+  const { getWorkspaceBySlug } = useWorkspace();
   const { data: currentUser } = useUser();
   const { allowPermissions, getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
   const project = getPartialProjectById(projectId);
+  const workspace = getWorkspaceBySlug(workspaceSlug);
   const isShellEnabled = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   const isCanvasEnabled = isPpmCanvasEnabled(process.env.PPM_CANVAS_ENABLED, isShellEnabled);
 
   if (!isCanvasEnabled) return <Navigate replace to={getPpmProjectPath(workspaceSlug, projectId, "tasks")} />;
-  if (!project || !currentUser) return <CanvasState kind="loading" />;
+  if (!project || !currentUser || !workspace) return <CanvasState kind="loading" />;
 
   const role = getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId);
   const roleAccess = resolvePpmCanvasAccess(role);
@@ -54,7 +57,7 @@ export function PpmCanvasRoute({ projectId, workspaceSlug }: TPpmCanvasRouteProp
             {project.name}
           </span>
           <span className="shadow-sm rounded-full border border-subtle bg-surface-1/95 px-2.5 py-1 text-11 font-medium text-secondary backdrop-blur">
-            {ppmT("canvas.local_badge")}
+            {ppmT("canvas.shared_badge")}
           </span>
         </div>
         <CanvasErrorBoundary>
@@ -63,7 +66,7 @@ export function PpmCanvasRoute({ projectId, workspaceSlug }: TPpmCanvasRouteProp
               authorId={currentUser.id}
               canEdit={canEdit && roleAccess === "edit"}
               projectId={projectId}
-              workspaceSlug={workspaceSlug}
+              workspaceId={workspace.id}
             />
           </Suspense>
         </CanvasErrorBoundary>
