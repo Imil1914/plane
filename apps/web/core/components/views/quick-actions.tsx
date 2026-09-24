@@ -9,7 +9,7 @@ import { observer } from "mobx-react";
 import { MoreHorizontal } from "lucide-react";
 // types
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
-import { IconButton } from "@plane/propel/icon-button";
+import { getIconButtonStyling } from "@plane/propel/icon-button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IProjectView } from "@plane/types";
 // ui
@@ -20,6 +20,7 @@ import { copyUrlToClipboard, cn } from "@plane/utils";
 import { useViewMenuItems } from "@/components/common/quick-actions-helper";
 // hooks
 import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { useViewPublish } from "@/components/views/publish";
 // local imports
 import { DeleteProjectViewModal } from "./delete-view-modal";
@@ -35,6 +36,8 @@ type Props = {
 
 export const ViewQuickActions = observer(function ViewQuickActions(props: Props) {
   const { parentRef, projectId, view, workspaceSlug, customClassName } = props;
+  // i18n
+  const ppmT = usePpmTranslation();
   // states
   const [createUpdateViewModal, setCreateUpdateViewModal] = useState(false);
   const [deleteViewModal, setDeleteViewModal] = useState(false);
@@ -99,7 +102,9 @@ export const ViewQuickActions = observer(function ViewQuickActions(props: Props)
       {additionalModals}
       <ContextMenu parentRef={parentRef} items={CONTEXT_MENU_ITEMS} />
       <CustomMenu
-        customButton={<IconButton variant="tertiary" size="lg" icon={MoreHorizontal} />}
+        customButton={<MoreHorizontal className="size-4" aria-hidden="true" />}
+        customButtonClassName={getIconButtonStyling("tertiary", "lg")}
+        ariaLabel={ppmT("a11y.more_actions")}
         placement="bottom-end"
         closeOnSelect
         buttonClassName={customClassName}

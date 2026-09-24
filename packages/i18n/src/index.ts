@@ -18,6 +18,8 @@ export type { TNamespace } from "./constants/namespaces";
 
 // Utilities
 export { setLanguage } from "./core/set-language";
+export { applyTranslationOverlay } from "./core/overlay";
+export type { TTranslationOverlay } from "./core/overlay";
 
 // Constants
 export { FALLBACK_LANGUAGE, SUPPORTED_LANGUAGES, LANGUAGE_STORAGE_KEY } from "./constants/language";

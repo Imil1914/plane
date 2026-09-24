@@ -118,7 +118,7 @@ function CanvasState({ kind }: { kind: TCanvasStateKind }) {
         {kind === "error" && (
           <button
             type="button"
-            className="mt-4 rounded-md bg-accent-primary px-3 py-2 text-13 font-semibold text-on-color hover:bg-accent-primary-hover"
+            className="mt-4 rounded-md bg-accent-primary px-3 py-2 text-13 font-semibold text-on-accent hover:bg-accent-primary-hover"
             onClick={() => window.location.reload()}
           >
             {ppmT("canvas.reload")}

@@ -10,7 +10,7 @@ import { MoreHorizontal } from "lucide-react";
 // ui
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { IconButton } from "@plane/propel/icon-button";
+import { getIconButtonStyling } from "@plane/propel/icon-button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TContextMenuItem } from "@plane/ui";
 import { ContextMenu, CustomMenu } from "@plane/ui";
@@ -20,6 +20,7 @@ import { useCycleMenuItems } from "@/components/common/quick-actions-helper";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // local imports
 import { ArchiveCycleModal } from "./archived-cycles/modal";
 import { CycleDeleteModal } from "./delete-modal";
@@ -37,6 +38,8 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
   const { parentRef, cycleId, projectId, workspaceSlug, customClassName } = props;
   // router
   const router = useAppRouter();
+  // i18n
+  const ppmT = usePpmTranslation();
   // states
   const [updateModal, setUpdateModal] = useState(false);
   const [archiveCycleModal, setArchiveCycleModal] = useState(false);
@@ -140,7 +143,9 @@ export const CycleQuickActions = observer(function CycleQuickActions(props: Prop
       )}
       <ContextMenu parentRef={parentRef} items={CONTEXT_MENU_ITEMS} />
       <CustomMenu
-        customButton={<IconButton variant="tertiary" size="lg" icon={MoreHorizontal} />}
+        customButton={<MoreHorizontal className="size-4" aria-hidden="true" />}
+        customButtonClassName={getIconButtonStyling("tertiary", "lg")}
+        ariaLabel={ppmT("a11y.more_actions")}
         placement="bottom-end"
         closeOnSelect
         maxHeight="lg"

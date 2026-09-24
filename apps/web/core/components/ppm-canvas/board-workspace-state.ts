@@ -1,6 +1,11 @@
-import type { TPpmCanvasBoard } from "@ppm/canvas";
+import type { TPpmCanvasBoard, TPpmCanvasSyncStatus } from "@ppm/canvas";
 
 export const MAX_OPEN_CANVAS_BOARDS = 8;
+
+// Below this width the rail starts (and snaps back to) collapsed so it does not eat canvas space
+// on laptop-size viewports. Independent of canvas.css's 980px overlay breakpoint, which still
+// governs when an expanded rail floats over the canvas instead of taking its own column.
+export const CANVAS_RAIL_COLLAPSE_QUERY = "(max-width: 1279px)";
 
 export type TPpmCanvasBoardTabScope = {
   authorId: string;
@@ -105,6 +110,38 @@ export function moveBoard(boards: TPpmCanvasBoard[], boardId: string, direction:
   const next = [...activeBoards];
   [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
   return [...next.map((board, position) => Object.assign({}, board, { position })), ...archivedBoards];
+}
+
+// Conflict, error and corrupt states (and any pending draft recovery) need a user decision,
+// so they are shown as a banner with actions instead of the quiet footer status.
+export function isBlockingCanvasStatus(status: TPpmCanvasSyncStatus | undefined, recoveryMode: boolean): boolean {
+  return recoveryMode || status === "conflict" || status === "error" || status === "corrupt";
+}
+
+// The footer only reports the active board; background tabs keep a dot while they save or need attention.
+export function shouldShowTabSyncDot(status: TPpmCanvasSyncStatus | undefined): boolean {
+  return status === "saving" || status === "error" || status === "conflict" || status === "corrupt";
+}
+
+// Right side of the footer: the access role, unless the status label on the left already says "read-only".
+export function footerRoleLabelKey(
+  canEdit: boolean,
+  statusKey: string
+): "canvas.shared_badge" | "canvas.read_only_title" | null {
+  if (canEdit) return "canvas.shared_badge";
+  return statusKey === "canvas.read_only_title" ? null : "canvas.read_only_title";
+}
+
+// Hint for the canvas command palette; Apple keyboards show ⌘, everyone else presses Ctrl.
+export function formatCanvasCommandShortcut(platform: string): string {
+  return /mac|iphone|ipad/i.test(platform) ? "⌘K" : "Ctrl K";
+}
+
+// ⌘K opens the canvas palette only while focus is on the page body or inside the canvas workspace.
+// Anywhere else (Plane's top bar, Power-K, Plane modals) the shortcut is left to Plane's own palette.
+export function shouldCanvasOwnCommandShortcut(activeElement: Element | null, workspace: Element | null): boolean {
+  if (!activeElement || activeElement.tagName === "BODY") return true;
+  return Boolean(workspace?.contains(activeElement));
 }
 
 export function filterCanvasCommands<TCommand extends string>(

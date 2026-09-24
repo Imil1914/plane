@@ -197,6 +197,21 @@ export function resolveBoardSaveCompletion(remoteConflict: boolean, hasNewLocalC
   return hasNewLocalChanges ? "save_again" : "saved";
 }
 
+export type TPpmPresenceCursorColors = { cursor: string; label: string };
+
+// Cursor keeps the saturated accent; the label is lightened so a fixed dark ink
+// (#0e0f12, matched to the toast/canvas dark background) stays >= 4.5:1 on every hue.
+export function presenceCursorColorsForHue(hue: number): TPpmPresenceCursorColors {
+  const normalized = ((hue % 360) + 360) % 360;
+  return { cursor: `hsl(${normalized} 72% 52%)`, label: `hsl(${normalized} 80% 72%)` };
+}
+
+export function presenceCursorColors(userId: string): TPpmPresenceCursorColors {
+  let hash = 0;
+  for (const character of userId) hash = (hash * 31 + character.codePointAt(0)!) % 360;
+  return presenceCursorColorsForHue(hash);
+}
+
 export function usePpmBoardPresence({
   boardId,
   projectId,

@@ -97,6 +97,15 @@ describe("PPM shell contract", () => {
     expect(getPpmTranslation("ru", "navigation.open_workspace_menu")).toBe("Открыть меню пространства");
     expect(getPpmTranslation("ru", "canvas.add_note")).toBe("Добавить заметку");
     expect(getPpmTranslation("en", "canvas.permission_denied_title")).toBe("Canvas access denied");
+    expect(getPpmTranslation("ru", "confirm.cancel")).toBe("Отмена");
+    expect(getPpmTranslation("ru", "vault.confirm_trash_action")).toBe("В корзину");
+    expect(getPpmTranslation("en", "code.confirm_disable_index_action")).toBe("Turn off");
+    expect(getPpmTranslation("ru", "a11y.editor.align_left")).toBe("Выровнять по левому краю");
+    expect(getPpmTranslation("ru", "a11y.editor.align_center")).toBe("Выровнять по центру");
+    expect(getPpmTranslation("ru", "a11y.editor.align_right")).toBe("Выровнять по правому краю");
+    expect(getPpmTranslation("en", "a11y.editor.align_center")).toBe("Center align");
+    expect(getPpmTranslation("ru", "vault.tree_label")).toBe("Хранилище проекта");
+    expect(getPpmTranslation("en", "vault.tree_label")).toBe("Project storage");
   });
 
   it("builds reload-safe project routes", () => {
@@ -119,35 +128,61 @@ describe("PPM shell contract", () => {
     ]);
   });
 
-  it("marks unavailable capabilities with a delivery stage", () => {
-    const plannedCapabilities = PPM_PROJECT_NAVIGATION_CONTRACT.filter(({ capability }) => capability === "planned");
-
-    expect(plannedCapabilities).toEqual([expect.objectContaining({ key: "code", stage: "G0.1" })]);
+  it("has no planned capabilities left: every navigation entry is available", () => {
+    expect(PPM_PROJECT_NAVIGATION_CONTRACT.every(({ capability }) => capability === "available")).toBe(true);
     expect(PPM_PROJECT_NAVIGATION_CONTRACT).toContainEqual(
       expect.objectContaining({ key: "knowledge", capability: "available" })
     );
+    expect(PPM_PROJECT_NAVIGATION_CONTRACT).toContainEqual(
+      expect.objectContaining({ key: "code", capability: "available" })
+    );
+  });
+});
+
+describe("PPM canvas board-info pill (fix round 2/5, controller ruling R7)", () => {
+  it("phrases the object count plural-neutral instead of '{count} object(s)'", () => {
+    const enValue = getPpmTranslation("en", "canvas.board_info_objects");
+    const ruValue = getPpmTranslation("ru", "canvas.board_info_objects");
+    expect(enValue).toBe("Objects: {count}");
+    expect(ruValue).toBe("Объектов: {count}");
+  });
+
+  it("never renders a '{count} object'/'{count} объект' form in any locale", () => {
+    const enValue = getPpmTranslation("en", "canvas.board_info_objects");
+    const ruValue = getPpmTranslation("ru", "canvas.board_info_objects");
+    expect(enValue).not.toMatch(/\{count\}\s*objects?\b/i);
+    expect(ruValue).not.toMatch(/\{count\}\s*объект/i);
+  });
+
+  it("removes the unused canvas.board_version key (no reference left in apps/web or packages)", () => {
+    // `getPpmTranslation` is typed by `TPpmTranslationKey`, which is derived from the
+    // PPM_TRANSLATIONS object itself — casting past that type here to assert removal
+    // actually happened at runtime, not just that TypeScript would refuse to compile a
+    // reference to it (which it now also does, by construction).
+    expect(getPpmTranslation("en", "canvas.board_version" as never)).toBeUndefined();
+    expect(getPpmTranslation("ru", "canvas.board_version" as never)).toBeUndefined();
   });
 });
 
 describe("PPM token bridge", () => {
   it("keeps cyan as the single primary accent", () => {
     expect(PPM_BRAND.accentColor).toBe("#22D3EE");
-    expect(tokenSource).toContain("--ppm-color-accent: #22d3ee");
+    expect(tokenSource).toContain("--ppm-color-accent: oklch(0.7971 0.1339 211.53)");
     expect(tokenSource).toContain("--bg-accent-primary: var(--ppm-color-accent)");
   });
 
   it("is gated and provides Graphite and Light semantic surfaces", () => {
     expect(tokenSource).toContain('[data-ppm-brand="enabled"]');
-    expect(tokenSource).toContain("--ppm-color-canvas: #0e0f12");
-    expect(tokenSource).toContain("--ppm-color-canvas: #eef0f3");
-    expect(tokenSource).toContain("--border-accent-strong: var(--ppm-color-focus)");
+    expect(tokenSource).toContain("--ppm-color-canvas: oklch(0.1687 0.0065 271.01)");
+    expect(tokenSource).toContain("--ppm-color-canvas: oklch(0.9545 0.0046 258.32)");
+    expect(tokenSource).toContain("--border-accent-strong: var(--ppm-color-selection)");
   });
 
   it("keeps representative text and focus combinations above WCAG AA", () => {
     expect(contrastRatio("#1A1D23", "#FFFFFF")).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio("#E7EAF0", "#15171C")).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio("#062B32", "#22D3EE")).toBeGreaterThanOrEqual(4.5);
-    expect(contrastRatio("#0891B2", "#FFFFFF")).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio("#136782", "#FFFFFF")).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio("#67E8F9", "#0E0F12")).toBeGreaterThanOrEqual(3);
   });
 });

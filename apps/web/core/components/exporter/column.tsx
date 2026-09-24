@@ -35,7 +35,7 @@ export const useExportColumns = () => {
                   />
                 </span>
               ) : (
-                <span className="bg-gray-700 relative flex h-4 w-4 items-center justify-center rounded-full text-11 text-on-color capitalize">
+                <span className="relative flex h-4 w-4 items-center justify-center rounded-full bg-layer-3 text-11 text-secondary capitalize">
                   {(email ?? display_name ?? "?")[0]}
                 </span>
               )}

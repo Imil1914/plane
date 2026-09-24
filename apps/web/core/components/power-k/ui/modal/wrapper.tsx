@@ -8,13 +8,17 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Command } from "cmdk";
 import { observer } from "mobx-react";
 import { Dialog, Transition } from "@headlessui/react";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { usePowerK } from "@/hooks/store/use-power-k";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // local imports
 import type { TPowerKCommandConfig, TPowerKContext } from "../../core/types";
 import type { TPowerKCommandsListProps } from "./commands-list";
 import { PowerKModalFooter } from "./footer";
 import { PowerKModalHeader } from "./header";
+
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 type Props = {
   commandsListComponent: React.FC<TPowerKCommandsListProps>;
@@ -31,6 +35,7 @@ export const ProjectsAppPowerKModalWrapper = observer(function ProjectsAppPowerK
   const [isWorkspaceLevel, setIsWorkspaceLevel] = useState(false);
   // store hooks
   const { activePage, setActivePage } = usePowerK();
+  const ppmT = usePpmTranslation();
 
   // Handle command selection
   const handleCommandSelect = useCallback(
@@ -68,8 +73,8 @@ export const ProjectsAppPowerKModalWrapper = observer(function ProjectsAppPowerK
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // Cmd/Ctrl+K closes palette
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      // Cmd/Ctrl+K closes palette (matched by physical key so it works on any keyboard layout)
+      if ((e.metaKey || e.ctrlKey) && e.code === "KeyK") {
         e.preventDefault();
         onClose();
         return;
@@ -145,10 +150,10 @@ export const ProjectsAppPowerKModalWrapper = observer(function ProjectsAppPowerK
             >
               <Dialog.Panel className="divide-opacity-10 relative flex w-full max-w-2xl transform flex-col items-center justify-center divide-y divide-subtle-1 rounded-lg bg-surface-1 shadow-raised-200 transition-all">
                 <Command
-                  filter={(i18nValue: string, search: string) => {
+                  filter={(i18nValue: string, search: string, keywords?: string[]) => {
                     if (i18nValue === "no-results") return 1;
-                    if (i18nValue.toLowerCase().includes(search.toLowerCase())) return 1;
-                    return 0;
+                    const haystack = [i18nValue, ...(keywords ?? [])].join(" ").toLowerCase();
+                    return haystack.includes(search.toLowerCase()) ? 1 : 0;
                   }}
                   shouldFilter={searchTerm.length > 0}
                   onKeyDown={handleKeyDown}
@@ -160,7 +165,10 @@ export const ProjectsAppPowerKModalWrapper = observer(function ProjectsAppPowerK
                     onSearchChange={setSearchTerm}
                     searchTerm={searchTerm}
                   />
-                  <Command.List className="vertical-scrollbar scrollbar-sm max-h-96 overflow-scroll outline-none">
+                  <Command.List
+                    className="vertical-scrollbar scrollbar-sm max-h-96 overflow-scroll outline-none"
+                    label={IS_PPM_SHELL_ENABLED ? ppmT("navigation.command_results") : undefined}
+                  >
                     <CommandsListComponent
                       activePage={activePage}
                       context={context}

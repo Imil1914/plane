@@ -11,6 +11,7 @@ import { PageIcon } from "@plane/propel/icons";
 import type { ICustomSearchSelectOption } from "@plane/types";
 import { Breadcrumbs, Header, BreadcrumbNavigationSearchDropdown } from "@plane/ui";
 import { getPageName } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { PageAccessIcon } from "@/components/common/page-access-icon";
@@ -22,6 +23,7 @@ import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { EPageStoreType, usePage, usePageStore } from "@/hooks/store";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 export interface IPagesHeaderProps {
   showButton?: boolean;
@@ -40,6 +42,10 @@ export const PageDetailsHeader = observer(function PageDetailsHeader() {
     pageId: pageId?.toString() ?? "",
     storeType,
   });
+  // translation
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const pagesLabel = isPpmShell ? ppmT("project.collaborative_pages") : "Pages";
   // derived values
   const projectPageIds = getCurrentProjectPageIds(projectId?.toString());
 
@@ -71,7 +77,7 @@ export const PageDetailsHeader = observer(function PageDetailsHeader() {
             <Breadcrumbs.Item
               component={
                 <BreadcrumbLink
-                  label="Pages"
+                  label={pagesLabel}
                   href={`/${workspaceSlug}/projects/${projectId}/pages/`}
                   icon={<PageIcon className="h-4 w-4 text-tertiary" />}
                 />

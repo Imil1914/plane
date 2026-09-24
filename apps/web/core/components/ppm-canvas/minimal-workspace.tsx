@@ -45,7 +45,7 @@ export default function PpmMinimalCanvasWorkspace({
           {error ? <BrainCircuit className="size-5" /> : <LoaderCircle className="size-5 animate-spin" />}
           <span>{ppmT(error ? "canvas.error_description" : "canvas.loading_description")}</span>
           {error && (
-            <button className="rounded-md bg-accent-primary px-3 py-2 text-on-color" type="button" onClick={load}>
+            <button className="rounded-md bg-accent-primary px-3 py-2 text-on-accent" type="button" onClick={load}>
               {ppmT("canvas.reload")}
             </button>
           )}

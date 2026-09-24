@@ -53,7 +53,7 @@ export function TabNavigationVisibleItem({
               key={`${item.key}-${isActive ? "active" : "inactive"}`}
               to={item.href}
               aria-current={isActive ? "page" : undefined}
-              className="focus-visible:outline-accent-primary block rounded-md focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="block rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
             >
               <TabNavigationItem isActive={isActive}>
                 <span>{label}</span>

@@ -9,7 +9,7 @@ import { ListFilter } from "lucide-react";
 // plane imports
 import type { TActivityFilters, TActivityFilterOption } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { IconButton } from "@plane/propel/icon-button";
+import { getIconButtonStyling } from "@plane/propel/icon-button";
 import { CheckIcon } from "@plane/propel/icons";
 import { PopoverMenu } from "@plane/ui";
 // helper
@@ -29,10 +29,11 @@ export const ActivityFilter = observer(function ActivityFilter(props: TActivityF
 
   return (
     <PopoverMenu
-      buttonClassName="outline-none"
+      buttonClassName={cn(getIconButtonStyling("tertiary", "base"), "relative")}
       button={
         <>
-          <IconButton variant="tertiary" icon={ListFilter} />
+          <ListFilter className="size-4" aria-hidden="true" />
+          <span className="sr-only">{t("common.filters")}</span>
           {selectedFilters.length < filterOptions.length && (
             <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-accent-primary" />
           )}

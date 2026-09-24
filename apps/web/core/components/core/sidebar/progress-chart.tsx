@@ -15,9 +15,25 @@ type Props = {
   totalIssues: number;
   className?: string;
   plotTitle?: string;
+  // PPM shell: pre-translated overrides for the legend/axis copy below. Undefined keeps the
+  // upstream English default (`Current ${plotTitle}` / "Date" / "Completion") unchanged for any
+  // caller that does not opt in, per the "no revert of upstream behavior" constraint.
+  currentLabel?: string;
+  idealLabel?: string;
+  dateAxisLabel?: string;
+  completionAxisLabel?: string;
 };
 
-function ProgressChart({ distribution, totalIssues, className = "", plotTitle = "work items" }: Props) {
+function ProgressChart({
+  distribution,
+  totalIssues,
+  className = "",
+  plotTitle = "work items",
+  currentLabel,
+  idealLabel,
+  dateAxisLabel,
+  completionAxisLabel,
+}: Props) {
   const chartData: TChartData<string, string>[] = Object.keys(distribution ?? []).map((key, index) => ({
     name: renderFormattedDateWithoutYear(key),
     current: distribution[key] ?? 0,
@@ -31,7 +47,7 @@ function ProgressChart({ distribution, totalIssues, className = "", plotTitle = 
         areas={[
           {
             key: "current",
-            label: `Current ${plotTitle}`,
+            label: currentLabel ?? `Current ${plotTitle}`,
             strokeColor: "#3F76FF",
             fill: "#3F76FF33",
             fillOpacity: 1,
@@ -42,7 +58,7 @@ function ProgressChart({ distribution, totalIssues, className = "", plotTitle = 
           },
           {
             key: "ideal",
-            label: `Ideal ${plotTitle}`,
+            label: idealLabel ?? `Ideal ${plotTitle}`,
             strokeColor: "#A9BBD0",
             fill: "#A9BBD0",
             fillOpacity: 0,
@@ -56,8 +72,8 @@ function ProgressChart({ distribution, totalIssues, className = "", plotTitle = 
             },
           },
         ]}
-        xAxis={{ key: "name", label: "Date" }}
-        yAxis={{ key: "current", label: "Completion" }}
+        xAxis={{ key: "name", label: dateAxisLabel ?? "Date" }}
+        yAxis={{ key: "current", label: completionAxisLabel ?? "Completion" }}
         margin={{ bottom: 30 }}
         className="h-[370px] w-full"
         legend={{

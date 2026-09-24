@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { TPpmCanvasOrchestratorTrace } from "@ppm/canvas";
 import {
   AlertTriangle,
@@ -38,13 +38,32 @@ import {
   type TPpmProjectMemoryRecord,
   type TPpmSemanticRelation,
 } from "@/services/ppm-brain.service";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import type { TPpmCanvasCommandDetail } from "./commands";
+
+/** "search" is the non-AI project search of PPM 1.0; "full" adds agents and generated answers. */
+export type TPpmBrainPanelMode = "search" | "full";
+
+export type TPpmBrainPanelSection = "query" | "agents" | "answer" | "results" | "index" | "sources" | "memory";
+
+const BRAIN_PANEL_SECTIONS: Record<TPpmBrainPanelMode, readonly TPpmBrainPanelSection[]> = {
+  search: ["query", "results", "index", "sources", "memory"],
+  full: ["query", "agents", "answer", "results", "index", "sources", "memory"],
+};
+
+/** Panel sections in render order: the query field always comes first. */
+export function getBrainPanelSections(mode: TPpmBrainPanelMode): TPpmBrainPanelSection[] {
+  return [...BRAIN_PANEL_SECTIONS[mode]];
+}
 
 type TPpmBrainPanelProps = {
   boardId: string;
   canEdit: boolean;
   canvasAgentRunVersions: Record<string, string>;
+  mode: TPpmBrainPanelMode;
   onClose: () => void;
+  /** Reports whether the panel holds typed but unsent text, so a stray Esc outside it keeps the panel open. */
+  onDraftChange?: (hasDraft: boolean) => void;
   onSaveAnswer: (run: TPpmBrainAnswerRun) => void;
   onSaveAgentRun: (payload: NonNullable<TPpmCanvasCommandDetail["orchestratorRun"]>) => void;
   onSaveSearch: (payload: NonNullable<TPpmCanvasCommandDetail["searchResults"]>) => void;
@@ -283,7 +302,9 @@ export function PpmBrainPanel({
   boardId,
   canEdit,
   canvasAgentRunVersions,
+  mode,
   onClose,
+  onDraftChange,
   onSaveAnswer,
   onSaveAgentRun,
   onSaveSearch,
@@ -292,6 +313,7 @@ export function PpmBrainPanel({
   workspaceId,
   workspaceSlug,
 }: TPpmBrainPanelProps) {
+  const ppmT = usePpmTranslation();
   const service = useMemo(() => new PpmBrainService(), []);
   const [health, setHealth] = useState<TPpmBrainHealth>();
   const [sources, setSources] = useState<TPpmBrainSource[]>([]);
@@ -399,12 +421,14 @@ export function PpmBrainPanel({
 
   const loadState = useCallback(async () => {
     try {
+      const includeRuns = mode === "full";
       const [nextHealth, sourceResponse, memoryResponse, answerRunResponse, agentRunResponse] = await Promise.all([
         service.getHealth(workspaceId, projectId),
         service.getSources(workspaceId, projectId),
         service.getMemory(workspaceId, projectId),
-        service.getAnswerRuns(workspaceId, projectId),
-        service.getAgentRuns(workspaceId, projectId),
+        // Search mode neither lists nor restores generated answers and agent runs.
+        includeRuns ? service.getAnswerRuns(workspaceId, projectId) : { results: [] as TPpmBrainAnswerRun[] },
+        includeRuns ? service.getAgentRuns(workspaceId, projectId) : { results: [] as TPpmAgentRun[] },
       ]);
       setHealth(nextHealth);
       setSources(sourceResponse.sources);
@@ -441,7 +465,7 @@ export function PpmBrainPanel({
     } finally {
       setLoading(false);
     }
-  }, [projectId, service, watchAgentRun, workspaceId]);
+  }, [mode, projectId, service, watchAgentRun, workspaceId]);
 
   useEffect(() => {
     void loadState();
@@ -491,6 +515,12 @@ export function PpmBrainPanel({
   }, [knowledgeSourceId, readyMarkdownSources]);
 
   useEffect(() => () => stopWatchingRef.current(), []);
+
+  const hasDraft = [query, decompositionGoal, relationshipReason, knowledgeTopic].some((value) => value.trim() !== "");
+  useEffect(() => {
+    onDraftChange?.(hasDraft);
+    return () => onDraftChange?.(false);
+  }, [hasDraft, onDraftChange]);
 
   const watchRun = useCallback(
     (runId: string) => {
@@ -596,6 +626,11 @@ export function PpmBrainPanel({
     setSearching(false);
     setServiceProgress(undefined);
     setNotice("Поиск остановлен. Данные проекта не изменялись.");
+  };
+
+  const submitSearchForm = (event: FormEvent) => {
+    event.preventDefault();
+    if (!searching) void submitSearch();
   };
 
   const saveSearchToCanvas = () => {
@@ -1201,598 +1236,655 @@ export function PpmBrainPanel({
     saveAgentRunToCanvas(activeAgentRun);
   }, [activeAgentRun, activeAgentRunVersion, saveAgentRunToCanvas, savedActiveAgentRunVersion]);
 
+  const isSearchMode = mode === "search";
+  const panelTitle = isSearchMode ? ppmT("project_search.title") : "Спросить проект";
+  const hasAnswerBody = Boolean(relationshipRun || knowledgeRun || decompositionRun || reportRun || answerRun);
+  const serviceProgressBlock = serviceProgress ? (
+    <section
+      className="ppm-brain-panel__agent-progress"
+      data-status={serviceProgress.stage.status}
+      aria-live="polite"
+      aria-label="Ход выполнения Мозга проекта"
+    >
+      {serviceProgress.stage.status === "running" ? (
+        <LoaderCircle className="animate-spin" aria-hidden="true" />
+      ) : (
+        <Check aria-hidden="true" />
+      )}
+      <div>
+        <strong>{SERVICE_STAGE_LABELS[serviceProgress.stage.name]}</strong>
+        <span>
+          {serviceProgress.stage.status === "running"
+            ? serviceProgress.stage.name === "receive_provider_answer" && serviceProgress.stage.result_count !== null
+              ? `Получено фрагментов: ${serviceProgress.stage.result_count}`
+              : "Выполняется"
+            : serviceProgress.stage.result_count === null
+              ? "Выполнено"
+              : serviceProgress.stage.name === "receive_provider_answer"
+                ? `Выполнено · фрагментов: ${serviceProgress.stage.result_count}`
+                : `Выполнено · результатов: ${serviceProgress.stage.result_count}`}
+        </span>
+      </div>
+    </section>
+  ) : null;
+
+  const renderSection = (section: TPpmBrainPanelSection): ReactNode => {
+    switch (section) {
+      case "query":
+        return (
+          <>
+            <form className="ppm-brain-panel__ask" onSubmit={isSearchMode ? submitSearchForm : submitAnswer}>
+              <textarea
+                aria-label={isSearchMode ? ppmT("project_search.title") : "Вопрос проекту"}
+                maxLength={500}
+                placeholder={
+                  isSearchMode
+                    ? ppmT("project_search.placeholder")
+                    : "Например: что блокирует испытания и где это зафиксировано?"
+                }
+                rows={3}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+              <div className="ppm-brain-panel__scope">
+                <label data-disabled={selectedShapeIds.length === 0 || undefined}>
+                  <input
+                    checked={useSelection}
+                    disabled={selectedShapeIds.length === 0 || answerRunning || agentBusy}
+                    type="checkbox"
+                    onChange={(event) => setUseSelection(event.target.checked)}
+                  />
+                  <span>
+                    {selectedShapeIds.length > 0
+                      ? `Только выбранные объекты: ${selectedShapeIds.length}`
+                      : "Весь проект — на холсте ничего не выбрано"}
+                  </span>
+                </label>
+                {useSelection && selectedShapeIds.length > 0 && (
+                  <label data-disabled={health?.graph_enabled === false || undefined}>
+                    <span>
+                      {health?.graph_enabled === false
+                        ? "Соседи по связям отключены администратором"
+                        : "Соседи по подтверждённым связям"}
+                    </span>
+                    <select
+                      aria-label="Глубина смыслового графа"
+                      disabled={answerRunning || agentBusy || health?.graph_enabled === false}
+                      value={graphDepth}
+                      onChange={(event) => setGraphDepth(Number(event.currentTarget.value))}
+                    >
+                      <option value={0}>Не добавлять</option>
+                      <option value={1}>1 шаг</option>
+                      <option value={2}>2 шага</option>
+                    </select>
+                  </label>
+                )}
+              </div>
+              <div className="ppm-brain-panel__ask-actions">
+                {isSearchMode ? (
+                  searching ? (
+                    <button type="button" className="ppm-brain-panel__cancel" onClick={cancelSearch}>
+                      <Square aria-hidden="true" />
+                      Остановить поиск
+                    </button>
+                  ) : (
+                    <button type="submit" disabled={!query.trim()}>
+                      <Search aria-hidden="true" />
+                      Найти источники
+                    </button>
+                  )
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className={searching ? "ppm-brain-panel__cancel" : "ppm-brain-panel__secondary"}
+                      disabled={agentBusy || answerRunning || (!searching && !query.trim())}
+                      onClick={() => (searching ? cancelSearch() : void submitSearch())}
+                    >
+                      {searching ? <Square aria-hidden="true" /> : <Search aria-hidden="true" />}
+                      {searching ? "Остановить поиск" : "Найти источники"}
+                    </button>
+                    {answerRunning ? (
+                      <button type="button" className="ppm-brain-panel__cancel" onClick={() => void cancelAnswer()}>
+                        <Square aria-hidden="true" />
+                        Остановить
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={
+                          startingAnswer || searching || agentBusy || !query.trim() || health?.answers_enabled === false
+                        }
+                      >
+                        {startingAnswer ? (
+                          <LoaderCircle className="animate-spin" aria-hidden="true" />
+                        ) : (
+                          <Send aria-hidden="true" />
+                        )}
+                        Спросить
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </form>
+            {!isSearchMode && health?.answers_enabled === false && (
+              <div className="ppm-brain-panel__message">
+                Ответы отключены администратором. Поиск по источникам доступен.
+              </div>
+            )}
+            {!isSearchMode && health?.answers_enabled !== false && health?.completion.enabled === false && (
+              <div className="ppm-brain-panel__message">
+                <strong>Ответы без внешней ИИ-модели.</strong> PPM формирует проверяемую сводку по источникам проекта.
+                Подключение модели требует утверждённой политики и отдельного серверного ключа.
+              </div>
+            )}
+            {error && (
+              <div className="ppm-brain-panel__message" data-tone="error">
+                {error}
+              </div>
+            )}
+            {notice && <div className="ppm-brain-panel__message">{notice}</div>}
+          </>
+        );
+      case "agents":
+        return (
+          <div className="ppm-brain-panel__agents">
+            <section className="ppm-brain-panel__report-launcher" aria-label="Агент Сводка проекта">
+              <span className="ppm-brain-panel__report-icon">
+                <FileText aria-hidden="true" />
+              </span>
+              <div>
+                <strong>Сводка проекта</strong>
+                <span>
+                  <ShieldCheck aria-hidden="true" /> Только чтение · задачи проекта не изменяются
+                </span>
+              </div>
+              <button
+                type="button"
+                disabled={agentBusy || answerRunning || searching || health?.agents_enabled === false}
+                onClick={() => void createProjectReport()}
+              >
+                {startingReport ? (
+                  <LoaderCircle className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <FileText aria-hidden="true" />
+                )}
+                {reportRun ? "Обновить" : "Создать"}
+              </button>
+            </section>
+
+            <form
+              className="ppm-brain-panel__decomposer-launcher"
+              aria-label="Агент Декомпозиция работы"
+              onSubmit={createWorkDecomposition}
+            >
+              <header>
+                <span className="ppm-brain-panel__report-icon">
+                  <ListChecks aria-hidden="true" />
+                </span>
+                <div>
+                  <strong>Декомпозиция работы</strong>
+                  <span>
+                    <ShieldCheck aria-hidden="true" /> Черновик · создание задач только после вашего подтверждения
+                  </span>
+                </div>
+              </header>
+              <textarea
+                aria-label="Цель декомпозиции"
+                maxLength={500}
+                placeholder="Какой результат нужно разложить на задачи?"
+                rows={2}
+                value={decompositionGoal}
+                onChange={(event) => setDecompositionGoal(event.currentTarget.value)}
+              />
+              <div>
+                <select
+                  aria-label="Исходная задача"
+                  disabled={readyWorkItemSources.length === 0}
+                  value={decompositionSourceId}
+                  onChange={(event) => setDecompositionSourceId(event.currentTarget.value)}
+                >
+                  {readyWorkItemSources.length === 0 ? (
+                    <option value="">Нет готовых задач в индексе</option>
+                  ) : (
+                    readyWorkItemSources.map((source) => (
+                      <option key={source.id} value={source.source_id}>
+                        {source.title || "Задача без названия"}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <button
+                  type="submit"
+                  disabled={
+                    agentBusy ||
+                    answerRunning ||
+                    searching ||
+                    health?.agents_enabled === false ||
+                    !decompositionGoal.trim() ||
+                    !decompositionSourceId
+                  }
+                >
+                  {startingDecomposition ? (
+                    <LoaderCircle className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <ListChecks aria-hidden="true" />
+                  )}
+                  Подготовить
+                </button>
+              </div>
+            </form>
+
+            <form
+              className="ppm-brain-panel__decomposer-launcher"
+              aria-label="Агент Аналитик связей"
+              onSubmit={createRelationshipProposal}
+            >
+              <header>
+                <span className="ppm-brain-panel__report-icon">
+                  <Network aria-hidden="true" />
+                </span>
+                <div>
+                  <strong>Аналитик связей</strong>
+                  <span>
+                    <ShieldCheck aria-hidden="true" /> Выберите ровно 2 объекта · связь добавляется после подтверждения
+                  </span>
+                </div>
+              </header>
+              <textarea
+                aria-label="Основание смысловой связи"
+                maxLength={1000}
+                placeholder="Почему эти объекты связаны?"
+                rows={2}
+                value={relationshipReason}
+                onChange={(event) => setRelationshipReason(event.currentTarget.value)}
+              />
+              <div>
+                <select
+                  aria-label="Тип смысловой связи"
+                  value={relationshipType}
+                  onChange={(event) => setRelationshipType(event.currentTarget.value as TPpmSemanticRelation)}
+                >
+                  {Object.entries(RELATION_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  disabled={
+                    agentBusy ||
+                    answerRunning ||
+                    searching ||
+                    health?.agents_enabled === false ||
+                    selectedShapeIds.length !== 2 ||
+                    !relationshipReason.trim()
+                  }
+                >
+                  {startingRelationship ? (
+                    <LoaderCircle className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Network aria-hidden="true" />
+                  )}
+                  Предложить
+                </button>
+              </div>
+            </form>
+
+            <form
+              className="ppm-brain-panel__decomposer-launcher"
+              aria-label="Агент Библиотекарь знаний"
+              onSubmit={createKnowledgeProposal}
+            >
+              <header>
+                <span className="ppm-brain-panel__report-icon">
+                  <BookOpenCheck aria-hidden="true" />
+                </span>
+                <div>
+                  <strong>Библиотекарь знаний</strong>
+                  <span>
+                    <ShieldCheck aria-hidden="true" /> Черновик · создание файла после вашего подтверждения
+                  </span>
+                </div>
+              </header>
+              <textarea
+                aria-label="Пробел в знаниях"
+                maxLength={500}
+                placeholder="Что нужно уточнить или добавить в базу знаний?"
+                rows={2}
+                value={knowledgeTopic}
+                onChange={(event) => setKnowledgeTopic(event.currentTarget.value)}
+              />
+              <div>
+                <select
+                  aria-label="Исходный Markdown-материал"
+                  disabled={readyMarkdownSources.length === 0}
+                  value={knowledgeSourceId}
+                  onChange={(event) => setKnowledgeSourceId(event.currentTarget.value)}
+                >
+                  {readyMarkdownSources.length === 0 ? (
+                    <option value="">Нет готовых Markdown-материалов</option>
+                  ) : (
+                    readyMarkdownSources.map((source) => (
+                      <option key={source.id} value={source.source_id}>
+                        {source.title || "Материал без названия"}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <button
+                  type="submit"
+                  disabled={
+                    agentBusy ||
+                    answerRunning ||
+                    searching ||
+                    health?.agents_enabled === false ||
+                    !knowledgeTopic.trim() ||
+                    !knowledgeSourceId
+                  }
+                >
+                  {startingKnowledge ? (
+                    <LoaderCircle className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <BookOpenCheck aria-hidden="true" />
+                  )}
+                  Подготовить
+                </button>
+              </div>
+            </form>
+
+            {health?.agents_enabled === false && (
+              <div className="ppm-brain-panel__message">Проектные агенты отключены глобальным администратором.</div>
+            )}
+          </div>
+        );
+      case "answer":
+        return (
+          <>
+            {answerRunning && serviceProgressBlock}
+            {activeAgentRun && (activeAgentRun.attempt_count ?? 1) > 1 && (
+              <section
+                className="ppm-brain-panel__agent-progress"
+                data-status={isActiveAgentRunStatus(activeAgentRun.status) ? "running" : "completed"}
+                aria-live="polite"
+                aria-label="Восстановление исполнения агента"
+              >
+                <RefreshCcw aria-hidden="true" />
+                <div>
+                  <strong>Исполнение восстановлено</strong>
+                  <span>
+                    Предыдущий worker остановился. PPM продолжил запуск с попытки {activeAgentRun.attempt_count} без
+                    дублирования предложений.
+                  </span>
+                </div>
+              </section>
+            )}
+
+            {recoveringAnswerRunId && answerRun?.id === recoveringAnswerRunId && (
+              <section
+                className="ppm-brain-panel__agent-progress"
+                data-status="running"
+                aria-live="polite"
+                aria-label="Наблюдение за ответом проекта"
+              >
+                <LoaderCircle className="animate-spin" aria-hidden="true" />
+                <div>
+                  <strong>Наблюдение за ответом восстановлено</strong>
+                  <span>PPM продолжает отслеживать запрос после перезагрузки страницы.</span>
+                </div>
+              </section>
+            )}
+
+            {recoveringAgentRunId && activeAgentRun?.id === recoveringAgentRunId ? (
+              <section
+                className="ppm-brain-panel__agent-progress"
+                data-status="running"
+                aria-live="polite"
+                aria-label="Наблюдение за запуском агента"
+              >
+                <LoaderCircle className="animate-spin" aria-hidden="true" />
+                <div>
+                  <strong>Наблюдение восстановлено</strong>
+                  <span>PPM обновляет состояние запущенного агента…</span>
+                </div>
+              </section>
+            ) : activeAgentProgress ? (
+              <section
+                className="ppm-brain-panel__agent-progress"
+                data-status={activeAgentProgress.tool.status}
+                aria-live="polite"
+                aria-label={
+                  activeAgentProgress.tool.status === "running" ? "Текущий шаг агента" : "Последний шаг агента"
+                }
+              >
+                {activeAgentProgress.tool.status === "running" ? (
+                  <LoaderCircle className="animate-spin" aria-hidden="true" />
+                ) : activeAgentProgress.tool.status === "failed" ? (
+                  <AlertTriangle aria-hidden="true" />
+                ) : (
+                  <Check aria-hidden="true" />
+                )}
+                <div>
+                  <strong>{AGENT_TOOL_LABELS[activeAgentProgress.tool.name] ?? "Безопасный шаг агента"}</strong>
+                  <span>
+                    {activeAgentProgress.tool.status === "running"
+                      ? "Выполняется…"
+                      : activeAgentProgress.tool.status === "failed"
+                        ? "Остановлено"
+                        : activeAgentProgress.tool.result_count === null
+                          ? "Выполнено"
+                          : `Выполнено · результатов: ${activeAgentProgress.tool.result_count}`}
+                  </span>
+                </div>
+              </section>
+            ) : null}
+
+            {activeAgentRun && (canCancelAgentRun || canRetryAgentRun) && (
+              <section className="ppm-brain-panel__agent-run-controls" aria-label="Управление запуском агента">
+                <div>
+                  <strong>{agentRunControlTitle}</strong>
+                  <span>{agentRunControlDescription}</span>
+                </div>
+                {canCancelAgentRun && (
+                  <button
+                    type="button"
+                    className="ppm-brain-panel__cancel"
+                    disabled={changingAgentRunId === activeAgentRun.id}
+                    onClick={() => void cancelAgentRun(activeAgentRun)}
+                  >
+                    {changingAgentRunId === activeAgentRun.id ? (
+                      <LoaderCircle className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Square aria-hidden="true" />
+                    )}
+                    Отменить запуск
+                  </button>
+                )}
+                {canRetryAgentRun && (
+                  <button
+                    type="button"
+                    className="ppm-brain-panel__secondary"
+                    disabled={changingAgentRunId === activeAgentRun.id}
+                    onClick={() => void retryAgentRun(activeAgentRun)}
+                  >
+                    {changingAgentRunId === activeAgentRun.id ? (
+                      <LoaderCircle className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <RefreshCcw aria-hidden="true" />
+                    )}
+                    {activeAgentRun.status === "timed_out" ? "Запустить заново" : "Повторить"}
+                  </button>
+                )}
+              </section>
+            )}
+
+            {activeAgentRun && canSaveAgentRun && (
+              <section className="ppm-brain-panel__agent-run-save" aria-label="Карточка запуска агента на Холсте">
+                <div>
+                  <strong>Запуск можно закрепить на Холсте</strong>
+                  <span>Повторное сохранение обновит эту же карточку и дополнит её хронологию без создания дубля.</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={savedActiveAgentRunVersion === activeAgentRunVersion}
+                  onClick={() => saveAgentRunToCanvas(activeAgentRun)}
+                >
+                  <Save aria-hidden="true" />
+                  {savedActiveAgentRunVersion === activeAgentRunVersion
+                    ? "Карточка актуальна"
+                    : savedActiveAgentRunVersion
+                      ? "Обновить карточку"
+                      : "Добавить на холст"}
+                </button>
+                {(activeAgentRun.actions.length > 0 || activeAgentRun.audit_trace.some((event) => event.tool)) && (
+                  <button type="button" onClick={() => saveAgentRunToCanvas(activeAgentRun, true)}>
+                    <Network aria-hidden="true" />
+                    Разложить на холсте
+                  </button>
+                )}
+              </section>
+            )}
+            {hasAnswerBody && (
+              <div className="ppm-brain-panel__body">
+                {relationshipRun ? (
+                  <RelationshipProposal
+                    applying={applyingRelationship}
+                    canApply={canEdit && health?.agent_writes_enabled === true}
+                    canReview={canEdit}
+                    projectId={projectId}
+                    reviewingActionId={reviewingActionId}
+                    run={relationshipRun}
+                    writeEnabled={health?.agent_writes_enabled === true}
+                    workspaceSlug={workspaceSlug}
+                    onApply={() => void applyRelationshipProposal()}
+                    onClose={() => setRelationshipRun(undefined)}
+                    onReview={(actionId, decision) => void reviewRelationshipProposal(actionId, decision)}
+                  />
+                ) : knowledgeRun ? (
+                  <KnowledgeProposal
+                    applying={applyingKnowledge}
+                    canApply={canEdit && health?.agent_writes_enabled === true}
+                    canReview={canEdit}
+                    projectId={projectId}
+                    reviewingActionId={reviewingActionId}
+                    run={knowledgeRun}
+                    writeEnabled={health?.agent_writes_enabled === true}
+                    workspaceSlug={workspaceSlug}
+                    onApply={() => void applyKnowledgeProposal()}
+                    onClose={() => setKnowledgeRun(undefined)}
+                    onReview={(actionId, decision) => void reviewKnowledgeProposal(actionId, decision)}
+                  />
+                ) : decompositionRun ? (
+                  <WorkDecomposition
+                    applying={applyingDecomposition}
+                    canApply={canEdit && health?.agent_writes_enabled === true}
+                    canReview={canEdit}
+                    projectId={projectId}
+                    reviewing={reviewingActionId === decompositionRun.id}
+                    run={decompositionRun}
+                    writeEnabled={health?.agent_writes_enabled === true}
+                    workspaceSlug={workspaceSlug}
+                    onApply={() => void applyDecomposition()}
+                    onClose={() => setDecompositionRun(undefined)}
+                    onReviewBatch={(decisions) => void reviewDecompositionBatch(decisions)}
+                  />
+                ) : reportRun ? (
+                  <ProjectReport
+                    projectId={projectId}
+                    run={reportRun}
+                    workspaceSlug={workspaceSlug}
+                    onClose={() => setReportRun(undefined)}
+                  />
+                ) : answerRun ? (
+                  <AnswerResult
+                    canSave={canEdit}
+                    memorySaved={savedMemoryRunId === answerRun.id}
+                    run={answerRun}
+                    saved={savedRunId === answerRun.id}
+                    onSave={() => {
+                      onSaveAnswer(answerRun);
+                      setSavedRunId(answerRun.id);
+                    }}
+                    onSaveMemory={(kind) => void saveAnswerToMemory(answerRun, kind)}
+                  />
+                ) : null}
+              </div>
+            )}
+          </>
+        );
+      case "results":
+        return (
+          <>
+            {searching && serviceProgressBlock}
+            {!hasAnswerBody && results.length > 0 && (
+              <div className="ppm-brain-panel__body">
+                <SearchResults
+                  canSave={canEdit}
+                  projectId={projectId}
+                  results={results}
+                  saved={searchSaved}
+                  workspaceSlug={workspaceSlug}
+                  onSave={saveSearchToCanvas}
+                />
+              </div>
+            )}
+          </>
+        );
+      case "index":
+        return (
+          <section className="ppm-brain-panel__summary" aria-label="Состояние индекса">
+            <StatusCard label="Готово" value={health?.ready_sources ?? 0} tone="ready" />
+            <StatusCard label="В очереди" value={health?.pending_sources ?? 0} tone="pending" />
+            <StatusCard label="Ошибки" value={health?.failed_sources ?? 0} tone="failed" />
+          </section>
+        );
+      case "sources":
+        return (
+          <div className="ppm-brain-panel__body">
+            <SourceList canEdit={canEdit} reindexing={reindexing} sources={sources} onReindex={() => void reindex()} />
+          </div>
+        );
+      case "memory":
+        return (
+          <div className="ppm-brain-panel__body">
+            <MemoryList
+              canEdit={canEdit}
+              records={memory}
+              showAnswerHint={!isSearchMode}
+              onReview={(recordId, status) => void reviewMemory(recordId, status)}
+            />
+          </div>
+        );
+    }
+  };
+
   return (
-    <div className="ppm-brain-panel" role="dialog" aria-label="Спросить проект" aria-modal="true">
+    <div className="ppm-brain-panel" role="dialog" aria-label={panelTitle} aria-modal={false}>
       <header className="ppm-brain-panel__header">
         <span className="ppm-brain-panel__icon">
-          <BrainCircuit aria-hidden="true" />
+          {isSearchMode ? <Search aria-hidden="true" /> : <BrainCircuit aria-hidden="true" />}
         </span>
         <div>
-          <strong>Спросить проект</strong>
-          <span>Ответы только по доступным задачам и материалам проекта</span>
+          <strong>{panelTitle}</strong>
+          {!isSearchMode && <span>Ответы только по доступным задачам и материалам проекта</span>}
         </div>
         <button type="button" aria-label="Закрыть" onClick={onClose}>
           <X aria-hidden="true" />
         </button>
       </header>
 
-      {loading ? (
-        <div className="ppm-brain-panel__state">
-          <LoaderCircle className="animate-spin" aria-hidden="true" />
-          Проверяем индекс…
-        </div>
-      ) : (
-        <>
-          <section className="ppm-brain-panel__summary" aria-label="Состояние индекса">
-            <StatusCard label="Готово" value={health?.ready_sources ?? 0} tone="ready" />
-            <StatusCard label="В очереди" value={health?.pending_sources ?? 0} tone="pending" />
-            <StatusCard label="Ошибки" value={health?.failed_sources ?? 0} tone="failed" />
-          </section>
-
-          {health?.answers_enabled !== false && health?.completion.enabled === false && (
-            <div className="ppm-brain-panel__message">
-              <strong>Ответы без внешней ИИ-модели.</strong> PPM формирует проверяемую сводку по источникам проекта.
-              Подключение модели требует утверждённой политики и отдельного серверного ключа.
-            </div>
-          )}
-
-          <section className="ppm-brain-panel__report-launcher" aria-label="Агент Сводка проекта">
-            <span className="ppm-brain-panel__report-icon">
-              <FileText aria-hidden="true" />
-            </span>
-            <div>
-              <strong>Сводка проекта</strong>
-              <span>
-                <ShieldCheck aria-hidden="true" /> Только чтение · задачи проекта не изменяются
-              </span>
-            </div>
-            <button
-              type="button"
-              disabled={agentBusy || answerRunning || searching || health?.agents_enabled === false}
-              onClick={() => void createProjectReport()}
-            >
-              {startingReport ? (
-                <LoaderCircle className="animate-spin" aria-hidden="true" />
-              ) : (
-                <FileText aria-hidden="true" />
-              )}
-              {reportRun ? "Обновить" : "Создать"}
-            </button>
-          </section>
-
-          <form
-            className="ppm-brain-panel__decomposer-launcher"
-            aria-label="Агент Декомпозиция работы"
-            onSubmit={createWorkDecomposition}
-          >
-            <header>
-              <span className="ppm-brain-panel__report-icon">
-                <ListChecks aria-hidden="true" />
-              </span>
-              <div>
-                <strong>Декомпозиция работы</strong>
-                <span>
-                  <ShieldCheck aria-hidden="true" /> Черновик · создание задач только после вашего подтверждения
-                </span>
-              </div>
-            </header>
-            <textarea
-              aria-label="Цель декомпозиции"
-              maxLength={500}
-              placeholder="Какой результат нужно разложить на задачи?"
-              rows={2}
-              value={decompositionGoal}
-              onChange={(event) => setDecompositionGoal(event.currentTarget.value)}
-            />
-            <div>
-              <select
-                aria-label="Исходная задача"
-                disabled={readyWorkItemSources.length === 0}
-                value={decompositionSourceId}
-                onChange={(event) => setDecompositionSourceId(event.currentTarget.value)}
-              >
-                {readyWorkItemSources.length === 0 ? (
-                  <option value="">Нет готовых задач в индексе</option>
-                ) : (
-                  readyWorkItemSources.map((source) => (
-                    <option key={source.id} value={source.source_id}>
-                      {source.title || "Задача без названия"}
-                    </option>
-                  ))
-                )}
-              </select>
-              <button
-                type="submit"
-                disabled={
-                  agentBusy ||
-                  answerRunning ||
-                  searching ||
-                  health?.agents_enabled === false ||
-                  !decompositionGoal.trim() ||
-                  !decompositionSourceId
-                }
-              >
-                {startingDecomposition ? (
-                  <LoaderCircle className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <ListChecks aria-hidden="true" />
-                )}
-                Подготовить
-              </button>
-            </div>
-          </form>
-
-          <form
-            className="ppm-brain-panel__decomposer-launcher"
-            aria-label="Агент Аналитик связей"
-            onSubmit={createRelationshipProposal}
-          >
-            <header>
-              <span className="ppm-brain-panel__report-icon">
-                <Network aria-hidden="true" />
-              </span>
-              <div>
-                <strong>Аналитик связей</strong>
-                <span>
-                  <ShieldCheck aria-hidden="true" /> Выберите ровно 2 объекта · связь добавляется после подтверждения
-                </span>
-              </div>
-            </header>
-            <textarea
-              aria-label="Основание смысловой связи"
-              maxLength={1000}
-              placeholder="Почему эти объекты связаны?"
-              rows={2}
-              value={relationshipReason}
-              onChange={(event) => setRelationshipReason(event.currentTarget.value)}
-            />
-            <div>
-              <select
-                aria-label="Тип смысловой связи"
-                value={relationshipType}
-                onChange={(event) => setRelationshipType(event.currentTarget.value as TPpmSemanticRelation)}
-              >
-                {Object.entries(RELATION_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="submit"
-                disabled={
-                  agentBusy ||
-                  answerRunning ||
-                  searching ||
-                  health?.agents_enabled === false ||
-                  selectedShapeIds.length !== 2 ||
-                  !relationshipReason.trim()
-                }
-              >
-                {startingRelationship ? (
-                  <LoaderCircle className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <Network aria-hidden="true" />
-                )}
-                Предложить
-              </button>
-            </div>
-          </form>
-
-          <form
-            className="ppm-brain-panel__decomposer-launcher"
-            aria-label="Агент Библиотекарь знаний"
-            onSubmit={createKnowledgeProposal}
-          >
-            <header>
-              <span className="ppm-brain-panel__report-icon">
-                <BookOpenCheck aria-hidden="true" />
-              </span>
-              <div>
-                <strong>Библиотекарь знаний</strong>
-                <span>
-                  <ShieldCheck aria-hidden="true" /> Черновик · создание файла после вашего подтверждения
-                </span>
-              </div>
-            </header>
-            <textarea
-              aria-label="Пробел в знаниях"
-              maxLength={500}
-              placeholder="Что нужно уточнить или добавить в базу знаний?"
-              rows={2}
-              value={knowledgeTopic}
-              onChange={(event) => setKnowledgeTopic(event.currentTarget.value)}
-            />
-            <div>
-              <select
-                aria-label="Исходный Markdown-материал"
-                disabled={readyMarkdownSources.length === 0}
-                value={knowledgeSourceId}
-                onChange={(event) => setKnowledgeSourceId(event.currentTarget.value)}
-              >
-                {readyMarkdownSources.length === 0 ? (
-                  <option value="">Нет готовых Markdown-материалов</option>
-                ) : (
-                  readyMarkdownSources.map((source) => (
-                    <option key={source.id} value={source.source_id}>
-                      {source.title || "Материал без названия"}
-                    </option>
-                  ))
-                )}
-              </select>
-              <button
-                type="submit"
-                disabled={
-                  agentBusy ||
-                  answerRunning ||
-                  searching ||
-                  health?.agents_enabled === false ||
-                  !knowledgeTopic.trim() ||
-                  !knowledgeSourceId
-                }
-              >
-                {startingKnowledge ? (
-                  <LoaderCircle className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <BookOpenCheck aria-hidden="true" />
-                )}
-                Подготовить
-              </button>
-            </div>
-          </form>
-
-          {health?.agents_enabled === false && (
-            <div className="ppm-brain-panel__message">Проектные агенты отключены глобальным администратором.</div>
-          )}
-
-          <form className="ppm-brain-panel__ask" onSubmit={submitAnswer}>
-            <textarea
-              aria-label="Вопрос проекту"
-              maxLength={500}
-              placeholder="Например: что блокирует испытания и где это зафиксировано?"
-              rows={3}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <div className="ppm-brain-panel__scope">
-              <label data-disabled={selectedShapeIds.length === 0 || undefined}>
-                <input
-                  checked={useSelection}
-                  disabled={selectedShapeIds.length === 0 || answerRunning || agentBusy}
-                  type="checkbox"
-                  onChange={(event) => setUseSelection(event.target.checked)}
-                />
-                <span>
-                  {selectedShapeIds.length > 0
-                    ? `Только выбранные объекты: ${selectedShapeIds.length}`
-                    : "Весь проект — на холсте ничего не выбрано"}
-                </span>
-              </label>
-              {useSelection && selectedShapeIds.length > 0 && (
-                <label data-disabled={health?.graph_enabled === false || undefined}>
-                  <span>
-                    {health?.graph_enabled === false
-                      ? "Соседи по связям отключены администратором"
-                      : "Соседи по подтверждённым связям"}
-                  </span>
-                  <select
-                    aria-label="Глубина смыслового графа"
-                    disabled={answerRunning || agentBusy || health?.graph_enabled === false}
-                    value={graphDepth}
-                    onChange={(event) => setGraphDepth(Number(event.currentTarget.value))}
-                  >
-                    <option value={0}>Не добавлять</option>
-                    <option value={1}>1 шаг</option>
-                    <option value={2}>2 шага</option>
-                  </select>
-                </label>
-              )}
-            </div>
-            <div className="ppm-brain-panel__ask-actions">
-              <button
-                type="button"
-                className={searching ? "ppm-brain-panel__cancel" : "ppm-brain-panel__secondary"}
-                disabled={agentBusy || answerRunning || (!searching && !query.trim())}
-                onClick={() => (searching ? cancelSearch() : void submitSearch())}
-              >
-                {searching ? <Square aria-hidden="true" /> : <Search aria-hidden="true" />}
-                {searching ? "Остановить поиск" : "Найти источники"}
-              </button>
-              {answerRunning ? (
-                <button type="button" className="ppm-brain-panel__cancel" onClick={() => void cancelAnswer()}>
-                  <Square aria-hidden="true" />
-                  Остановить
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={
-                    startingAnswer || searching || agentBusy || !query.trim() || health?.answers_enabled === false
-                  }
-                >
-                  {startingAnswer ? (
-                    <LoaderCircle className="animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Send aria-hidden="true" />
-                  )}
-                  Спросить
-                </button>
-              )}
-            </div>
-          </form>
-
-          {health?.answers_enabled === false && (
-            <div className="ppm-brain-panel__message">
-              Ответы отключены администратором. Поиск по источникам доступен.
-            </div>
-          )}
-          {error && (
-            <div className="ppm-brain-panel__message" data-tone="error">
-              {error}
-            </div>
-          )}
-          {notice && <div className="ppm-brain-panel__message">{notice}</div>}
-
-          {serviceProgress && (searching || answerRunning) && (
-            <section
-              className="ppm-brain-panel__agent-progress"
-              data-status={serviceProgress.stage.status}
-              aria-live="polite"
-              aria-label="Ход выполнения Мозга проекта"
-            >
-              {serviceProgress.stage.status === "running" ? (
-                <LoaderCircle className="animate-spin" aria-hidden="true" />
-              ) : (
-                <Check aria-hidden="true" />
-              )}
-              <div>
-                <strong>{SERVICE_STAGE_LABELS[serviceProgress.stage.name]}</strong>
-                <span>
-                  {serviceProgress.stage.status === "running"
-                    ? serviceProgress.stage.name === "receive_provider_answer" &&
-                      serviceProgress.stage.result_count !== null
-                      ? `Получено фрагментов: ${serviceProgress.stage.result_count}`
-                      : "Выполняется"
-                    : serviceProgress.stage.result_count === null
-                      ? "Выполнено"
-                      : serviceProgress.stage.name === "receive_provider_answer"
-                        ? `Выполнено · фрагментов: ${serviceProgress.stage.result_count}`
-                        : `Выполнено · результатов: ${serviceProgress.stage.result_count}`}
-                </span>
-              </div>
-            </section>
-          )}
-
-          {activeAgentRun && (activeAgentRun.attempt_count ?? 1) > 1 && (
-            <section
-              className="ppm-brain-panel__agent-progress"
-              data-status={isActiveAgentRunStatus(activeAgentRun.status) ? "running" : "completed"}
-              aria-live="polite"
-              aria-label="Восстановление исполнения агента"
-            >
-              <RefreshCcw aria-hidden="true" />
-              <div>
-                <strong>Исполнение восстановлено</strong>
-                <span>
-                  Предыдущий worker остановился. PPM продолжил запуск с попытки {activeAgentRun.attempt_count} без
-                  дублирования предложений.
-                </span>
-              </div>
-            </section>
-          )}
-
-          {recoveringAnswerRunId && answerRun?.id === recoveringAnswerRunId && (
-            <section
-              className="ppm-brain-panel__agent-progress"
-              data-status="running"
-              aria-live="polite"
-              aria-label="Наблюдение за ответом проекта"
-            >
-              <LoaderCircle className="animate-spin" aria-hidden="true" />
-              <div>
-                <strong>Наблюдение за ответом восстановлено</strong>
-                <span>PPM продолжает отслеживать запрос после перезагрузки страницы.</span>
-              </div>
-            </section>
-          )}
-
-          {recoveringAgentRunId && activeAgentRun?.id === recoveringAgentRunId ? (
-            <section
-              className="ppm-brain-panel__agent-progress"
-              data-status="running"
-              aria-live="polite"
-              aria-label="Наблюдение за запуском агента"
-            >
-              <LoaderCircle className="animate-spin" aria-hidden="true" />
-              <div>
-                <strong>Наблюдение восстановлено</strong>
-                <span>PPM обновляет состояние запущенного агента…</span>
-              </div>
-            </section>
-          ) : activeAgentProgress ? (
-            <section
-              className="ppm-brain-panel__agent-progress"
-              data-status={activeAgentProgress.tool.status}
-              aria-live="polite"
-              aria-label={activeAgentProgress.tool.status === "running" ? "Текущий шаг агента" : "Последний шаг агента"}
-            >
-              {activeAgentProgress.tool.status === "running" ? (
-                <LoaderCircle className="animate-spin" aria-hidden="true" />
-              ) : activeAgentProgress.tool.status === "failed" ? (
-                <AlertTriangle aria-hidden="true" />
-              ) : (
-                <Check aria-hidden="true" />
-              )}
-              <div>
-                <strong>{AGENT_TOOL_LABELS[activeAgentProgress.tool.name] ?? "Безопасный шаг агента"}</strong>
-                <span>
-                  {activeAgentProgress.tool.status === "running"
-                    ? "Выполняется…"
-                    : activeAgentProgress.tool.status === "failed"
-                      ? "Остановлено"
-                      : activeAgentProgress.tool.result_count === null
-                        ? "Выполнено"
-                        : `Выполнено · результатов: ${activeAgentProgress.tool.result_count}`}
-                </span>
-              </div>
-            </section>
-          ) : null}
-
-          {activeAgentRun && (canCancelAgentRun || canRetryAgentRun) && (
-            <section className="ppm-brain-panel__agent-run-controls" aria-label="Управление запуском агента">
-              <div>
-                <strong>{agentRunControlTitle}</strong>
-                <span>{agentRunControlDescription}</span>
-              </div>
-              {canCancelAgentRun && (
-                <button
-                  type="button"
-                  className="ppm-brain-panel__cancel"
-                  disabled={changingAgentRunId === activeAgentRun.id}
-                  onClick={() => void cancelAgentRun(activeAgentRun)}
-                >
-                  {changingAgentRunId === activeAgentRun.id ? (
-                    <LoaderCircle className="animate-spin" aria-hidden="true" />
-                  ) : (
-                    <Square aria-hidden="true" />
-                  )}
-                  Отменить запуск
-                </button>
-              )}
-              {canRetryAgentRun && (
-                <button
-                  type="button"
-                  className="ppm-brain-panel__secondary"
-                  disabled={changingAgentRunId === activeAgentRun.id}
-                  onClick={() => void retryAgentRun(activeAgentRun)}
-                >
-                  {changingAgentRunId === activeAgentRun.id ? (
-                    <LoaderCircle className="animate-spin" aria-hidden="true" />
-                  ) : (
-                    <RefreshCcw aria-hidden="true" />
-                  )}
-                  {activeAgentRun.status === "timed_out" ? "Запустить заново" : "Повторить"}
-                </button>
-              )}
-            </section>
-          )}
-
-          {activeAgentRun && canSaveAgentRun && (
-            <section className="ppm-brain-panel__agent-run-save" aria-label="Карточка запуска агента на Холсте">
-              <div>
-                <strong>Запуск можно закрепить на Холсте</strong>
-                <span>Повторное сохранение обновит эту же карточку и дополнит её хронологию без создания дубля.</span>
-              </div>
-              <button
-                type="button"
-                disabled={savedActiveAgentRunVersion === activeAgentRunVersion}
-                onClick={() => saveAgentRunToCanvas(activeAgentRun)}
-              >
-                <Save aria-hidden="true" />
-                {savedActiveAgentRunVersion === activeAgentRunVersion
-                  ? "Карточка актуальна"
-                  : savedActiveAgentRunVersion
-                    ? "Обновить карточку"
-                    : "Добавить на холст"}
-              </button>
-              {(activeAgentRun.actions.length > 0 || activeAgentRun.audit_trace.some((event) => event.tool)) && (
-                <button type="button" onClick={() => saveAgentRunToCanvas(activeAgentRun, true)}>
-                  <Network aria-hidden="true" />
-                  Разложить на холсте
-                </button>
-              )}
-            </section>
-          )}
-
-          <div className="ppm-brain-panel__body">
-            {relationshipRun ? (
-              <RelationshipProposal
-                applying={applyingRelationship}
-                canApply={canEdit && health?.agent_writes_enabled === true}
-                canReview={canEdit}
-                projectId={projectId}
-                reviewingActionId={reviewingActionId}
-                run={relationshipRun}
-                writeEnabled={health?.agent_writes_enabled === true}
-                workspaceSlug={workspaceSlug}
-                onApply={() => void applyRelationshipProposal()}
-                onClose={() => setRelationshipRun(undefined)}
-                onReview={(actionId, decision) => void reviewRelationshipProposal(actionId, decision)}
-              />
-            ) : knowledgeRun ? (
-              <KnowledgeProposal
-                applying={applyingKnowledge}
-                canApply={canEdit && health?.agent_writes_enabled === true}
-                canReview={canEdit}
-                projectId={projectId}
-                reviewingActionId={reviewingActionId}
-                run={knowledgeRun}
-                writeEnabled={health?.agent_writes_enabled === true}
-                workspaceSlug={workspaceSlug}
-                onApply={() => void applyKnowledgeProposal()}
-                onClose={() => setKnowledgeRun(undefined)}
-                onReview={(actionId, decision) => void reviewKnowledgeProposal(actionId, decision)}
-              />
-            ) : decompositionRun ? (
-              <WorkDecomposition
-                applying={applyingDecomposition}
-                canApply={canEdit && health?.agent_writes_enabled === true}
-                canReview={canEdit}
-                projectId={projectId}
-                reviewing={reviewingActionId === decompositionRun.id}
-                run={decompositionRun}
-                writeEnabled={health?.agent_writes_enabled === true}
-                workspaceSlug={workspaceSlug}
-                onApply={() => void applyDecomposition()}
-                onClose={() => setDecompositionRun(undefined)}
-                onReviewBatch={(decisions) => void reviewDecompositionBatch(decisions)}
-              />
-            ) : reportRun ? (
-              <ProjectReport
-                projectId={projectId}
-                run={reportRun}
-                workspaceSlug={workspaceSlug}
-                onClose={() => setReportRun(undefined)}
-              />
-            ) : answerRun ? (
-              <AnswerResult
-                canSave={canEdit}
-                memorySaved={savedMemoryRunId === answerRun.id}
-                run={answerRun}
-                saved={savedRunId === answerRun.id}
-                onSave={() => {
-                  onSaveAnswer(answerRun);
-                  setSavedRunId(answerRun.id);
-                }}
-                onSaveMemory={(kind) => void saveAnswerToMemory(answerRun, kind)}
-              />
-            ) : results.length > 0 ? (
-              <SearchResults
-                canSave={canEdit}
-                projectId={projectId}
-                results={results}
-                saved={searchSaved}
-                workspaceSlug={workspaceSlug}
-                onSave={saveSearchToCanvas}
-              />
-            ) : (
-              <>
-                <SourceList
-                  canEdit={canEdit}
-                  reindexing={reindexing}
-                  sources={sources}
-                  onReindex={() => void reindex()}
-                />
-                <MemoryList
-                  canEdit={canEdit}
-                  records={memory}
-                  onReview={(recordId, status) => void reviewMemory(recordId, status)}
-                />
-              </>
-            )}
+      <div className="ppm-brain-panel__scroll">
+        {loading ? (
+          <div className="ppm-brain-panel__state">
+            <LoaderCircle className="animate-spin" aria-hidden="true" />
+            Проверяем индекс…
           </div>
-        </>
-      )}
+        ) : (
+          getBrainPanelSections(mode).map((section) => <Fragment key={section}>{renderSection(section)}</Fragment>)
+        )}
+      </div>
     </div>
   );
 }
@@ -2808,10 +2900,13 @@ function MemoryList({
   canEdit,
   onReview,
   records,
+  showAnswerHint,
 }: {
   canEdit: boolean;
   onReview: (recordId: string, status: "confirmed" | "rejected") => void;
   records: TPpmProjectMemoryRecord[];
+  /** Search mode has no answers, so it must not suggest saving one. */
+  showAnswerHint: boolean;
 }) {
   return (
     <section className="ppm-brain-panel__memory" aria-label="Память проекта">
@@ -2825,7 +2920,7 @@ function MemoryList({
         <div className="ppm-brain-panel__empty">
           <BrainCircuit aria-hidden="true" />
           <strong>Память пока пуста</strong>
-          <span>Получите ответ по источникам и сохраните его как решение или сводку.</span>
+          {showAnswerHint && <span>Получите ответ по источникам и сохраните его как решение или сводку.</span>}
         </div>
       ) : (
         records.map((record) => (

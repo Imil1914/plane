@@ -993,7 +993,9 @@ test("narrow Canvas keeps board navigation and named actions within its header",
 
     const switcher = owner.page.locator(".ppm-canvas-board-switcher");
     const command = owner.page.getByRole("button", { name: /Найти команду холста|Find a Canvas command/ });
-    const brain = owner.page.getByRole("button", { name: /Спросить проект|Ask project/ });
+    const brain = owner.page.getByRole("button", {
+      name: /Найти в проекте|Search project|Спросить проект|Ask project/,
+    });
     const header = owner.page.locator(".ppm-canvas-workspace__header");
     const headerBox = await header.boundingBox();
     if (!headerBox) throw new Error("Canvas header has no visible bounds");

@@ -8,8 +8,10 @@ import { useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IWebhook } from "@plane/types";
+import { isPpmShellEnabled } from "@ppm/brand";
 // ui
 // components
 import { LogoSpinner } from "@/components/common/logo-spinner";
@@ -33,6 +35,7 @@ function WebhookDetailsPage({ params }: Route.ComponentProps) {
   const { currentWebhook, fetchWebhookById, updateWebhook } = useWebhook();
   const { currentWorkspace } = useWorkspace();
   const { allowPermissions } = useUserPermissions();
+  const { t } = useTranslation();
 
   // TODO: fix this error
   // useEffect(() => {
@@ -40,7 +43,12 @@ function WebhookDetailsPage({ params }: Route.ComponentProps) {
   // }, [clearSecretKey, isCreated]);
   // derived values
   const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
-  const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - Webhook` : undefined;
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  // No singular webhook i18n key exists, so the PPM path reuses the plural
+  // workspace_settings.settings.webhooks.title key; gated so non-PPM users keep the
+  // upstream singular title unchanged.
+  const webhookTitleSuffix = isPpmShell ? t("workspace_settings.settings.webhooks.title") : "Webhook";
+  const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - ${webhookTitleSuffix}` : undefined;
 
   useSWR(
     isAdmin ? `WEBHOOK_DETAILS_${workspaceSlug}_${webhookId}` : null,

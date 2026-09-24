@@ -63,6 +63,7 @@ export function CommandRenderer(props: Props) {
                 iconNode={command.iconNode}
                 label={t(command.i18n_title)}
                 keySequence={command.keySequence}
+                keywords={command.keywords}
                 shortcut={command.shortcut || command.modifierShortcut}
                 onSelect={() => onCommandSelect(command)}
               />

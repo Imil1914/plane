@@ -9,6 +9,8 @@ import React, { useCallback, useEffect, useState, useRef } from "react";
 // helpers
 import { usePlatformOS } from "@plane/hooks";
 import { cn } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 interface ResizableSidebarProps {
   showPeek?: boolean;
@@ -58,6 +60,12 @@ export function ResizableSidebar({
   const initialMouseXRef = useRef<number>(0);
   // hooks
   const { isMobile } = usePlatformOS();
+  const ppmT = usePpmTranslation();
+  // a11y labels
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const mainSidebarLabel = isPpmShell ? ppmT("a11y.main_sidebar") : "Main sidebar";
+  const resizeSidebarLabel = isPpmShell ? ppmT("a11y.resize_sidebar") : "Resize sidebar";
+  const sidebarPeekLabel = isPpmShell ? ppmT("a11y.sidebar_peek") : "Sidebar peek view";
   // handlers
   const setShowPeek = useCallback(
     (value: boolean) => {
@@ -192,7 +200,7 @@ export function ResizableSidebar({
           maxWidth: `${isCollapsed ? 0 : width}px`,
         }}
         role="complementary"
-        aria-label="Main sidebar"
+        aria-label={mainSidebarLabel}
         data-prevent-outside-click={isMobile}
       >
         <aside
@@ -215,7 +223,7 @@ export function ResizableSidebar({
             onDoubleClick={() => toggleCollapsed()}
             onMouseDown={(e) => startResizing(e)}
             role="separator"
-            aria-label="Resize sidebar"
+            aria-label={resizeSidebarLabel}
           />
         </aside>
       </div>
@@ -235,7 +243,7 @@ export function ResizableSidebar({
         onMouseEnter={handlePeekEnter}
         onMouseLeave={handlePeekLeave}
         role="complementary"
-        aria-label="Sidebar peek view"
+        aria-label={sidebarPeekLabel}
       >
         <aside
           className={cn(
@@ -257,7 +265,7 @@ export function ResizableSidebar({
             onDoubleClick={() => toggleCollapsed()}
             onMouseDown={(e) => startResizing(e)}
             role="separator"
-            aria-label="Resize sidebar"
+            aria-label={resizeSidebarLabel}
           />
         </aside>
       </div>

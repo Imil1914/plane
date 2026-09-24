@@ -13,6 +13,7 @@ import { useTranslation } from "@plane/i18n";
 import type { TModuleFilters } from "@plane/types";
 import { EUserProjectRoles } from "@plane/types";
 import { calculateTotalFilters } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // assets
 import darkModulesAsset from "@/app/assets/empty-state/disabled-feature/modules-dark.webp?url";
 import lightModulesAsset from "@/app/assets/empty-state/disabled-feature/modules-light.webp?url";
@@ -25,6 +26,7 @@ import { useModuleFilter } from "@/hooks/store/use-module-filter";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import type { Route } from "./+types/page";
 
 function ProjectModulesPage({ params }: Route.ComponentProps) {
@@ -35,6 +37,7 @@ function ProjectModulesPage({ params }: Route.ComponentProps) {
   const { resolvedTheme } = useTheme();
   // plane hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
   // store
   const { getProjectById, currentProjectDetails } = useProject();
   const {
@@ -47,7 +50,10 @@ function ProjectModulesPage({ params }: Route.ComponentProps) {
   const { allowPermissions } = useUserPermissions();
   // derived values
   const project = getProjectById(projectId);
-  const pageTitle = project?.name ? `${project?.name} - Modules` : undefined;
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const modulesTitleLabel = isPpmShell ? ppmT("project.directions") : "Modules";
+  const modulesTitleSeparator = isPpmShell ? "—" : "-";
+  const pageTitle = project?.name ? `${project.name} ${modulesTitleSeparator} ${modulesTitleLabel}` : undefined;
   const canPerformEmptyStateActions = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
   const resolvedPath = resolvedTheme === "light" ? lightModulesAsset : darkModulesAsset;
 

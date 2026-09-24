@@ -10,9 +10,11 @@ import { useParams } from "next/navigation";
 import { WORKSPACE_DEFAULT_SEARCH_RESULT } from "@plane/constants";
 import type { IWorkspaceSearchResults } from "@plane/types";
 import { cn } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { usePowerK } from "@/hooks/store/use-power-k";
 import useDebounce from "@/hooks/use-debounce";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { WorkspaceService } from "@/services/workspace.service";
 // local imports
 import type { TPowerKContext, TPowerKPageType } from "../../core/types";
@@ -20,6 +22,7 @@ import { PowerKModalNoSearchResultsCommand } from "./no-results-command";
 import { PowerKModalSearchResults } from "./search-results";
 // services init
 const workspaceService = new WorkspaceService();
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 type Props = {
   activePage: TPowerKPageType | null;
@@ -41,6 +44,7 @@ export function PowerKModalSearchMenu(props: Props) {
   const { workspaceSlug, projectId } = useParams();
   // store hooks
   const { togglePowerKModal } = usePowerK();
+  const ppmT = usePpmTranslation();
 
   useEffect(() => {
     if (activePage || !workspaceSlug) return;
@@ -89,13 +93,16 @@ export function PowerKModalSearchMenu(props: Props) {
               "animate-pulse": isSearching,
             })}
           >
-            Search results for{" "}
+            {IS_PPM_SHELL_ENABLED ? ppmT("navigation.search_results_for") : "Search results for"}{" "}
             <span className="font-medium">
               {'"'}
               {searchTerm}
               {'"'}
             </span>{" "}
-            in {isWorkspaceLevel ? "workspace" : "project"}:
+            {IS_PPM_SHELL_ENABLED
+              ? ppmT(isWorkspaceLevel ? "navigation.in_workspace" : "navigation.in_project")
+              : `in ${isWorkspaceLevel ? "workspace" : "project"}`}
+            :
           </h5>
         </div>
       )}

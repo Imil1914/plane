@@ -9,7 +9,7 @@ import { observer } from "mobx-react";
 import { MoreHorizontal } from "lucide-react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
-import { IconButton } from "@plane/propel/icon-button";
+import { getIconButtonStyling } from "@plane/propel/icon-button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TContextMenuItem } from "@plane/ui";
 import { ContextMenu, CustomMenu } from "@plane/ui";
@@ -21,6 +21,7 @@ import { ArchiveModuleModal, CreateUpdateModuleModal, DeleteModuleModal } from "
 import { useModule } from "@/hooks/store/use-module";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type Props = {
   parentRef: React.RefObject<HTMLDivElement>;
@@ -34,6 +35,8 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
   const { parentRef, moduleId, projectId, workspaceSlug, customClassName } = props;
   // router
   const router = useAppRouter();
+  // i18n
+  const ppmT = usePpmTranslation();
   // states
   const [editModal, setEditModal] = useState(false);
   const [archiveModuleModal, setArchiveModuleModal] = useState(false);
@@ -135,7 +138,9 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
       )}
       <ContextMenu parentRef={parentRef} items={CONTEXT_MENU_ITEMS} />
       <CustomMenu
-        customButton={<IconButton variant="tertiary" size="lg" icon={MoreHorizontal} />}
+        customButton={<MoreHorizontal className="size-4" aria-hidden="true" />}
+        customButtonClassName={getIconButtonStyling("tertiary", "lg")}
+        ariaLabel={ppmT("a11y.more_actions")}
         placement="bottom-end"
         closeOnSelect
         buttonClassName={customClassName}

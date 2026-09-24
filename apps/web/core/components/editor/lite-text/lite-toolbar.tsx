@@ -9,6 +9,9 @@ import { ArrowUp, Paperclip } from "lucide-react";
 // constants
 import type { ToolbarMenuItem } from "@plane/editor";
 import { IMAGE_ITEM } from "@plane/editor";
+import { useTranslation } from "@plane/i18n";
+// hooks
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type LiteToolbarProps = {
   onSubmit: (e: React.KeyboardEvent<HTMLDivElement> | React.MouseEvent<HTMLButtonElement>) => void;
@@ -18,12 +21,15 @@ type LiteToolbarProps = {
 };
 
 export function LiteToolbar({ onSubmit, isSubmitting, isEmpty, executeCommand }: LiteToolbarProps) {
+  const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
   return (
     <div className="flex items-center gap-2 pb-1">
       <button
         onClick={() => executeCommand(IMAGE_ITEM)}
         type="button"
         className="p-1 text-tertiary transition-colors hover:text-secondary"
+        aria-label={ppmT("a11y.attach_image")}
       >
         <Paperclip className="size-3" />
       </button>
@@ -32,6 +38,7 @@ export function LiteToolbar({ onSubmit, isSubmitting, isEmpty, executeCommand }:
         onClick={(e) => onSubmit(e)}
         disabled={isEmpty || isSubmitting}
         className="rounded-sm bg-accent-primary p-1 text-primary transition-colors hover:bg-accent-primary/80 disabled:bg-layer-1 disabled:text-secondary"
+        aria-label={t("submit")}
       >
         <ArrowUp className="size-3" />
       </button>

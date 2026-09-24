@@ -88,6 +88,7 @@ export const IssueSubscription = observer(function IssueSubscription(props: TIss
         onClick={handleSubscription}
         disabled={!isEditable || loading}
         size="lg"
+        aria-label={isSubscribed ? t("common.actions.unsubscribe") : t("common.actions.subscribe")}
       >
         {loading ? (
           <span>

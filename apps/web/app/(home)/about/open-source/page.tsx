@@ -41,10 +41,10 @@ export default function OpenSourcePage() {
         </header>
 
         <section className="rounded-xl border border-subtle-1 bg-surface-1 p-6 shadow-raised-100 sm:p-8">
-          <p className="tracking-widest mb-3 text-caption-md-semibold text-accent-primary uppercase">
+          <p className="mb-3 text-caption-md-semibold tracking-[0.12em] text-accent-primary uppercase">
             {ppmT("about.eyebrow")}
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight">{ppmT("about.heading")}</h1>
+          <h1 className="text-28 font-semibold tracking-tight">{ppmT("about.heading")}</h1>
           <p className="mt-4 max-w-2xl text-body-md-regular text-tertiary">{ppmT("about.description")}</p>
 
           <dl className="mt-8 grid gap-5 border-t border-subtle pt-6 sm:grid-cols-2">

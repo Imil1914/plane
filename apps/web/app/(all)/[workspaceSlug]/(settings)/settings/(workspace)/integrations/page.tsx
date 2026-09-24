@@ -8,6 +8,7 @@ import { observer } from "mobx-react";
 import useSWR from "swr";
 // components
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
 import { SingleIntegrationCard } from "@/components/integration/single-integration-card";
@@ -27,10 +28,13 @@ function WorkspaceIntegrationsPage() {
   // store hooks
   const { currentWorkspace } = useWorkspace();
   const { allowPermissions } = useUserPermissions();
+  const { t } = useTranslation();
 
   // derived values
   const isAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
-  const pageTitle = currentWorkspace?.name ? `${currentWorkspace.name} - Integrations` : undefined;
+  const pageTitle = currentWorkspace?.name
+    ? `${currentWorkspace.name} - ${t("workspace_settings.settings.integrations.heading")}`
+    : undefined;
   const { data: appIntegrations } = useSWR(isAdmin ? APP_INTEGRATIONS : null, () =>
     isAdmin ? integrationService.getAppIntegrationsList() : null
   );

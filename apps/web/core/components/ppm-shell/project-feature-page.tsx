@@ -78,7 +78,7 @@ export function PpmProjectFeaturePage({ feature, projectId, workspaceSlug }: TPp
             href={getPpmProjectPath(workspaceSlug, projectId, "tasks")}
             icon={ListTodo}
             title={ppmT("project.tasks")}
-            description={ppmT("overview.next_title")}
+            description={ppmT("overview.tasks_description")}
             status={ppmT("status.available")}
             available
           />
@@ -97,14 +97,16 @@ export function PpmProjectFeaturePage({ feature, projectId, workspaceSlug }: TPp
             icon={FileText}
             title={ppmT("project.knowledge")}
             description={ppmT("knowledge.description")}
-            status={ppmT("status.planned")}
+            status={ppmT("status.available")}
+            available
           />
           <FeatureCard
             href={getPpmProjectPath(workspaceSlug, projectId, "code")}
             icon={Code2}
             title={ppmT("project.code")}
             description={ppmT("code.description")}
-            status={ppmT("status.planned")}
+            status={ppmT("status.available")}
+            available
           />
         </div>
         <div className="rounded-xl border border-subtle bg-surface-2 p-5">
@@ -112,7 +114,7 @@ export function PpmProjectFeaturePage({ feature, projectId, workspaceSlug }: TPp
           <p className="mt-1 max-w-2xl text-13 leading-5 text-secondary">{ppmT("overview.next_description")}</p>
           <Link
             href={getPpmProjectPath(workspaceSlug, projectId, "tasks")}
-            className="focus-visible:outline-accent-primary mt-4 inline-flex items-center gap-2 rounded-md bg-accent-primary px-3 py-2 text-13 font-semibold text-on-color hover:bg-accent-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="mt-4 inline-flex items-center gap-2 rounded-md bg-accent-primary px-3 py-2 text-13 font-semibold text-on-accent hover:bg-accent-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
           >
             {ppmT("actions.open_tasks")}
             <ArrowRight className="size-4" aria-hidden="true" />
@@ -141,14 +143,14 @@ export function PpmProjectFeaturePage({ feature, projectId, workspaceSlug }: TPp
         <div className="mt-5 flex flex-wrap gap-3">
           <Link
             href={getPpmProjectPath(workspaceSlug, projectId, "tasks")}
-            className="focus-visible:outline-accent-primary inline-flex items-center gap-2 rounded-md bg-accent-primary px-3 py-2 text-13 font-semibold text-on-color hover:bg-accent-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="inline-flex items-center gap-2 rounded-md bg-accent-primary px-3 py-2 text-13 font-semibold text-on-accent hover:bg-accent-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
           >
             {ppmT("actions.open_tasks")}
             <ArrowRight className="size-4" aria-hidden="true" />
           </Link>
           <Link
             href={getPpmProjectPath(workspaceSlug, projectId, "overview")}
-            className="focus-visible:outline-accent-primary inline-flex items-center rounded-md border border-subtle bg-surface-1 px-3 py-2 text-13 font-semibold text-primary hover:bg-layer-1 focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="inline-flex items-center rounded-md border border-subtle bg-surface-1 px-3 py-2 text-13 font-semibold text-primary hover:bg-layer-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
           >
             {ppmT("actions.back_overview")}
           </Link>
@@ -203,7 +205,7 @@ function FeatureCard({ available = false, description, href, icon: Icon, status,
   return (
     <Link
       href={href}
-      className="group focus-visible:outline-accent-primary flex min-h-44 flex-col rounded-xl border border-subtle bg-surface-2 p-4 transition-colors hover:border-strong hover:bg-layer-1 focus-visible:outline-2 focus-visible:outline-offset-2"
+      className="group flex min-h-44 flex-col rounded-xl border border-subtle bg-surface-2 p-4 transition-colors hover:border-strong hover:bg-layer-1-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="grid size-9 place-items-center rounded-lg bg-layer-1 text-accent-primary">

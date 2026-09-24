@@ -16,6 +16,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TPage } from "@plane/types";
 // plane ui
 import { Breadcrumbs, Header } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // helpers
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 // hooks
@@ -23,6 +24,7 @@ import { useProject } from "@/hooks/store/use-project";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 import { EPageStoreType, usePageStore } from "@/hooks/store";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 export const PagesListHeader = observer(function PagesListHeader() {
   // states
@@ -35,6 +37,10 @@ export const PagesListHeader = observer(function PagesListHeader() {
   // store hooks
   const { currentProjectDetails, loader } = useProject();
   const { canCurrentUserCreatePage, createPage } = usePageStore(EPageStoreType.PROJECT);
+  // translation
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const pagesLabel = isPpmShell ? ppmT("project.collaborative_pages") : "Pages";
   // handle page create
   const handleCreatePage = async () => {
     setIsCreatingPage(true);
@@ -67,7 +73,7 @@ export const PagesListHeader = observer(function PagesListHeader() {
           <Breadcrumbs.Item
             component={
               <BreadcrumbLink
-                label="Pages"
+                label={pagesLabel}
                 href={`/${workspaceSlug}/projects/${currentProjectDetails?.id}/pages/`}
                 icon={<PageIcon className="h-4 w-4 text-tertiary" />}
                 isLast

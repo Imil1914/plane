@@ -189,7 +189,7 @@ export const ModuleAnalyticsSidebar = observer(function ModuleAnalyticsSidebar(p
               className="flex h-5 w-5 items-center justify-center rounded-full bg-layer-3"
               onClick={() => handleClose()}
             >
-              <ChevronRightIcon className="h-3 w-3 stroke-2 text-on-color" />
+              <ChevronRightIcon className="h-3 w-3 stroke-2 text-secondary" />
             </button>
           </div>
         </div>

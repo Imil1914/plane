@@ -129,7 +129,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
             key={item.key}
             href={getPpmAdminModeNavigationHref(item.href, isGlobalAdmin, searchParams.get("ppm_admin_mode"))}
             aria-current={itemIsActive ? "page" : undefined}
-            className="focus-visible:outline-accent-primary block rounded-md focus-visible:outline-2 focus-visible:outline-offset-2"
+            className="block rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
             onClick={handleProjectClick}
           >
             <SidebarNavItem isActive={itemIsActive}>

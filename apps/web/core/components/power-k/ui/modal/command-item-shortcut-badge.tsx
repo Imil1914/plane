@@ -5,6 +5,10 @@
  */
 
 import React from "react";
+import { isPpmShellEnabled } from "@ppm/brand";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 /**
  * Formats a shortcut string for display
@@ -88,14 +92,18 @@ export function ShortcutBadge({ shortcut }: { shortcut: string | undefined }) {
 /**
  * Formats key sequence for display (e.g., "gm" -> "G then M")
  */
-export const formatKeySequenceForDisplay = (sequence: string | undefined): string => {
+export const formatKeySequenceForDisplay = (sequence: string | undefined, separator = "then"): string => {
   if (!sequence) return "";
 
   const chars = sequence.split("");
-  return chars.map((c) => c.toUpperCase()).join(" then ");
+  return chars.map((c) => c.toUpperCase()).join(` ${separator} `);
 };
 
 export function KeySequenceBadge({ sequence }: { sequence: string | undefined }) {
+  // translation
+  const ppmT = usePpmTranslation();
+  const then = IS_PPM_SHELL_ENABLED ? ppmT("power_k.then") : "then";
+
   if (!sequence) return null;
 
   const chars = sequence.split("");
@@ -107,7 +115,7 @@ export function KeySequenceBadge({ sequence }: { sequence: string | undefined })
           <kbd className="inline-flex h-5 items-center justify-center rounded-sm border border-strong bg-surface-1 px-1.5 font-code text-10 font-medium text-tertiary">
             {char.toUpperCase()}
           </kbd>
-          {index < chars.length - 1 && <span className="text-10 text-placeholder">then</span>}
+          {index < chars.length - 1 && <span className="text-10 text-placeholder">{then}</span>}
         </React.Fragment>
       ))}
     </div>

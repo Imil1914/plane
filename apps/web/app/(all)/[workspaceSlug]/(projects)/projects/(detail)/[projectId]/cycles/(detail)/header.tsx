@@ -27,6 +27,7 @@ import type { ICustomSearchSelectOption, IIssueDisplayFilterOptions, IIssueDispl
 import { EIssuesStoreType, EIssueLayoutTypes } from "@plane/types";
 import { Breadcrumbs, BreadcrumbNavigationSearchDropdown, Header } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { WorkItemsModal } from "@/components/analytics/work-items/modal";
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
@@ -47,6 +48,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import useLocalStorage from "@/hooks/use-local-storage";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 
@@ -60,6 +62,9 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   const { workspaceSlug, projectId, cycleId } = useParams();
   // i18n
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const cyclesLabel = isPpmShell ? ppmT("project.stages") : "Cycles";
   // store hooks
   const {
     issuesFilter: { issueFilters, updateFilters },
@@ -142,7 +147,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
               <Breadcrumbs.Item
                 component={
                   <BreadcrumbLink
-                    label="Cycles"
+                    label={cyclesLabel}
                     href={`/${workspaceSlug}/projects/${projectId}/cycles/`}
                     icon={<CycleIcon className="h-4 w-4 text-tertiary" />}
                   />

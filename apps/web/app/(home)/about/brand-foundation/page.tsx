@@ -22,8 +22,8 @@ export default function BrandFoundationPage() {
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="tracking-widest text-caption-md-semibold text-accent-primary uppercase">I0.2 smoke</p>
-            <h1 className="text-3xl mt-2 font-semibold tracking-tight">PPM brand foundation</h1>
+            <p className="text-caption-md-semibold tracking-[0.12em] text-accent-primary uppercase">I0.2 smoke</p>
+            <h1 className="mt-2 text-28 font-semibold tracking-tight">PPM brand foundation</h1>
             <p className="mt-2 text-body-sm-regular text-tertiary">
               Реальные Button, Input, Dialog и Toast из Propel на едином наборе семантических токенов.
             </p>

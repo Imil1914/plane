@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import type { APIResponse, Browser, BrowserContext, Page, TestInfo } from "@playwright/test";
 import { expect, test } from "@playwright/test";
+import { isPpmProjectAskEnabled } from "@ppm/canvas";
 
 type DemoRole = "OWNER" | "ROBOT_MEMBER" | "BIO_MEMBER" | "ROBOT_VIEWER" | "OUTSIDER";
 
@@ -368,8 +369,8 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
     await ownerPage.getByLabel("Название папки").fill(folderTitle);
     await ownerPage.getByRole("button", { name: "Создать", exact: true }).click();
     await ownerPage
-      .getByRole("tree", { name: "Project Vault" })
-      .getByRole("button", { name: folderTitle, exact: true })
+      .getByRole("tree", { name: "Хранилище проекта" })
+      .getByRole("treeitem", { name: folderTitle, exact: true })
       .last()
       .click();
 
@@ -383,8 +384,8 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
 
     await ownerPage.reload();
     await ownerPage
-      .getByRole("tree", { name: "Project Vault" })
-      .getByRole("button", { name: noteTitle, exact: true })
+      .getByRole("tree", { name: "Хранилище проекта" })
+      .getByRole("treeitem", { name: noteTitle, exact: true })
       .click();
     await expect(ownerPage.getByRole("textbox", { name: "Редактор Markdown" })).toHaveValue(markdown);
 
@@ -425,8 +426,8 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
 
     await ownerPage.goto(projectPath(demo.robotProjectId, "knowledge"));
     await ownerPage
-      .getByRole("tree", { name: "Project Vault" })
-      .getByRole("button", { name: pdfTitle, exact: true })
+      .getByRole("tree", { name: "Хранилище проекта" })
+      .getByRole("treeitem", { name: pdfTitle, exact: true })
       .click();
 
     const brainPanel = ownerPage.getByRole("region", {
@@ -470,46 +471,54 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
       },
     ];
 
+    // The canvas page hosts both the Ask panel and the projection-removal step below.
     await ownerPage.goto(projectPath(demo.robotProjectId, "brain"));
-    await ownerPage.getByRole("button", { name: "Спросить проект", exact: true }).click();
-    const askPanel = ownerPage.getByRole("region", { name: "Спросить проект" });
-    await askPanel
-      .getByPlaceholder("Спросите о проекте, его задачах или материалах…")
-      .fill(`Собери подтверждения для ${workItemTitle}, ${noteMarker} и ${pdfMarker}.`);
-    await askPanel.getByRole("button", { name: "Спросить", exact: true }).click();
-    await expect(askPanel.locator(".ppm-ask-panel__result")).toBeVisible({
-      timeout: 120_000,
-    });
-    await expect(askPanel).toContainText(workItemTitle);
-    await expect(askPanel).toContainText(noteTitle);
-    await expect(askPanel).toContainText(pdfTitle);
-    const citations = askPanel.locator(".ppm-ask-panel__citations a");
-    await expect.poll(async () => citations.count()).toBeGreaterThanOrEqual(3);
-    const citationLinks = await citations.evaluateAll((links) =>
-      links.map((link) => ({
-        href: (link as HTMLAnchorElement).getAttribute("href") ?? "",
-        title:
-          link
-            .querySelector("span")
-            ?.textContent?.replace(/^\d+\.\s*/, "")
-            .trim() ?? "",
-      }))
-    );
-    await Promise.all(
-      expectedCitations.map(async (expectedCitation) => {
-        expect(citationLinks, `Citation is missing for ${expectedCitation.sourceType}`).toContainEqual({
-          href: expectedCitation.url,
-          title: expectedCitation.title,
-        });
-        const destination = await ownerPage.request.get(expectedCitation.url);
-        expect(destination.status(), `Citation destination is not reachable: ${expectedCitation.sourceType}`).toBe(200);
-      })
-    );
-    const beforeAnswerSave = await getCanvas(ownerPage);
-    await askPanel.getByRole("button", { name: "Сохранить на холсте", exact: true }).click();
-    await expect(askPanel.getByRole("button", { name: "Добавлено на холст", exact: true })).toBeVisible();
-    await waitForCanvasVersion(ownerPage, beforeAnswerSave.version);
-    await screenshot(ownerPage, testInfo, "e7-grounded-answer");
+    // Generated answers ship only with PPM_PROJECT_ASK_ENABLED on (same truthy set as the app); without it only
+    // the Ask/agents steps are skipped — projection removal and the E2–E7 evidence below still run.
+    const projectAskEnabled = isPpmProjectAskEnabled(process.env.PPM_PROJECT_ASK_ENABLED);
+    if (projectAskEnabled) {
+      await ownerPage.getByRole("button", { name: "Спросить проект", exact: true }).click();
+      const askPanel = ownerPage.getByRole("region", { name: "Спросить проект" });
+      await askPanel
+        .getByPlaceholder("Спросите о проекте, его задачах или материалах…")
+        .fill(`Собери подтверждения для ${workItemTitle}, ${noteMarker} и ${pdfMarker}.`);
+      await askPanel.getByRole("button", { name: "Спросить", exact: true }).click();
+      await expect(askPanel.locator(".ppm-ask-panel__result")).toBeVisible({
+        timeout: 120_000,
+      });
+      await expect(askPanel).toContainText(workItemTitle);
+      await expect(askPanel).toContainText(noteTitle);
+      await expect(askPanel).toContainText(pdfTitle);
+      const citations = askPanel.locator(".ppm-ask-panel__citations a");
+      await expect.poll(async () => citations.count()).toBeGreaterThanOrEqual(3);
+      const citationLinks = await citations.evaluateAll((links) =>
+        links.map((link) => ({
+          href: (link as HTMLAnchorElement).getAttribute("href") ?? "",
+          title:
+            link
+              .querySelector("span")
+              ?.textContent?.replace(/^\d+\.\s*/, "")
+              .trim() ?? "",
+        }))
+      );
+      await Promise.all(
+        expectedCitations.map(async (expectedCitation) => {
+          expect(citationLinks, `Citation is missing for ${expectedCitation.sourceType}`).toContainEqual({
+            href: expectedCitation.url,
+            title: expectedCitation.title,
+          });
+          const destination = await ownerPage.request.get(expectedCitation.url);
+          expect(destination.status(), `Citation destination is not reachable: ${expectedCitation.sourceType}`).toBe(
+            200
+          );
+        })
+      );
+      const beforeAnswerSave = await getCanvas(ownerPage);
+      await askPanel.getByRole("button", { name: "Сохранить на холсте", exact: true }).click();
+      await expect(askPanel.getByRole("button", { name: "Добавлено на холст", exact: true })).toBeVisible();
+      await waitForCanvasVersion(ownerPage, beforeAnswerSave.version);
+      await screenshot(ownerPage, testInfo, "e7-grounded-answer");
+    }
 
     const beforeProjectionRemoval = await getCanvas(ownerPage);
     await ownerPage
@@ -535,13 +544,16 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
     );
     await attachJson(testInfo, "e2-e7-api-evidence.json", {
       canvasVersion: finalCanvas.version,
-      citations: expectedCitations.map(({ sourceId, sourceType, title, url }) => ({
-        reachable: true,
-        sourceId,
-        sourceType,
-        title,
-        url,
-      })),
+      // Citations are verified (link present, destination reachable) only in the Ask block above.
+      citations: projectAskEnabled
+        ? expectedCitations.map(({ sourceId, sourceType, title, url }) => ({
+            reachable: true,
+            sourceId,
+            sourceType,
+            title,
+            url,
+          }))
+        : [],
       indexedSources: finalBrain.sources
         .filter((source) => [workItemTitle, noteTitle, pdfTitle].includes(source.title))
         .map((source) => ({
@@ -549,6 +561,7 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
           title: source.title,
           type: source.source_type,
         })),
+      projectAskEnabled,
       projectionRemoved: !finalCanvas.bindings.some((item) => item.source.display.title === workItemTitle),
       runId,
       vaultProjectionContainsBlob: "content" in vaultProjectionNode || "blob" in vaultProjectionNode,

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react";
 // plane helpers
 import { useOutsideClickDetector } from "@plane/hooks";
+import { useTranslation } from "@plane/i18n";
 import { PreferencesIcon } from "@plane/propel/icons";
 import { ScrollArea } from "@plane/propel/scrollarea";
 import { isPpmShellEnabled } from "@ppm/brand";
@@ -35,6 +36,7 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
   const { toggleSidebar, sidebarCollapsed } = useAppTheme();
   const windowSize = useSize();
   const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const { t } = useTranslation();
   // refs
   const ref = useRef<HTMLDivElement>(null);
 
@@ -64,6 +66,7 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
                   size="base"
                   variant="ghost"
                   icon={PreferencesIcon}
+                  aria-label={t("customize_navigation")}
                   onClick={() => setIsCustomizeNavDialogOpen(true)}
                 />
               )}

@@ -169,12 +169,15 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
   return (
     <>
       {showAdminMode && (
-        <div className="border-accent-primary/30 flex flex-wrap items-center justify-between gap-2 border-b bg-accent-primary/10 px-4 py-2 text-12 text-primary">
+        <div
+          role="status"
+          className="flex flex-wrap items-center justify-between gap-2 border-b border-warning-subtle bg-warning-subtle px-4 py-2 text-12 text-warning-primary"
+        >
           <span className="flex items-center gap-2 font-medium">
-            <ShieldCheck className="size-4 text-accent-primary" aria-hidden="true" />
+            <ShieldCheck className="size-4 text-icon-warning-primary" aria-hidden="true" />
             {ppmT("admin.mode_banner")}
           </span>
-          <Link href="/ppm-admin" className="font-semibold text-accent-primary hover:underline">
+          <Link href="/ppm-admin" className="font-semibold text-warning-primary underline underline-offset-2">
             {ppmT("admin.back_to_center")}
           </Link>
         </div>

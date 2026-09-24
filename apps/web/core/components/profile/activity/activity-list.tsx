@@ -52,10 +52,10 @@ export const ActivityList = observer(function ActivityList(props: Props) {
                           alt={activityItem.actor_detail.display_name}
                           height={30}
                           width={30}
-                          className="bg-gray-500 grid h-7 w-7 place-items-center rounded-full border-2 border-white text-on-color"
+                          className="grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-layer-3 text-secondary"
                         />
                       ) : (
-                        <div className="bg-gray-500 grid h-7 w-7 place-items-center rounded-full border-2 border-white text-on-color capitalize">
+                        <div className="grid h-7 w-7 place-items-center rounded-full border-2 border-white bg-layer-3 text-secondary capitalize">
                           {activityItem.actor_detail.display_name?.[0]}
                         </div>
                       )}
@@ -134,7 +134,7 @@ export const ActivityList = observer(function ActivityList(props: Props) {
                                     className="h-full w-full rounded-full object-cover"
                                   />
                                 ) : (
-                                  <div className="bg-gray-700 grid h-6 w-6 place-items-center rounded-full border-2 border-white text-11 text-on-color capitalize">
+                                  <div className="grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-layer-3 text-11 text-secondary capitalize">
                                     {activityItem.actor_detail.display_name?.[0]}
                                   </div>
                                 )}

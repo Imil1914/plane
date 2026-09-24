@@ -15,8 +15,10 @@ import {
   type DragEvent,
 } from "react";
 import {
+  AlertTriangle,
   BrainCircuit,
   Check,
+  ChevronDown,
   Download,
   FileArchive,
   Frame,
@@ -40,6 +42,7 @@ import {
   type TLGroupShape,
   type TLShapeId,
 } from "tldraw";
+import { useTheme } from "next-themes";
 import {
   PPM_CANVAS_AUTOSAVE_DELAY_MS,
   PPM_CANVAS_GIT_OBJECT_TYPES,
@@ -79,7 +82,10 @@ import {
   type TPpmWorkItemsViewResponse,
 } from "@ppm/canvas";
 import type { TPpmTranslationKey } from "@ppm/brand";
+import { useTranslation } from "@plane/i18n";
 import { EFileAssetType } from "@plane/types";
+import { resolveGeneralTheme } from "@plane/utils";
+import { formatPpmTimeAgo } from "@/helpers/ppm-time-ago.helper";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { PpmCanvasService, PpmCanvasServiceError } from "@/services/ppm-canvas.service";
 import { FileService } from "@/services/file.service";
@@ -94,6 +100,7 @@ import {
 } from "./shape";
 import { PPM_CANVAS_COMMAND_EVENT, type TPpmCanvasCommandDetail } from "./commands";
 import {
+  presenceCursorColors,
   resolveBoardChangeAction,
   resolveBoardSaveCompletion,
   type TPpmBoardPresenceController,
@@ -113,6 +120,7 @@ import {
   type TPpmCanvasRecoveryDraft,
 } from "./board-recovery";
 import { canvasSaveRetryDelayMs, shouldRetryCanvasSave } from "./board-save-retry";
+import { isBlockingCanvasStatus } from "./board-workspace-state";
 import {
   MAX_CANVAS_IMPORT_SNAPSHOT_BYTES,
   createDesktopImportReport,
@@ -135,8 +143,12 @@ type TPpmCanvasEditorProps = {
   onOrchestratorRunVersionsChange?: (boardId: string, versions: Record<string, string>) => void;
   onSelectionChange?: (boardId: string, shapeIds: string[]) => void;
   onSyncStatusChange?: (boardId: string, status: TPpmCanvasSyncStatus) => void;
+  onToolChange?: (boardId: string, toolId: string) => void;
   presence?: TPpmBoardPresenceController;
   projectId: string;
+  // "card": the status card inside the editor (minimal workspace, the only status there).
+  // "footer": the workspace footer owns the status; the editor keeps a blocking banner and a "Board" pill.
+  statusPlacement?: "card" | "footer";
   workspaceId: string;
   workspaceSlug: string;
 };
@@ -194,8 +206,10 @@ export default function PpmCanvasEditor({
   onOrchestratorRunVersionsChange,
   onSelectionChange,
   onSyncStatusChange,
+  onToolChange,
   presence,
   projectId,
+  statusPlacement = "card",
   workspaceId,
   workspaceSlug,
 }: TPpmCanvasEditorProps) {
@@ -204,6 +218,9 @@ export default function PpmCanvasEditor({
   const fileService = useMemo(() => new FileService(), []);
   const vaultService = useMemo(() => new PpmVaultService(), []);
   const [editor, setEditor] = useState<Editor>();
+  // tldraw follows the PPM theme, not the OS: `inferDarkMode` would track the system setting instead.
+  const { resolvedTheme } = useTheme();
+  const colorScheme = resolveGeneralTheme(resolvedTheme);
   const [effectiveCanEdit, setEffectiveCanEdit] = useState(false);
   const [syncStatus, setSyncStatus] = useState<TPpmCanvasSyncStatus>("loading");
   const [recoveryDraft, setRecoveryDraft] = useState<TPpmCanvasRecoveryDraft>();
@@ -228,6 +245,12 @@ export default function PpmCanvasEditor({
   }>();
   const [desktopImportCount, setDesktopImportCount] = useState<number>();
   const [desktopImportReport, setDesktopImportReport] = useState<TPpmDesktopImportReport>();
+  // Lives here, not in CanvasControls: the tldraw overlay remounts whenever the components memo changes.
+  const [boardInfoOpen, setBoardInfoOpen] = useState(false);
+  const boardInfoFocusRef = useRef(false);
+  // Same reason: "Semantic links" must survive autosave and edge updates, which rebuild the overlay.
+  const [semanticPanelOpen, setSemanticPanelOpen] = useState(false);
+  const semanticPanelFocusRef = useRef(false);
   const [fileDropNotice, setFileDropNotice] = useState(false);
   const [pendingFileDrop, setPendingFileDrop] = useState<TPendingFileDrop>();
   const [fileDropError, setFileDropError] = useState<string>();
@@ -570,6 +593,11 @@ export default function PpmCanvasEditor({
     },
     [authorId, boardId, projectId, service, workspaceId]
   );
+
+  useEffect(() => {
+    if (editor && editor.user.getUserPreferences().colorScheme !== colorScheme)
+      editor.user.updateUserPreferences({ colorScheme });
+  }, [editor, colorScheme]);
 
   useEffect(() => {
     if (!editor) return;
@@ -1640,6 +1668,8 @@ export default function PpmCanvasEditor({
         setDesktopImport(undefined);
         setDesktopImportCount(undefined);
         setImportError(true);
+        // Import outcomes live inside "Board": reveal them on every attempt, including a repeated failure.
+        setBoardInfoOpen(true);
       }
     },
     [authorId, boardId]
@@ -1770,9 +1800,11 @@ export default function PpmCanvasEditor({
       setDesktopImportReport(createDesktopImportReport(desktopImport.plan, desktopImport.filename));
       setDesktopImport(undefined);
       setImportError(false);
+      setBoardInfoOpen(true);
     } catch {
       activeEditor.loadSnapshot(previous as Partial<TLEditorSnapshot>);
       setImportError(true);
+      setBoardInfoOpen(true);
       return;
     } finally {
       applyingRemoteRef.current = false;
@@ -1909,6 +1941,25 @@ export default function PpmCanvasEditor({
     [boardId, projectId, service, workspaceId]
   );
 
+  const toggleBoardInfo = useCallback(() => {
+    // Toggling rebuilds the overlay (components memo), so the pill remounts: return keyboard focus to it.
+    boardInfoFocusRef.current = true;
+    setBoardInfoOpen((open) => !open);
+  }, []);
+
+  const openSemanticPanel = useCallback(() => {
+    // Focus moves into the panel once, when it opens; later overlay remounts must not steal focus from the canvas.
+    semanticPanelFocusRef.current = true;
+    setSemanticPanelOpen(true);
+  }, []);
+  const closeSemanticPanel = useCallback(() => {
+    const focusInPanel =
+      document.activeElement instanceof HTMLElement && Boolean(document.activeElement.closest(".ppm-semantic-edges"));
+    setSemanticPanelOpen(false);
+    // The panel unmounts with focus inside it: keep keyboard focus on this board's canvas, not on the page body.
+    if (focusInPanel) editorRef.current?.getContainer().focus();
+  }, []);
+
   const components = useMemo<TLComponents>(
     () => ({
       ...HIDDEN_TLDRAW_UI,
@@ -1916,6 +1967,9 @@ export default function PpmCanvasEditor({
         <CanvasControls
           authorId={authorId}
           boardId={boardId}
+          boardInfoFocusRef={boardInfoFocusRef}
+          // A pending import preview lives inside "Board" and must stay reachable until confirmed or cancelled.
+          boardInfoOpen={boardInfoOpen || Boolean(desktopImport)}
           boards={boards}
           canEdit={effectiveCanEdit}
           copiedLocal={copiedLocal}
@@ -1935,6 +1989,8 @@ export default function PpmCanvasEditor({
           onCreateSemanticEdge={createSemanticEdge}
           onDeleteSemanticEdge={deleteSemanticEdge}
           onReviewSemanticEdge={reviewSemanticEdge}
+          onOpenSemanticPanel={openSemanticPanel}
+          onCloseSemanticPanel={closeSemanticPanel}
           onExport={exportBoard}
           onExportRecovery={downloadRecoveryDraft}
           onSelectRecovery={selectRecoveryDraft}
@@ -1949,8 +2005,13 @@ export default function PpmCanvasEditor({
           onRetry={() => (pendingSaveRef.current ? void flushSave() : window.location.reload())}
           onSelectionChange={onSelectionChange}
           onSearchWorkItems={searchWorkItems}
+          onToggleBoardInfo={toggleBoardInfo}
+          onToolChange={onToolChange}
+          statusPlacement={statusPlacement}
           syncStatus={syncStatus}
           semanticEdges={semanticEdges}
+          semanticPanelFocusRef={semanticPanelFocusRef}
+          semanticPanelOpen={semanticPanelOpen}
           recoveryMode={recoveryDraft ? recoveryMode : undefined}
           pendingRecoveryOperation={Boolean(recoveryDraft?.pending_operation)}
           recoveryCandidates={recoveryCandidates}
@@ -1961,8 +2022,10 @@ export default function PpmCanvasEditor({
     [
       authorId,
       boardId,
+      boardInfoOpen,
       boards,
       bindWorkItem,
+      closeSemanticPanel,
       copiedLocal,
       copyLocalSnapshot,
       createWorkItem,
@@ -1987,6 +2050,8 @@ export default function PpmCanvasEditor({
       downloadDesktopImportReport,
       onOrchestratorRunVersionsChange,
       onSelectionChange,
+      onToolChange,
+      openSemanticPanel,
       recoveryDraft,
       recoveryCandidates,
       recoveryMode,
@@ -1997,7 +2062,10 @@ export default function PpmCanvasEditor({
       reviewSemanticEdge,
       searchWorkItems,
       semanticEdges,
+      semanticPanelOpen,
+      statusPlacement,
       syncStatus,
+      toggleBoardInfo,
     ]
   );
 
@@ -2122,35 +2190,35 @@ function PpmCanvasRealtimeCursors({ presence }: { presence: TPpmBoardPresenceCon
 
   return (
     <div className="ppm-canvas-remote-cursors" aria-hidden="true">
-      {remoteCursors.map((cursor) => (
-        <div
-          className="ppm-canvas-remote-cursor"
-          data-pointer-down={cursor.pointer_down || undefined}
-          key={cursor.connection_id}
-          style={
-            {
-              "--ppm-presence-cursor-color": presenceCursorColor(cursor.user_id),
-              transform: `translate3d(${cursor.viewport.x}px, ${cursor.viewport.y}px, 0)`,
-            } as CSSProperties
-          }
-        >
-          <MousePointer2 aria-hidden="true" />
-          <span>{cursor.display_name}</span>
-        </div>
-      ))}
+      {remoteCursors.map((cursor) => {
+        const { cursor: cursorColor, label: labelColor } = presenceCursorColors(cursor.user_id);
+        return (
+          <div
+            className="ppm-canvas-remote-cursor"
+            data-pointer-down={cursor.pointer_down || undefined}
+            key={cursor.connection_id}
+            style={
+              {
+                "--ppm-presence-cursor-color": cursorColor,
+                "--ppm-presence-cursor-label": labelColor,
+                transform: `translate3d(${cursor.viewport.x}px, ${cursor.viewport.y}px, 0)`,
+              } as CSSProperties
+            }
+          >
+            <MousePointer2 aria-hidden="true" />
+            <span>{cursor.display_name}</span>
+          </div>
+        );
+      })}
     </div>
   );
-}
-
-function presenceCursorColor(value: string) {
-  let hash = 0;
-  for (const character of value) hash = (hash * 31 + character.codePointAt(0)!) % 360;
-  return `hsl(${hash} 72% 52%)`;
 }
 
 function CanvasControls({
   authorId,
   boardId,
+  boardInfoFocusRef,
+  boardInfoOpen,
   boards,
   canEdit,
   copiedLocal,
@@ -2184,15 +2252,24 @@ function CanvasControls({
   onRetry,
   onSelectionChange,
   onSearchWorkItems,
+  onToggleBoardInfo,
+  onToolChange,
+  onOpenSemanticPanel,
+  onCloseSemanticPanel,
   semanticEdges,
+  semanticPanelFocusRef,
+  semanticPanelOpen,
   recoveryMode,
   pendingRecoveryOperation,
   recoveryCandidates,
   selectedRecoveryKey,
+  statusPlacement,
   syncStatus,
 }: {
   authorId: string;
   boardId: string;
+  boardInfoFocusRef: { current: boolean };
+  boardInfoOpen: boolean;
   boards: TPpmCanvasBoard[];
   canEdit: boolean;
   copiedLocal: boolean;
@@ -2231,11 +2308,18 @@ function CanvasControls({
   onRetry: () => void;
   onSelectionChange?: (boardId: string, shapeIds: string[]) => void;
   onSearchWorkItems: (query: string, cursor?: string) => Promise<TPpmProjectionSearchResponse>;
+  onToggleBoardInfo: () => void;
+  onToolChange?: (boardId: string, toolId: string) => void;
+  onOpenSemanticPanel: () => void;
+  onCloseSemanticPanel: () => void;
   semanticEdges: TPpmCanvasSemanticEdge[];
+  semanticPanelFocusRef: { current: boolean };
+  semanticPanelOpen: boolean;
   recoveryMode?: "restore" | "export_only";
   pendingRecoveryOperation: boolean;
   recoveryCandidates: TRecoveryCandidate[];
   selectedRecoveryKey?: string;
+  statusPlacement: "card" | "footer";
   syncStatus: TPpmCanvasSyncStatus;
 }) {
   const editor = useEditor();
@@ -2243,8 +2327,8 @@ function CanvasControls({
   const projectionContext = useContext(PpmWorkItemProjectionContext);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [boardPickerOpen, setBoardPickerOpen] = useState(false);
-  const [semanticPanelOpen, setSemanticPanelOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const boardInfoToggleRef = useRef<HTMLButtonElement>(null);
   const nodes = useValue(
     "ppm canvas nodes",
     () =>
@@ -2254,6 +2338,7 @@ function CanvasControls({
     [editor]
   );
   const selectedShapeIds = useValue("ppm canvas selected shapes", () => editor.getSelectedShapeIds(), [editor]);
+  const toolId = useValue("ppm canvas tool", () => editor.getCurrentToolId(), [editor]);
   const orchestratorRunVersions = useMemo(
     () =>
       Object.fromEntries(
@@ -2271,8 +2356,18 @@ function CanvasControls({
   }, [boardId, onSelectionChange, selectedShapeIds]);
 
   useEffect(() => {
+    onToolChange?.(boardId, toolId);
+  }, [boardId, onToolChange, toolId]);
+
+  useEffect(() => {
     onOrchestratorRunVersionsChange?.(boardId, orchestratorRunVersions);
   }, [boardId, onOrchestratorRunVersionsChange, orchestratorRunVersions]);
+
+  useEffect(() => {
+    if (!boardInfoFocusRef.current) return;
+    boardInfoFocusRef.current = false;
+    boardInfoToggleRef.current?.focus();
+  }, [boardInfoFocusRef]);
 
   useEffect(() => {
     const onCommand = (event: Event) => {
@@ -2331,7 +2426,7 @@ function CanvasControls({
           if (canEdit) editor.setCurrentTool("arrow");
           break;
         case "semantic-edges":
-          setSemanticPanelOpen(true);
+          if (!semanticPanelOpen) onOpenSemanticPanel();
           break;
         case "undo":
           if (canEdit) editor.undo();
@@ -2366,7 +2461,202 @@ function CanvasControls({
     };
     window.addEventListener(PPM_CANVAS_COMMAND_EVENT, onCommand);
     return () => window.removeEventListener(PPM_CANVAS_COMMAND_EVENT, onCommand);
-  }, [authorId, boardId, canEdit, editor, ppmT]);
+  }, [authorId, boardId, canEdit, editor, onOpenSemanticPanel, ppmT, semanticPanelOpen]);
+
+  const statusLabelKey: TPpmTranslationKey = recoveryMode
+    ? "canvas.recovery_title"
+    : canEdit || syncStatus !== "saved"
+      ? SYNC_STATUS_LABELS[syncStatus]
+      : "canvas.read_only_title";
+  const statusDescriptionKey: TPpmTranslationKey = recoveryMode
+    ? recoveryMode === "restore"
+      ? "canvas.recovery_restore_description"
+      : pendingRecoveryOperation
+        ? "canvas.recovery_verify_pending_description"
+        : "canvas.recovery_export_description"
+    : canEdit || syncStatus !== "saved"
+      ? SYNC_STATUS_DESCRIPTIONS[syncStatus]
+      : "canvas.read_only_description";
+  const blockingStatus = isBlockingCanvasStatus(syncStatus, Boolean(recoveryMode));
+  const boardInfoPanelId = `ppm-canvas-board-info-${boardId}`;
+  // Shared status blocks: the card (minimal workspace) and the footer layout (banner + "Board" pill) render the same
+  // blocks with the same labels and classes, so recovery, merge and import flows behave identically in both.
+  const statusNotice = (
+    <p className="ppm-canvas-status__notice" data-status={syncStatus}>
+      {ppmT(statusDescriptionKey)}
+    </p>
+  );
+  const recoverySelect = recoveryMode && recoveryCandidates.length > 1 && (
+    <label className="ppm-canvas-status__recovery-select">
+      <span>{ppmT("canvas.recovery_choose")}</span>
+      <select value={selectedRecoveryKey} onChange={(event) => onSelectRecovery(event.target.value)}>
+        {recoveryCandidates.map((candidate, index) => (
+          <option key={candidate.key} value={candidate.key}>
+            {index + 1} · {candidate.draft.saved_at}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+  const recoveryActions = recoveryMode && (
+    <div className="ppm-canvas-status__actions">
+      {(recoveryMode === "restore" || pendingRecoveryOperation) && syncStatus !== "loading" && (
+        <button type="button" onClick={onRestoreRecovery}>
+          {ppmT(recoveryMode === "restore" ? "canvas.recovery_restore" : "canvas.recovery_verify_pending")}
+        </button>
+      )}
+      <button type="button" onClick={onExportRecovery}>
+        <Download aria-hidden="true" />
+        {ppmT("canvas.recovery_download")}
+      </button>
+      <button type="button" onClick={onDiscardRecovery}>
+        {ppmT("canvas.recovery_discard")}
+      </button>
+    </div>
+  );
+  const storageWarning = draftStorageUnavailable && (
+    <p className="ppm-canvas-status__storage-warning">{ppmT("canvas.recovery_storage_unavailable")}</p>
+  );
+  const mergeBlock = ((syncStatus === "conflict" && !recoveryMode) || recoveryMode === "export_only") && (
+    <div className="ppm-canvas-status__migration">
+      <strong>{ppmT("canvas.merge_title")}</strong>
+      <p>{ppmT("canvas.merge_description")}</p>
+      {mergePreview && (
+        <p>
+          {ppmT("canvas.merge_local_changes")}: {mergePreview.localChanges} · {ppmT("canvas.merge_remote_changes")}:{" "}
+          {mergePreview.remoteChanges}
+        </p>
+      )}
+      {mergeUnavailable && <p className="ppm-canvas-status__import-error">{ppmT("canvas.merge_unavailable")}</p>}
+      <div className="ppm-canvas-status__actions">
+        <button disabled={mergeBusy} type="button" onClick={mergePreview ? onConfirmMerge : onPreviewMerge}>
+          {ppmT(mergeBusy ? "canvas.merge_checking" : mergePreview ? "canvas.merge_confirm" : "canvas.merge_preview")}
+        </button>
+      </div>
+    </div>
+  );
+  const exportButton = (
+    <button type="button" onClick={onExport}>
+      <Download aria-hidden="true" />
+      {ppmT("canvas.export_board")}
+    </button>
+  );
+  const importButton = (
+    <button type="button" onClick={() => importInputRef.current?.click()}>
+      <Upload aria-hidden="true" />
+      {ppmT("canvas.import_board")}
+    </button>
+  );
+  const importInput = (
+    <input
+      ref={importInputRef}
+      hidden
+      accept="application/json,.json,.flow.json"
+      type="file"
+      onChange={(event) => {
+        const file = event.currentTarget.files?.[0];
+        if (file) void onImport(file);
+        event.currentTarget.value = "";
+      }}
+    />
+  );
+  const desktopImportPreview = desktopImport && (
+    <div className="ppm-canvas-status__migration" role="dialog" aria-label={ppmT("canvas.desktop_import_title")}>
+      <strong>{ppmT("canvas.desktop_import_title")}</strong>
+      <span className="ppm-canvas-status__migration-file">{desktopImport.filename}</span>
+      <p>
+        {ppmT("canvas.desktop_import_converted")}: {desktopImport.plan.convertedCount} ·{" "}
+        {ppmT("canvas.desktop_import_placeholders")}: {desktopImport.plan.placeholderCount}
+      </p>
+      <p>
+        {ppmT("canvas.desktop_import_connections")}: {desktopImport.plan.connections.length}
+      </p>
+      <p>
+        {ppmT("canvas.desktop_import_free_arrows")}: {desktopImport.plan.freeArrows.length}
+      </p>
+      {(desktopImport.plan.placeholderCount > 0 ||
+        desktopImport.plan.assetCount > 0 ||
+        desktopImport.plan.hasLegacyExtras ||
+        desktopImport.plan.hasFlattenedHierarchy ||
+        desktopImport.plan.hasRotations) && <p>{ppmT("canvas.desktop_import_warning")}</p>}
+      {desktopImport.plan.unsupportedKinds.length > 0 && <p>{desktopImport.plan.unsupportedKinds.join(", ")}</p>}
+      <p>{ppmT("canvas.desktop_import_additive")}</p>
+      <div className="ppm-canvas-status__actions">
+        <button type="button" onClick={onConfirmDesktopImport}>
+          {ppmT("canvas.desktop_import_confirm")}
+        </button>
+        <button type="button" onClick={onCancelDesktopImport}>
+          {ppmT("canvas.desktop_import_cancel")}
+        </button>
+        <button type="button" onClick={onDownloadDesktopImportReport}>
+          {ppmT("canvas.desktop_import_report")}
+        </button>
+      </div>
+    </div>
+  );
+  const desktopImportResult = desktopImportCount !== undefined && (
+    <div className="ppm-canvas-status__migration">
+      <p className="ppm-canvas-status__import-success">
+        {ppmT("canvas.desktop_import_done")}: {desktopImportCount}
+      </p>
+      {desktopImportReport && (
+        <div className="ppm-canvas-status__actions">
+          <button type="button" onClick={onDownloadDesktopImportReport}>
+            {ppmT("canvas.desktop_import_report")}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+  const importErrorNotice = importError && (
+    <p className="ppm-canvas-status__import-error">{ppmT("canvas.import_error")}</p>
+  );
+  const syncActions = (syncStatus === "conflict" || syncStatus === "error" || syncStatus === "corrupt") && (
+    <div className="ppm-canvas-status__actions">
+      {syncStatus === "error" && (
+        <button type="button" onClick={onRetry}>
+          {ppmT("canvas.retry_save")}
+        </button>
+      )}
+      {syncStatus === "conflict" && (
+        <button type="button" onClick={onCopyLocal}>
+          {ppmT(copiedLocal ? "canvas.copy_done" : "canvas.copy_local")}
+        </button>
+      )}
+      <button type="button" onClick={onReload}>
+        {ppmT("canvas.reload_server")}
+      </button>
+    </div>
+  );
+  const objectsList = (
+    <details>
+      <summary>
+        {ppmT("canvas.objects")} · {nodes.length}
+      </summary>
+      {nodes.length === 0 ? (
+        <p>{ppmT("canvas.objects_empty")}</p>
+      ) : (
+        <ul>
+          {nodes.map(({ parsed, shape }) => (
+            <li key={shape.id}>
+              <button type="button" onClick={() => focusShape(editor, shape.id)}>
+                <Frame aria-hidden="true" />
+                <span>
+                  {parsed.status === "valid" || parsed.status === "migrated"
+                    ? parsed.node.kind === "work_item_ref"
+                      ? (projectionContext.bindingsByShapeId.get(shape.id)?.source.display.title ??
+                        ppmT("canvas.work_item"))
+                      : parsed.node.title ||
+                        ppmT(parsed.node.kind === "note" ? "canvas.note_title" : "canvas.group_title")
+                    : ppmT(parsed.status === "unknown" ? "canvas.unknown_node" : "canvas.corrupt_node")}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
+  );
 
   return (
     <>
@@ -2398,216 +2688,117 @@ function CanvasControls({
         <SemanticEdgesPanel
           canEdit={canEdit}
           edges={semanticEdges}
+          focusOnMountRef={semanticPanelFocusRef}
           nodes={nodes}
           selectedShapeIds={selectedShapeIds}
-          onClose={() => setSemanticPanelOpen(false)}
+          onClose={onCloseSemanticPanel}
           onCreate={onCreateSemanticEdge}
           onDelete={onDeleteSemanticEdge}
           onReview={onReviewSemanticEdge}
         />
       )}
 
-      <aside className="ppm-canvas-status" aria-live="polite">
-        <div className="ppm-canvas-status__heading">
-          <span className="ppm-canvas-status__icon" aria-hidden="true">
-            <BrainCircuit />
-          </span>
-          <div>
-            <strong>{ppmT("project.brain")}</strong>
-            <span>
-              {ppmT(
-                recoveryMode
-                  ? "canvas.recovery_title"
-                  : canEdit || syncStatus !== "saved"
-                    ? SYNC_STATUS_LABELS[syncStatus]
-                    : "canvas.read_only_title"
-              )}
+      {statusPlacement === "card" ? (
+        <aside className="ppm-canvas-status" aria-live="polite">
+          <div className="ppm-canvas-status__heading">
+            <span className="ppm-canvas-status__icon" aria-hidden="true">
+              <BrainCircuit />
             </span>
+            <div>
+              <strong>{ppmT("project.brain")}</strong>
+              <span>{ppmT(statusLabelKey)}</span>
+            </div>
           </div>
-        </div>
-        <p className="ppm-canvas-status__notice" data-status={syncStatus}>
-          {ppmT(
-            recoveryMode
-              ? recoveryMode === "restore"
-                ? "canvas.recovery_restore_description"
-                : pendingRecoveryOperation
-                  ? "canvas.recovery_verify_pending_description"
-                  : "canvas.recovery_export_description"
-              : canEdit || syncStatus !== "saved"
-                ? SYNC_STATUS_DESCRIPTIONS[syncStatus]
-                : "canvas.read_only_description"
+          {statusNotice}
+          {recoverySelect}
+          {recoveryActions}
+          {storageWarning}
+          {mergeBlock}
+          <div className="ppm-canvas-status__actions ppm-canvas-status__actions--always">
+            {exportButton}
+            {canEdit && (
+              <>
+                {importButton}
+                {importInput}
+              </>
+            )}
+          </div>
+          {desktopImportPreview}
+          {desktopImportResult}
+          {importErrorNotice}
+          {syncActions}
+          {objectsList}
+        </aside>
+      ) : (
+        <>
+          {!blockingStatus && (
+            // The footer shows the status; this keeps it announced and keeps exactly one notice per editor.
+            <p className="ppm-canvas-status__notice ppm-visually-hidden" data-status={syncStatus} aria-live="polite">
+              {ppmT(statusDescriptionKey)}
+            </p>
           )}
-        </p>
-        {recoveryMode && recoveryCandidates.length > 1 && (
-          <label className="ppm-canvas-status__recovery-select">
-            <span>{ppmT("canvas.recovery_choose")}</span>
-            <select value={selectedRecoveryKey} onChange={(event) => onSelectRecovery(event.target.value)}>
-              {recoveryCandidates.map((candidate, index) => (
-                <option key={candidate.key} value={candidate.key}>
-                  {index + 1} · {candidate.draft.saved_at}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        {recoveryMode && (
-          <div className="ppm-canvas-status__actions">
-            {(recoveryMode === "restore" || pendingRecoveryOperation) && syncStatus !== "loading" && (
-              <button type="button" onClick={onRestoreRecovery}>
-                {ppmT(recoveryMode === "restore" ? "canvas.recovery_restore" : "canvas.recovery_verify_pending")}
-              </button>
-            )}
-            <button type="button" onClick={onExportRecovery}>
-              <Download aria-hidden="true" />
-              {ppmT("canvas.recovery_download")}
-            </button>
-            <button type="button" onClick={onDiscardRecovery}>
-              {ppmT("canvas.recovery_discard")}
-            </button>
-          </div>
-        )}
-        {draftStorageUnavailable && (
-          <p className="ppm-canvas-status__storage-warning">{ppmT("canvas.recovery_storage_unavailable")}</p>
-        )}
-        {((syncStatus === "conflict" && !recoveryMode) || recoveryMode === "export_only") && (
-          <div className="ppm-canvas-status__migration">
-            <strong>{ppmT("canvas.merge_title")}</strong>
-            <p>{ppmT("canvas.merge_description")}</p>
-            {mergePreview && (
-              <p>
-                {ppmT("canvas.merge_local_changes")}: {mergePreview.localChanges} ·{" "}
-                {ppmT("canvas.merge_remote_changes")}: {mergePreview.remoteChanges}
-              </p>
-            )}
-            {mergeUnavailable && <p className="ppm-canvas-status__import-error">{ppmT("canvas.merge_unavailable")}</p>}
-            <div className="ppm-canvas-status__actions">
-              <button disabled={mergeBusy} type="button" onClick={mergePreview ? onConfirmMerge : onPreviewMerge}>
-                {ppmT(
-                  mergeBusy ? "canvas.merge_checking" : mergePreview ? "canvas.merge_confirm" : "canvas.merge_preview"
+          {/* One top overlay for the banner and the "Board" pill, so the banner never covers the pill. */}
+          <div className="ppm-canvas-overlay-top">
+            {(blockingStatus || draftStorageUnavailable) && (
+              <section className="ppm-canvas-status ppm-canvas-status--alert" aria-live="polite">
+                {blockingStatus && (
+                  <>
+                    <div className="ppm-canvas-status__heading">
+                      <span className="ppm-canvas-status__icon" aria-hidden="true">
+                        <AlertTriangle />
+                      </span>
+                      <div>
+                        <strong>{ppmT(statusLabelKey)}</strong>
+                      </div>
+                    </div>
+                    {statusNotice}
+                  </>
                 )}
+                {recoverySelect}
+                {recoveryActions}
+                {storageWarning}
+                {mergeBlock}
+                {syncActions}
+              </section>
+            )}
+            <div className="ppm-canvas-board-info">
+              <button
+                ref={boardInfoToggleRef}
+                type="button"
+                className="ppm-canvas-board-info__toggle"
+                aria-controls={boardInfoOpen ? boardInfoPanelId : undefined}
+                aria-expanded={boardInfoOpen}
+                onClick={onToggleBoardInfo}
+              >
+                <Frame aria-hidden="true" />
+                <span>
+                  {ppmT("canvas.board_info")} ·{" "}
+                  {ppmT("canvas.board_info_objects").replace("{count}", String(nodes.length))}
+                </span>
+                <ChevronDown aria-hidden="true" />
               </button>
+              {/* Always mounted so a file can be imported while "Board" is collapsed. */}
+              {canEdit && importInput}
+              {boardInfoOpen && (
+                <section
+                  className="ppm-canvas-status ppm-canvas-board-info__panel"
+                  id={boardInfoPanelId}
+                  aria-label={ppmT("canvas.board_info")}
+                >
+                  <div className="ppm-canvas-status__actions ppm-canvas-status__actions--always">
+                    {exportButton}
+                    {canEdit && importButton}
+                  </div>
+                  {desktopImportPreview}
+                  {desktopImportResult}
+                  {importErrorNotice}
+                  {objectsList}
+                </section>
+              )}
             </div>
           </div>
-        )}
-        <div className="ppm-canvas-status__actions ppm-canvas-status__actions--always">
-          <button type="button" onClick={onExport}>
-            <Download aria-hidden="true" />
-            {ppmT("canvas.export_board")}
-          </button>
-          {canEdit && (
-            <>
-              <button type="button" onClick={() => importInputRef.current?.click()}>
-                <Upload aria-hidden="true" />
-                {ppmT("canvas.import_board")}
-              </button>
-              <input
-                ref={importInputRef}
-                hidden
-                accept="application/json,.json,.flow.json"
-                type="file"
-                onChange={(event) => {
-                  const file = event.currentTarget.files?.[0];
-                  if (file) void onImport(file);
-                  event.currentTarget.value = "";
-                }}
-              />
-            </>
-          )}
-        </div>
-        {desktopImport && (
-          <div className="ppm-canvas-status__migration" role="dialog" aria-label={ppmT("canvas.desktop_import_title")}>
-            <strong>{ppmT("canvas.desktop_import_title")}</strong>
-            <span className="ppm-canvas-status__migration-file">{desktopImport.filename}</span>
-            <p>
-              {ppmT("canvas.desktop_import_converted")}: {desktopImport.plan.convertedCount} ·{" "}
-              {ppmT("canvas.desktop_import_placeholders")}: {desktopImport.plan.placeholderCount}
-            </p>
-            <p>
-              {ppmT("canvas.desktop_import_connections")}: {desktopImport.plan.connections.length}
-            </p>
-            <p>
-              {ppmT("canvas.desktop_import_free_arrows")}: {desktopImport.plan.freeArrows.length}
-            </p>
-            {(desktopImport.plan.placeholderCount > 0 ||
-              desktopImport.plan.assetCount > 0 ||
-              desktopImport.plan.hasLegacyExtras ||
-              desktopImport.plan.hasFlattenedHierarchy ||
-              desktopImport.plan.hasRotations) && <p>{ppmT("canvas.desktop_import_warning")}</p>}
-            {desktopImport.plan.unsupportedKinds.length > 0 && <p>{desktopImport.plan.unsupportedKinds.join(", ")}</p>}
-            <p>{ppmT("canvas.desktop_import_additive")}</p>
-            <div className="ppm-canvas-status__actions">
-              <button type="button" onClick={onConfirmDesktopImport}>
-                {ppmT("canvas.desktop_import_confirm")}
-              </button>
-              <button type="button" onClick={onCancelDesktopImport}>
-                {ppmT("canvas.desktop_import_cancel")}
-              </button>
-              <button type="button" onClick={onDownloadDesktopImportReport}>
-                {ppmT("canvas.desktop_import_report")}
-              </button>
-            </div>
-          </div>
-        )}
-        {desktopImportCount !== undefined && (
-          <div className="ppm-canvas-status__migration">
-            <p className="ppm-canvas-status__import-success">
-              {ppmT("canvas.desktop_import_done")}: {desktopImportCount}
-            </p>
-            {desktopImportReport && (
-              <div className="ppm-canvas-status__actions">
-                <button type="button" onClick={onDownloadDesktopImportReport}>
-                  {ppmT("canvas.desktop_import_report")}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-        {importError && <p className="ppm-canvas-status__import-error">{ppmT("canvas.import_error")}</p>}
-        {(syncStatus === "conflict" || syncStatus === "error" || syncStatus === "corrupt") && (
-          <div className="ppm-canvas-status__actions">
-            {syncStatus === "error" && (
-              <button type="button" onClick={onRetry}>
-                {ppmT("canvas.retry_save")}
-              </button>
-            )}
-            {syncStatus === "conflict" && (
-              <button type="button" onClick={onCopyLocal}>
-                {ppmT(copiedLocal ? "canvas.copy_done" : "canvas.copy_local")}
-              </button>
-            )}
-            <button type="button" onClick={onReload}>
-              {ppmT("canvas.reload_server")}
-            </button>
-          </div>
-        )}
-        <details>
-          <summary>
-            {ppmT("canvas.objects")} · {nodes.length}
-          </summary>
-          {nodes.length === 0 ? (
-            <p>{ppmT("canvas.objects_empty")}</p>
-          ) : (
-            <ul>
-              {nodes.map(({ parsed, shape }) => (
-                <li key={shape.id}>
-                  <button type="button" onClick={() => focusShape(editor, shape.id)}>
-                    <Frame aria-hidden="true" />
-                    <span>
-                      {parsed.status === "valid" || parsed.status === "migrated"
-                        ? parsed.node.kind === "work_item_ref"
-                          ? (projectionContext.bindingsByShapeId.get(shape.id)?.source.display.title ??
-                            ppmT("canvas.work_item"))
-                          : parsed.node.title ||
-                            ppmT(parsed.node.kind === "note" ? "canvas.note_title" : "canvas.group_title")
-                        : ppmT(parsed.status === "unknown" ? "canvas.unknown_node" : "canvas.corrupt_node")}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </details>
-      </aside>
+        </>
+      )}
 
       {nodes.length === 0 && (
         <div className="ppm-canvas-empty">
@@ -2837,6 +3028,7 @@ function BoardLinkPicker({
   onClose: () => void;
 }) {
   const ppmT = usePpmTranslation();
+  const { currentLocale } = useTranslation();
   return (
     <section className="ppm-work-item-picker ppm-board-link-picker" aria-label={ppmT("canvas.add_board_link")}>
       <header>
@@ -2854,7 +3046,7 @@ function BoardLinkPicker({
             <span>
               <strong>{board.name}</strong>
               <small>
-                {ppmT("canvas.board_version")} {board.version}
+                {ppmT("canvas.board_updated")} {formatPpmTimeAgo(board.updated_at, currentLocale)}
               </small>
             </span>
             <Plus aria-hidden="true" />
@@ -2881,6 +3073,7 @@ const SEMANTIC_RELATION_LABELS = {
 function SemanticEdgesPanel({
   canEdit,
   edges,
+  focusOnMountRef,
   nodes,
   onClose,
   onCreate,
@@ -2890,6 +3083,7 @@ function SemanticEdgesPanel({
 }: {
   canEdit: boolean;
   edges: TPpmCanvasSemanticEdge[];
+  focusOnMountRef: { current: boolean };
   nodes: { parsed: ReturnType<typeof parseSerializedPpmCanvasNode>; shape: TPpmCanvasShape }[];
   onClose: () => void;
   onCreate: (
@@ -2909,6 +3103,7 @@ function SemanticEdgesPanel({
   const [toShapeId, setToShapeId] = useState<string>(selectedShapeIds.length === 2 ? selectedShapeIds[1] : "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
   const pair = fromShapeId && toShapeId && fromShapeId !== toShapeId ? [fromShapeId, toShapeId] : [];
   const titleByShapeId = new Map(
     nodes.map(({ parsed, shape }) => [
@@ -2926,6 +3121,13 @@ function SemanticEdgesPanel({
     setFromShapeId(selectedShapeIds[0]);
     setToShapeId(selectedShapeIds[1]);
   }, [selectedShapeIds]);
+
+  useEffect(() => {
+    if (!focusOnMountRef.current) return;
+    focusOnMountRef.current = false;
+    // Next frame: when the command palette runs this command, it returns focus to its trigger in a frame first.
+    requestAnimationFrame(() => sectionRef.current?.querySelector<HTMLElement>("button, select, input")?.focus());
+  }, [focusOnMountRef]);
 
   const create = async () => {
     const [selectedFromShapeId, selectedToShapeId] = pair;
@@ -2967,7 +3169,17 @@ function SemanticEdgesPanel({
   };
 
   return (
-    <section className="ppm-semantic-edges" aria-label={ppmT("canvas.semantic_edges")}>
+    <section
+      ref={sectionRef}
+      className="ppm-semantic-edges"
+      aria-label={ppmT("canvas.semantic_edges")}
+      onKeyDown={(event) => {
+        if (event.code === "Escape") {
+          event.stopPropagation();
+          onClose();
+        }
+      }}
+    >
       <header>
         <div>
           <strong>{ppmT("canvas.semantic_edges")}</strong>

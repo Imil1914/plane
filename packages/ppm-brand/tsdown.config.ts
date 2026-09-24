@@ -8,6 +8,7 @@ export default defineConfig({
     customExports: (exports) => ({
       ...exports,
       "./tokens.css": "./src/tokens.css",
+      "./i18n-overlay.json": "./src/locales/i18n-overlay.json",
       "./assets/mark.svg": "./assets/mark.svg",
       "./assets/logo.svg": "./assets/logo.svg",
     }),

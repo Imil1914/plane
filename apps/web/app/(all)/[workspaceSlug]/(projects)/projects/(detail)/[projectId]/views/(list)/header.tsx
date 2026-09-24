@@ -11,12 +11,14 @@ import { PROJECT_VIEW_TRACKER_ELEMENTS } from "@plane/constants";
 import { Button } from "@plane/propel/button";
 import { ViewsIcon } from "@plane/propel/icons";
 import { Breadcrumbs, Header } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { ViewListHeader } from "@/components/views/view-list-header";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProject } from "@/hooks/store/use-project";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 
@@ -25,6 +27,9 @@ export const ProjectViewsHeader = observer(function ProjectViewsHeader() {
   // store hooks
   const { toggleCreateViewModal } = useCommandPalette();
   const { loader } = useProject();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const viewsLabel = isPpmShell ? ppmT("project.views") : "Views";
 
   return (
     <>
@@ -35,7 +40,7 @@ export const ProjectViewsHeader = observer(function ProjectViewsHeader() {
             <Breadcrumbs.Item
               component={
                 <BreadcrumbLink
-                  label="Views"
+                  label={viewsLabel}
                   href={`/${workspaceSlug}/projects/${projectId}/views/`}
                   icon={<ViewsIcon className="h-4 w-4 text-tertiary" />}
                   isLast

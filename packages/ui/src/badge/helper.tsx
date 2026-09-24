@@ -50,7 +50,7 @@ enum badgeIconStyling {
 
 export const badgeStyling: IBadgeStyling = {
   primary: {
-    default: `text-on-color bg-accent-primary`,
+    default: `text-on-accent bg-accent-primary`,
     hover: `hover:bg-accent-primary/80`,
     disabled: `cursor-not-allowed !bg-custom-primary-60 hover:bg-custom-primary-60`,
   },

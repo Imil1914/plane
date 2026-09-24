@@ -8,7 +8,9 @@ import React, { useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { STATE_GROUPS } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import { StateGroupIcon } from "@plane/propel/icons";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/filters";
 
@@ -20,6 +22,8 @@ type Props = {
 
 export const FilterStateGroup = observer(function FilterStateGroup(props: Props) {
   const { appliedFilters, handleUpdate, searchQuery } = props;
+  const { t } = useTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
   const [itemsToRender, setItemsToRender] = useState(5);
   const [previewEnabled, setPreviewEnabled] = useState(true);
@@ -52,7 +56,7 @@ export const FilterStateGroup = observer(function FilterStateGroup(props: Props)
                   isChecked={appliedFilters?.includes(stateGroup.key) ? true : false}
                   onClick={() => handleUpdate(stateGroup.key)}
                   icon={<StateGroupIcon stateGroup={stateGroup.key} />}
-                  title={stateGroup.label}
+                  title={isPpmShell ? t(`workspace_projects.state.${stateGroup.key}`) : stateGroup.label}
                 />
               ))}
               {filteredOptions.length > 5 && (

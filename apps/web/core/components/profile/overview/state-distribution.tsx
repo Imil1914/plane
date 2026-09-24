@@ -12,6 +12,7 @@ import { EmptyStateCompact } from "@plane/propel/empty-state";
 import type { IUserProfileData, IUserStateDistribution } from "@plane/types";
 import { Card } from "@plane/ui";
 import { capitalizeFirstLetter } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 
 type Props = {
   stateDistribution: IUserStateDistribution[];
@@ -20,6 +21,7 @@ type Props = {
 
 export function ProfileStateDistribution({ stateDistribution, userProfile }: Props) {
   const { t } = useTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   if (!userProfile) return null;
 
   return (
@@ -69,7 +71,11 @@ export function ProfileStateDistribution({ stateDistribution, userProfile }: Pro
                             STATE_GROUPS[group.state_group]?.color ?? "var(--background-color-accent-primary)",
                         }}
                       />
-                      <div className="whitespace-nowrap">{STATE_GROUPS[group.state_group].label}</div>
+                      <div className="whitespace-nowrap">
+                        {isPpmShell
+                          ? t(`workspace_projects.state.${group.state_group}`)
+                          : STATE_GROUPS[group.state_group].label}
+                      </div>
                     </div>
                     <div>{group.state_count}</div>
                   </div>

@@ -10,6 +10,7 @@ import { STATE_GROUPS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { IUserStateDistribution } from "@plane/types";
 import { Card, ECardDirection, ECardSpacing } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // constants
 
 type Props = {
@@ -18,6 +19,7 @@ type Props = {
 
 export function ProfileWorkload({ stateDistribution }: Props) {
   const { t } = useTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
   return (
     <div className="space-y-2">
@@ -35,11 +37,13 @@ export function ProfileWorkload({ stateDistribution }: Props) {
                 />
                 <div className="flex-col space-y-1">
                   <span className="text-13 text-placeholder">
-                    {group.state_group === "unstarted"
-                      ? "Not started"
-                      : group.state_group === "started"
-                        ? "Working on"
-                        : STATE_GROUPS[group.state_group].label}
+                    {isPpmShell
+                      ? t(`workspace_projects.state.${group.state_group}`)
+                      : group.state_group === "unstarted"
+                        ? "Not started"
+                        : group.state_group === "started"
+                          ? "Working on"
+                          : STATE_GROUPS[group.state_group].label}
                   </span>
                   <p className="text-18 font-semibold">{group.state_count}</p>
                 </div>

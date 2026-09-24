@@ -13,6 +13,7 @@ import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Breadcrumbs, Header } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { InboxIssueCreateModalRoot } from "@/components/inbox/modals/create-modal";
@@ -20,6 +21,7 @@ import { InboxIssueCreateModalRoot } from "@/components/inbox/modals/create-moda
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
 import { useUserPermissions } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 import { IntakeIcon } from "@plane/propel/icons";
@@ -32,6 +34,9 @@ export const ProjectInboxHeader = observer(function ProjectInboxHeader() {
   // store hooks
   const { allowPermissions } = useUserPermissions();
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const intakeLabel = isPpmShell ? ppmT("project.intake") : "Intake";
 
   const { currentProjectDetails, loader: currentProjectDetailsLoader } = useProject();
   const { loader } = useProjectInbox();
@@ -51,7 +56,7 @@ export const ProjectInboxHeader = observer(function ProjectInboxHeader() {
             <Breadcrumbs.Item
               component={
                 <BreadcrumbLink
-                  label="Intake"
+                  label={intakeLabel}
                   href={`/${workspaceSlug}/projects/${projectId}/intake/`}
                   icon={<IntakeIcon className="h-4 w-4 text-tertiary" />}
                   isLast

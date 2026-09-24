@@ -1,6 +1,18 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
+import { Dialog } from "@headlessui/react";
 import {
   ArchiveRestore,
+  ChevronDown,
+  ChevronRight,
   Download,
   FileImage,
   FileInput,
@@ -20,9 +32,14 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { PageHead } from "@/components/core/page-title";
+import { usePpmConfirm } from "@/components/ppm-shell/use-ppm-confirm";
+import { handlePpmDialogKeyDown, shouldDismissPpmDialog } from "@/helpers/ppm-dialog-dismiss.helper";
+import { flattenVaultTree, getVaultTreeKeyAction } from "@/helpers/ppm-vault-tree.helper";
 import { useProject } from "@/hooks/store/use-project";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import {
   PpmVaultService,
   PpmVaultServiceError,
@@ -50,6 +67,14 @@ const INDEX_POLICY_LABELS: Record<TPpmVaultIndexPolicy, string> = {
   exclude: "Не индексировать",
 };
 
+const VAULT_VIEWS: { value: TVaultView; label: string; icon: typeof FolderOpen }[] = [
+  { value: "materials", label: "Материалы", icon: FolderOpen },
+  { value: "connections", label: "Связи", icon: Network },
+  { value: "trash", label: "Корзина", icon: Trash2 },
+];
+const VAULT_PANEL_ID = "ppm-vault-panel";
+const vaultTabId = (view: TVaultView) => `ppm-vault-tab-${view}`;
+
 export function PpmVaultRoute({ projectId, workspaceSlug }: TPpmVaultRouteProps) {
   const searchParams = useSearchParams();
   const { getPartialProjectById } = useProject();
@@ -57,6 +82,8 @@ export function PpmVaultRoute({ projectId, workspaceSlug }: TPpmVaultRouteProps)
   const project = getPartialProjectById(projectId);
   const workspace = getWorkspaceBySlug(workspaceSlug);
   const service = useMemo(() => new PpmVaultService(), []);
+  const ppmT = usePpmTranslation();
+  const { confirm, confirmDialog } = usePpmConfirm();
   const [vault, setVault] = useState<TPpmVault>();
   const [selectedId, setSelectedId] = useState<string>();
   const [view, setView] = useState<TVaultView>("materials");
@@ -293,7 +320,14 @@ export function PpmVaultRoute({ projectId, workspaceSlug }: TPpmVaultRouteProps)
   };
 
   const trashSelected = async () => {
-    if (!workspace || !selected || !globalThis.confirm(`Переместить «${selected.name}» в корзину?`)) return;
+    if (!workspace || !selected) return;
+    const confirmed = await confirm({
+      title: ppmT("vault.confirm_trash_title"),
+      content: ppmT("vault.confirm_trash_description").replace("{name}", selected.name),
+      confirmLabel: ppmT("vault.confirm_trash_action"),
+      variant: "danger",
+    });
+    if (!confirmed) return;
     setSaving(true);
     try {
       await service.trashEntry(workspace.id, projectId, selected.id);
@@ -324,8 +358,14 @@ export function PpmVaultRoute({ projectId, workspaceSlug }: TPpmVaultRouteProps)
   };
 
   const restoreVersion = async (version: number) => {
-    if (!workspace || !selected || !globalThis.confirm(`Восстановить версию ${version} как новую текущую версию?`))
-      return;
+    if (!workspace || !selected) return;
+    const confirmed = await confirm({
+      title: ppmT("vault.confirm_restore_version_title").replace("{version}", String(version)),
+      content: ppmT("vault.confirm_restore_version_description"),
+      confirmLabel: ppmT("vault.confirm_restore_version_action"),
+      variant: "primary",
+    });
+    if (!confirmed) return;
     setSaving(true);
     try {
       const restored = await service.restoreVersion(workspace.id, projectId, selected.id, version, selected.version);
@@ -354,6 +394,29 @@ export function PpmVaultRoute({ projectId, workspaceSlug }: TPpmVaultRouteProps)
     }
   };
 
+  const visibleViews = VAULT_VIEWS.filter((item) => item.value !== "trash" || canEdit);
+
+  // Tabs follow automatic activation: arrows, Home and End move focus and switch the section.
+  const onTabsKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const count = visibleViews.length;
+    const index = visibleViews.findIndex((item) => item.value === view);
+    const nextIndex =
+      event.code === "ArrowRight"
+        ? (index + 1) % count
+        : event.code === "ArrowLeft"
+          ? (index - 1 + count) % count
+          : event.code === "Home"
+            ? 0
+            : event.code === "End"
+              ? count - 1
+              : -1;
+    if (nextIndex < 0) return;
+    event.preventDefault();
+    const next = visibleViews[nextIndex].value;
+    setView(next);
+    document.getElementById(vaultTabId(next))?.focus();
+  };
+
   if (!workspace || loading) return <VaultState text="Открываем хранилище проекта…" />;
   if (!vault) return <VaultState text={error ?? "Хранилище недоступно."} />;
 
@@ -372,7 +435,7 @@ export function PpmVaultRoute({ projectId, workspaceSlug }: TPpmVaultRouteProps)
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <a
-                className="inline-flex items-center gap-1.5 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-12 font-semibold text-primary hover:bg-layer-1"
+                className="inline-flex items-center gap-1.5 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-12 font-semibold text-primary hover:bg-layer-1-hover"
                 href={service.exportUrl(workspace.id, projectId)}
               >
                 <Download className="size-4" aria-hidden="true" /> Скачать ZIP
@@ -381,12 +444,12 @@ export function PpmVaultRoute({ projectId, workspaceSlug }: TPpmVaultRouteProps)
                 <>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1.5 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-12 font-semibold text-primary hover:bg-layer-1"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-12 font-semibold text-primary hover:bg-layer-1-hover"
                     onClick={() => void openDialog("import")}
                   >
                     <FileInput className="size-4" aria-hidden="true" /> Из Ворд-документов
                   </button>
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-color hover:bg-accent-primary-hover">
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-accent hover:bg-accent-primary-hover">
                     <FileUp className="size-4" aria-hidden="true" /> Загрузить файл
                     <input
                       className="sr-only"
@@ -403,27 +466,32 @@ export function PpmVaultRoute({ projectId, workspaceSlug }: TPpmVaultRouteProps)
               )}
             </div>
           </div>
-          <nav className="mt-4 flex flex-wrap gap-1" aria-label="Разделы хранилища">
-            <ViewButton active={view === "materials"} icon={FolderOpen} onClick={() => setView("materials")}>
-              Материалы
-            </ViewButton>
-            <ViewButton active={view === "connections"} icon={Network} onClick={() => setView("connections")}>
-              Связи
-            </ViewButton>
-            {canEdit && (
-              <ViewButton active={view === "trash"} icon={Trash2} onClick={() => setView("trash")}>
-                Корзина
+          <div
+            className="mt-4 flex flex-wrap gap-1"
+            role="tablist"
+            aria-label="Разделы хранилища"
+            onKeyDown={onTabsKeyDown}
+          >
+            {visibleViews.map((item) => (
+              <ViewButton
+                active={view === item.value}
+                icon={item.icon}
+                key={item.value}
+                value={item.value}
+                onClick={() => setView(item.value)}
+              >
+                {item.label}
               </ViewButton>
-            )}
-          </nav>
+            ))}
+          </div>
         </header>
 
         {(error || notice) && (
           <div
             className={`mx-5 mt-4 flex items-center justify-between rounded-lg border px-3 py-2 text-12 ${
               error
-                ? "border-red-500/30 bg-red-500/10 text-red-300"
-                : "border-green-500/30 bg-green-500/10 text-green-300"
+                ? "border-danger-subtle bg-danger-subtle text-danger-primary"
+                : "border-success-subtle bg-success-subtle text-success-primary"
             }`}
             role={error ? "alert" : "status"}
           >
@@ -441,173 +509,170 @@ export function PpmVaultRoute({ projectId, workspaceSlug }: TPpmVaultRouteProps)
           </div>
         )}
 
-        {view === "materials" && (
-          <div className="grid min-h-0 flex-1 grid-cols-[minmax(230px,300px)_minmax(0,1fr)]">
-            <aside className="overflow-y-auto border-r border-subtle bg-surface-2 p-3">
-              <div className="mb-3 flex items-center justify-between gap-2 px-2">
-                <span className="inline-flex items-center gap-2 text-11 font-semibold text-secondary uppercase">
-                  <FolderOpen className="size-4" aria-hidden="true" /> Материалы проекта
-                </span>
-                {canEdit && (
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      className="rounded p-1 text-secondary hover:bg-layer-1 hover:text-primary"
-                      title="Новая папка"
-                      onClick={() => void openDialog("folder")}
-                    >
-                      <Folder className="size-4" aria-hidden="true" />
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded p-1 text-secondary hover:bg-layer-1 hover:text-primary"
-                      title="Новый Markdown"
-                      onClick={() => void openDialog("markdown")}
-                    >
-                      <FileText className="size-4" aria-hidden="true" />
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="space-y-1" role="tree" aria-label="Хранилище проекта">
+        <div
+          className="flex min-h-0 flex-1 flex-col"
+          role="tabpanel"
+          id={VAULT_PANEL_ID}
+          aria-labelledby={vaultTabId(view)}
+        >
+          {view === "materials" && (
+            <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,40%)_minmax(0,1fr)] md:grid-cols-[minmax(230px,300px)_minmax(0,1fr)] md:grid-rows-1">
+              <aside className="overflow-y-auto border-b border-subtle bg-surface-2 p-3 md:border-r md:border-b-0">
+                <div className="mb-3 flex items-center justify-between gap-2 px-2">
+                  <span className="inline-flex items-center gap-2 text-11 font-semibold text-secondary uppercase">
+                    <FolderOpen className="size-4" aria-hidden="true" /> Материалы проекта
+                  </span>
+                  {canEdit && (
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        className="rounded p-1 text-secondary hover:bg-layer-1-hover hover:text-primary"
+                        title="Новая папка"
+                        onClick={() => void openDialog("folder")}
+                      >
+                        <Folder className="size-4" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded p-1 text-secondary hover:bg-layer-1-hover hover:text-primary"
+                        title="Новый Markdown"
+                        onClick={() => void openDialog("markdown")}
+                      >
+                        <FileText className="size-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                  )}
+                </div>
                 {vault.entries.length > 0 ? (
-                  vault.entries.map((entry) => (
-                    <VaultTreeEntry
-                      entry={entry}
-                      key={entry.id}
-                      level={0}
-                      onSelect={setSelectedId}
-                      selectedId={selectedId}
-                    />
-                  ))
+                  <VaultTree entries={vault.entries} selectedId={selectedId} onSelect={setSelectedId} />
                 ) : (
                   <div className="rounded-lg border border-dashed border-subtle px-3 py-8 text-center text-12 text-tertiary">
                     Пока пусто. Создайте папку, Markdown или загрузите файл.
                   </div>
                 )}
-              </div>
-            </aside>
+              </aside>
 
-            <section className="min-w-0 overflow-y-auto p-5 sm:p-7">
-              {selected ? (
-                <>
-                  <div className="flex flex-wrap items-start justify-between gap-4 border-b border-subtle pb-4">
-                    <div className="min-w-0">
-                      <p className="text-11 font-semibold text-accent-primary uppercase">
-                        {entryKindLabel(selected.kind)}
-                      </p>
-                      <h2 className="mt-1 truncate text-20 font-semibold text-primary">{selected.name}</h2>
-                      <p className="mt-1 truncate text-11 text-tertiary">{selected.path}</p>
-                      {selected.kind !== "folder" && (
-                        <p className="mt-1 text-11 text-tertiary">
-                          Версия {selected.kind === "markdown" ? markdownVersion : selected.version} ·{" "}
-                          {formatBytes(selected.size_bytes)}
+              <section className="min-w-0 overflow-y-auto p-5 sm:p-7">
+                {selected ? (
+                  <>
+                    <div className="flex flex-wrap items-start justify-between gap-4 border-b border-subtle pb-4">
+                      <div className="min-w-0">
+                        <p className="text-11 font-semibold text-accent-primary uppercase">
+                          {entryKindLabel(selected.kind)}
                         </p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {canEdit && (
-                        <>
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-1.5 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-12 font-semibold text-primary hover:bg-layer-1"
-                            onClick={() => void openDialog("organize")}
+                        <h2 className="mt-1 truncate text-20 font-semibold text-primary">{selected.name}</h2>
+                        <p className="mt-1 truncate text-11 text-tertiary">{selected.path}</p>
+                        {selected.kind !== "folder" && (
+                          <p className="mt-1 text-11 text-tertiary">
+                            Версия {selected.kind === "markdown" ? markdownVersion : selected.version} ·{" "}
+                            {formatBytes(selected.size_bytes)}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {canEdit && (
+                          <>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-12 font-semibold text-primary hover:bg-layer-1-hover"
+                              onClick={() => void openDialog("organize")}
+                            >
+                              <Pencil className="size-3.5" aria-hidden="true" /> Переименовать или переместить
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1.5 rounded-md border border-danger-strong px-3 py-2 text-12 font-semibold text-danger-primary hover:bg-danger-subtle"
+                              disabled={saving}
+                              onClick={() => void trashSelected()}
+                            >
+                              <Trash2 className="size-3.5" aria-hidden="true" /> В корзину
+                            </button>
+                          </>
+                        )}
+                        {selected.kind !== "folder" && (
+                          <Link
+                            href={canvasProjectionHref(workspaceSlug, projectId, selected)}
+                            className="rounded-md border border-subtle bg-surface-2 px-3 py-2 text-12 font-semibold text-primary hover:bg-layer-1-hover"
                           >
-                            <Pencil className="size-3.5" aria-hidden="true" /> Переименовать или переместить
-                          </button>
+                            На холст «Мозг проекта»
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+
+                    {canEdit && (
+                      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-subtle bg-surface-2 p-3">
+                        <label className="flex items-center gap-2 text-12 text-secondary">
+                          Индексация
+                          <select
+                            aria-label="Политика индексации"
+                            className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
+                            value={selected.index_policy}
+                            onChange={(event) => void changeIndexPolicy(event.target.value as TPpmVaultIndexPolicy)}
+                          >
+                            {vault.index_policy_values.map((policy) => (
+                              <option key={policy} value={policy}>
+                                {INDEX_POLICY_LABELS[policy]}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {selected.kind === "markdown" && (
                           <button
                             type="button"
-                            className="border-red-500/30 text-red-300 hover:bg-red-500/10 inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-12 font-semibold"
+                            className="inline-flex items-center gap-1.5 rounded-md border border-subtle px-2.5 py-1.5 text-12 font-semibold text-primary hover:bg-layer-1-hover"
                             disabled={saving}
-                            onClick={() => void trashSelected()}
+                            onClick={() => void exportToPage()}
                           >
-                            <Trash2 className="size-3.5" aria-hidden="true" /> В корзину
+                            <FileOutput className="size-3.5" aria-hidden="true" /> Создать Ворд-документ
                           </button>
-                        </>
-                      )}
-                      {selected.kind !== "folder" && (
-                        <Link
-                          href={canvasProjectionHref(workspaceSlug, projectId, selected)}
-                          className="rounded-md border border-subtle bg-surface-2 px-3 py-2 text-12 font-semibold text-primary hover:bg-layer-1"
-                        >
-                          На холст «Мозг проекта»
-                        </Link>
-                      )}
-                    </div>
-                  </div>
+                        )}
+                      </div>
+                    )}
 
-                  {canEdit && (
-                    <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-subtle bg-surface-2 p-3">
-                      <label className="flex items-center gap-2 text-11 text-secondary">
-                        Индексация
-                        <select
-                          aria-label="Политика индексации"
-                          className="rounded-md border border-subtle bg-surface-1 px-2 py-1.5 text-12 text-primary"
-                          value={selected.index_policy}
-                          onChange={(event) => void changeIndexPolicy(event.target.value as TPpmVaultIndexPolicy)}
-                        >
-                          {vault.index_policy_values.map((policy) => (
-                            <option key={policy} value={policy}>
-                              {INDEX_POLICY_LABELS[policy]}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      {selected.kind === "markdown" && (
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1.5 rounded-md border border-subtle px-2.5 py-1.5 text-11 font-semibold text-primary hover:bg-layer-1"
-                          disabled={saving}
-                          onClick={() => void exportToPage()}
-                        >
-                          <FileOutput className="size-3.5" aria-hidden="true" /> Создать Ворд-документ
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                  <EntryContent
-                    canEdit={canEdit}
-                    entry={selected}
-                    markdownContent={markdownContent}
-                    projectId={projectId}
-                    saving={saving}
-                    service={service}
-                    workspaceId={workspace.id}
-                    onChangeMarkdown={setMarkdownContent}
-                    onSaveMarkdown={saveMarkdown}
-                  />
-
-                  <div className="mt-6 grid gap-4 xl:grid-cols-3">
-                    <ConnectionsCard backlinks={backlinks} onSelect={setSelectedId} />
-                    <VersionsCard
+                    <EntryContent
                       canEdit={canEdit}
                       entry={selected}
+                      markdownContent={markdownContent}
+                      projectId={projectId}
                       saving={saving}
-                      versions={versions}
-                      onRestore={restoreVersion}
+                      service={service}
+                      workspaceId={workspace.id}
+                      onChangeMarkdown={setMarkdownContent}
+                      onSaveMarkdown={saveMarkdown}
                     />
-                    <TransfersCard transfers={transfers} />
-                  </div>
-                </>
-              ) : (
-                <VaultEmptyState icon={FolderOpen} text="Выберите материал слева." />
-              )}
-            </section>
-          </div>
-        )}
 
-        {view === "connections" && (
-          <ConnectionMap
-            graph={graph}
-            onOpen={(entryId) => {
-              setSelectedId(entryId);
-              setView("materials");
-            }}
-          />
-        )}
+                    <div className="mt-6 grid gap-4 xl:grid-cols-3">
+                      <ConnectionsCard backlinks={backlinks} onSelect={setSelectedId} />
+                      <VersionsCard
+                        canEdit={canEdit}
+                        entry={selected}
+                        saving={saving}
+                        versions={versions}
+                        onRestore={restoreVersion}
+                      />
+                      <TransfersCard transfers={transfers} />
+                    </div>
+                  </>
+                ) : (
+                  <VaultEmptyState icon={FolderOpen} text="Выберите материал слева." />
+                )}
+              </section>
+            </div>
+          )}
 
-        {view === "trash" && canEdit && <TrashView entries={trash} saving={saving} onRestore={restoreTrashEntry} />}
+          {view === "connections" && (
+            <ConnectionMap
+              graph={graph}
+              onOpen={(entryId) => {
+                setSelectedId(entryId);
+                setView("materials");
+              }}
+            />
+          )}
+
+          {view === "trash" && canEdit && <TrashView entries={trash} saving={saving} onRestore={restoreTrashEntry} />}
+        </div>
       </main>
 
       {dialog && (
@@ -627,6 +692,7 @@ export function PpmVaultRoute({ projectId, workspaceSlug }: TPpmVaultRouteProps)
           onSubmit={submitDialog}
         />
       )}
+      {confirmDialog}
     </>
   );
 }
@@ -659,13 +725,13 @@ function EntryContent({
     return (
       <div className="mt-5 grid gap-4 xl:grid-cols-2">
         <div>
-          <label className="mb-2 block text-11 font-semibold text-secondary" htmlFor="ppm-vault-markdown-editor">
+          <label className="mb-2 block text-12 font-semibold text-secondary" htmlFor="ppm-vault-markdown-editor">
             Markdown
           </label>
           <textarea
             id="ppm-vault-markdown-editor"
             aria-label="Редактор Markdown"
-            className="font-mono focus:border-accent-primary min-h-[420px] w-full resize-y rounded-lg border border-subtle bg-surface-2 p-4 text-13 leading-6 text-primary outline-none"
+            className="min-h-[420px] w-full resize-y rounded-lg border border-subtle bg-surface-2 p-4 font-code text-13 leading-6 text-primary outline-none focus:border-accent-strong"
             readOnly={!canEdit}
             value={markdownContent}
             onChange={(event) => onChangeMarkdown(event.target.value)}
@@ -673,7 +739,7 @@ function EntryContent({
           {canEdit && (
             <button
               type="button"
-              className="mt-3 rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-color disabled:opacity-60"
+              className="mt-3 rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-accent disabled:opacity-60"
               disabled={saving}
               onClick={onSaveMarkdown}
             >
@@ -682,7 +748,7 @@ function EntryContent({
           )}
         </div>
         <div>
-          <p className="mb-2 text-11 font-semibold text-secondary">Предпросмотр</p>
+          <p className="mb-2 text-12 font-semibold text-secondary">Предпросмотр</p>
           <pre className="min-h-[420px] rounded-lg border border-subtle bg-layer-1 p-4 text-13 leading-6 whitespace-pre-wrap text-primary">
             {markdownContent || "Пустой документ"}
           </pre>
@@ -722,7 +788,7 @@ function EntryContent({
           Просмотр выполняется во внешнем приложении без исполнения содержимого в PPM.
         </p>
         <a
-          className="mt-4 inline-flex rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-color"
+          className="mt-4 inline-flex rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-accent"
           href={service.fileUrl(workspaceId, projectId, entry.id)}
         >
           Скачать файл
@@ -744,7 +810,7 @@ function ConnectionsCard({
       <h3 className="flex items-center gap-2 text-13 font-semibold text-primary">
         <Link2 className="size-4 text-accent-primary" aria-hidden="true" /> Связи документа
       </h3>
-      <p className="mt-1 text-11 text-tertiary">
+      <p className="mt-1 text-12 text-tertiary">
         Ссылки вида [[Название]] обновляются при переименовании и перемещении.
       </p>
       <div className="mt-4 space-y-4 text-12">
@@ -788,20 +854,20 @@ function LinkGroup({
 }) {
   return (
     <div>
-      <p className="mb-2 text-11 font-semibold text-secondary">{label}</p>
+      <p className="mb-2 text-12 font-semibold text-secondary">{label}</p>
       {links.length > 0 ? (
         <ul className="space-y-1.5">
           {links.map((link) => (
             <li key={link.key}>
               <button
                 type="button"
-                className="w-full rounded-md border border-subtle px-2.5 py-2 text-left text-secondary hover:bg-layer-1 hover:text-primary disabled:cursor-default disabled:opacity-70"
+                className="w-full rounded-md border border-subtle px-2.5 py-2 text-left text-secondary hover:bg-layer-1-hover hover:text-primary disabled:cursor-default disabled:opacity-70"
                 disabled={!link.entryId}
                 onClick={() => link.entryId && onSelect(link.entryId)}
               >
                 <span className="block truncate">{link.label}</span>
                 {link.status !== "resolved" && (
-                  <span className="text-amber-300 mt-0.5 block text-10">
+                  <span className="mt-0.5 block text-11 text-warning-primary">
                     {link.status === "ambiguous" ? "Найдено несколько совпадений" : "Материал не найден"}
                   </span>
                 )}
@@ -810,7 +876,7 @@ function LinkGroup({
           ))}
         </ul>
       ) : (
-        <p className="text-11 text-tertiary">{empty}</p>
+        <p className="text-12 text-tertiary">{empty}</p>
       )}
     </div>
   );
@@ -834,9 +900,9 @@ function VersionsCard({
       <h3 className="flex items-center gap-2 text-13 font-semibold text-primary">
         <History className="size-4 text-accent-primary" aria-hidden="true" /> История версий
       </h3>
-      <p className="mt-1 text-11 text-tertiary">Восстановление всегда создаёт новую версию и не стирает историю.</p>
+      <p className="mt-1 text-12 text-tertiary">Восстановление всегда создаёт новую версию и не стирает историю.</p>
       {entry.kind === "folder" ? (
-        <p className="mt-4 text-11 text-tertiary">У папки нет содержимого и версий.</p>
+        <p className="mt-4 text-12 text-tertiary">У папки нет содержимого и версий.</p>
       ) : versions.length > 0 ? (
         <ul className="mt-4 max-h-64 space-y-2 overflow-y-auto">
           {versions.map((version) => (
@@ -848,14 +914,14 @@ function VersionsCard({
                 <p className="text-12 font-semibold text-primary">
                   Версия {version.version} {version.current && <span className="text-accent-primary">· текущая</span>}
                 </p>
-                <p className="mt-0.5 text-10 text-tertiary">
+                <p className="mt-0.5 text-11 text-tertiary">
                   {formatDate(version.created_at)} · {formatBytes(version.size_bytes)}
                 </p>
               </div>
               {canEdit && !version.current && (
                 <button
                   type="button"
-                  className="rounded-md border border-subtle px-2 py-1 text-10 font-semibold text-secondary hover:bg-layer-1 hover:text-primary"
+                  className="rounded-md border border-subtle px-2 py-1 text-12 font-semibold text-secondary hover:bg-layer-1-hover hover:text-primary"
                   disabled={saving}
                   onClick={() => onRestore(version.version)}
                 >
@@ -866,7 +932,7 @@ function VersionsCard({
           ))}
         </ul>
       ) : (
-        <p className="mt-4 text-11 text-tertiary">История пока пуста.</p>
+        <p className="mt-4 text-12 text-tertiary">История пока пуста.</p>
       )}
     </section>
   );
@@ -878,7 +944,7 @@ function TransfersCard({ transfers }: { transfers: TPpmVaultTransfer[] }) {
       <h3 className="flex items-center gap-2 text-13 font-semibold text-primary">
         <FileInput className="size-4 text-accent-primary" aria-hidden="true" /> Обмен с Ворд-документами
       </h3>
-      <p className="mt-1 text-11 text-tertiary">
+      <p className="mt-1 text-12 text-tertiary">
         PPM сохраняет, какая версия и когда была импортирована или экспортирована.
       </p>
       {transfers.length > 0 ? (
@@ -888,14 +954,14 @@ function TransfersCard({ transfers }: { transfers: TPpmVaultTransfer[] }) {
               <p className="text-12 font-semibold text-primary">
                 {transfer.direction === "page_to_vault" ? "Импорт из Ворд-документа" : "Создан Ворд-документ"}
               </p>
-              <p className="mt-0.5 text-10 text-tertiary">
+              <p className="mt-0.5 text-11 text-tertiary">
                 Версия материала {transfer.entry_version} · {formatDate(transfer.created_at)}
               </p>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="mt-4 text-11 text-tertiary">Обмена с Ворд-документами ещё не было.</p>
+        <p className="mt-4 text-12 text-tertiary">Обмена с Ворд-документами ещё не было.</p>
       )}
     </section>
   );
@@ -927,13 +993,13 @@ function ConnectionMap({ graph, onOpen }: { graph?: TPpmVaultGraph; onOpen: (ent
               return (
                 <button
                   type="button"
-                  className="hover:border-accent-primary rounded-lg border border-subtle bg-surface-2 p-4 text-left hover:bg-layer-1"
+                  className="rounded-lg border border-subtle bg-surface-2 p-4 text-left hover:border-accent-strong hover:bg-layer-1-hover"
                   key={node.id}
                   onClick={() => onOpen(node.id)}
                 >
                   <p className="truncate text-13 font-semibold text-primary">{node.name}</p>
-                  <p className="mt-1 truncate text-10 text-tertiary">{node.path}</p>
-                  <p className="mt-3 text-11 text-secondary">
+                  <p className="mt-1 truncate text-11 text-tertiary">{node.path}</p>
+                  <p className="mt-3 text-12 text-secondary">
                     ← {incoming} · → {outgoing}
                   </p>
                 </button>
@@ -945,14 +1011,14 @@ function ConnectionMap({ graph, onOpen }: { graph?: TPpmVaultGraph; onOpen: (ent
             {graph.edges.length > 0 ? (
               <ul className="mt-3 max-h-[60vh] space-y-2 overflow-y-auto">
                 {graph.edges.map((edge) => (
-                  <li className="rounded-md border border-subtle p-2.5 text-11" key={edge.id}>
+                  <li className="rounded-md border border-subtle p-2.5 text-12" key={edge.id}>
                     <span className="text-primary">{nodeById.get(edge.source_entry_id)?.name ?? "Материал"}</span>
                     <span className="mx-2 text-tertiary">→</span>
-                    <span className={edge.status === "resolved" ? "text-primary" : "text-amber-300"}>
+                    <span className={edge.status === "resolved" ? "text-primary" : "text-warning-primary"}>
                       {nodeById.get(edge.target_entry_id ?? "")?.name ?? edge.raw_target}
                     </span>
                     {edge.status !== "resolved" && (
-                      <p className="text-amber-300 mt-1 text-10">
+                      <p className="mt-1 text-11 text-warning-primary">
                         {edge.status === "ambiguous" ? "Несколько совпадений" : "Материал не найден"}
                       </p>
                     )}
@@ -960,7 +1026,7 @@ function ConnectionMap({ graph, onOpen }: { graph?: TPpmVaultGraph; onOpen: (ent
                 ))}
               </ul>
             ) : (
-              <p className="mt-3 text-11 text-tertiary">
+              <p className="mt-3 text-12 text-tertiary">
                 Добавьте в Markdown ссылку [[Название материала]], чтобы появилась связь.
               </p>
             )}
@@ -1001,7 +1067,7 @@ function TrashView({
                 </div>
                 <button
                   type="button"
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-subtle px-3 py-2 text-12 font-semibold text-primary hover:bg-layer-1"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-subtle px-3 py-2 text-12 font-semibold text-primary hover:bg-layer-1-hover"
                   disabled={saving}
                   onClick={() => onRestore(entry)}
                 >
@@ -1016,6 +1082,13 @@ function TrashView({
       </div>
     </section>
   );
+}
+
+// Initial focus for the first dialog field. Headless UI attaches its portal node only after the content
+// commits, so React autoFocus fires on a detached element and focus falls to the close button. A microtask
+// runs after the attach and before the dialog's own initial-focus pass, which keeps focus already inside.
+function focusOnMount(node: HTMLElement | null) {
+  if (node) queueMicrotask(() => node.focus());
 }
 
 function VaultDialog({
@@ -1056,21 +1129,32 @@ function VaultDialog({
           ? "Переименовать или переместить"
           : "Импорт из Ворд-документов";
   const valid = dialog === "import" ? Boolean(dialogPageId) : Boolean(dialogName.trim());
+  // Esc closes (not during a request); a backdrop click does not, so typed input survives a stray click.
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4" role="presentation">
+    <ModalCore
+      isOpen
+      handleClose={() => {
+        if (shouldDismissPpmDialog({ reason: "backdrop", saving })) onClose();
+        else lastFocusedRef.current?.focus();
+      }}
+      position={EModalPosition.CENTER}
+      width={EModalWidth.MD}
+    >
       <form
-        className="shadow-2xl w-full max-w-md rounded-xl border border-subtle bg-surface-1 p-5"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="ppm-vault-dialog-title"
+        className="p-5"
         onSubmit={onSubmit}
+        onFocus={(event) => {
+          lastFocusedRef.current = event.target;
+        }}
+        onKeyDown={(event) => handlePpmDialogKeyDown(event, { saving, onClose })}
       >
         <div className="flex items-center justify-between gap-3">
-          <h2 id="ppm-vault-dialog-title" className="text-16 font-semibold text-primary">
+          <Dialog.Title as="h2" className="text-16 font-semibold text-primary">
             {title}
-          </h2>
+          </Dialog.Title>
           <button type="button" aria-label="Закрыть" onClick={onClose}>
-            <X className="size-4" />
+            <X className="size-4" aria-hidden="true" />
           </button>
         </div>
         {dialog === "import" ? (
@@ -1080,7 +1164,8 @@ function VaultDialog({
             </label>
             <select
               id="ppm-vault-page"
-              className="focus:border-accent-primary mt-2 w-full rounded-md border border-subtle bg-surface-2 px-3 py-2 text-13 text-primary outline-none"
+              ref={focusOnMount}
+              className="mt-2 w-full rounded-md border border-subtle bg-surface-2 px-3 py-2 text-13 text-primary outline-none focus:border-accent-strong"
               value={dialogPageId}
               onChange={(event) => onPageChange(event.target.value)}
             >
@@ -1091,7 +1176,7 @@ function VaultDialog({
                 </option>
               ))}
             </select>
-            <p className="mt-2 text-11 text-tertiary">
+            <p className="mt-2 text-12 text-tertiary">
               Будет создан отдельный Markdown. Исходный Ворд-документ не изменится.
             </p>
           </>
@@ -1102,7 +1187,8 @@ function VaultDialog({
             </label>
             <input
               id="ppm-vault-entry-name"
-              className="focus:border-accent-primary mt-2 w-full rounded-md border border-subtle bg-surface-2 px-3 py-2 text-13 text-primary outline-none"
+              ref={focusOnMount}
+              className="mt-2 w-full rounded-md border border-subtle bg-surface-2 px-3 py-2 text-13 text-primary outline-none focus:border-accent-strong"
               value={dialogName}
               onChange={(event) => onNameChange(event.target.value)}
             />
@@ -1113,7 +1199,7 @@ function VaultDialog({
         </label>
         <select
           id="ppm-vault-parent"
-          className="focus:border-accent-primary mt-2 w-full rounded-md border border-subtle bg-surface-2 px-3 py-2 text-13 text-primary outline-none"
+          className="mt-2 w-full rounded-md border border-subtle bg-surface-2 px-3 py-2 text-13 text-primary outline-none focus:border-accent-strong"
           value={dialogParentId || rootEntryId}
           onChange={(event) => onParentChange(event.target.value)}
         >
@@ -1134,14 +1220,14 @@ function VaultDialog({
           </button>
           <button
             type="submit"
-            className="rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-color disabled:opacity-60"
+            className="rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-accent disabled:opacity-60"
             disabled={!valid || saving}
           >
             {dialog === "import" ? "Импортировать" : dialog === "organize" ? "Сохранить" : "Создать"}
           </button>
         </div>
       </form>
-    </div>
+    </ModalCore>
   );
 }
 
@@ -1150,16 +1236,23 @@ function ViewButton({
   children,
   icon: Icon,
   onClick,
+  value,
 }: {
   active: boolean;
   children: string;
   icon: typeof FolderOpen;
   onClick: () => void;
+  value: TVaultView;
 }) {
   return (
     <button
       type="button"
-      className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-12 font-semibold text-secondary hover:bg-layer-1 hover:text-primary data-[active=true]:bg-layer-1 data-[active=true]:text-primary"
+      role="tab"
+      id={vaultTabId(value)}
+      aria-selected={active}
+      aria-controls={VAULT_PANEL_ID}
+      tabIndex={active ? 0 : -1}
+      className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-12 font-semibold text-secondary hover:bg-layer-1-hover hover:text-primary data-[active=true]:bg-layer-1-selected data-[active=true]:text-primary"
       data-active={active}
       onClick={onClick}
     >
@@ -1168,34 +1261,129 @@ function ViewButton({
   );
 }
 
-function VaultTreeEntry({
-  entry,
-  level,
+// Flat treeitems with aria-level and a roving tabindex. Arrows move focus only; Enter/Space or a click
+// selects, because selecting loads content, versions and backlinks. Folders start expanded.
+function VaultTree({
+  entries,
   onSelect,
   selectedId,
 }: {
-  entry: TPpmVaultEntry;
-  level: number;
+  entries: TPpmVaultEntry[];
   onSelect: (entryId: string) => void;
   selectedId?: string;
 }) {
-  const Icon =
-    entry.kind === "folder" ? Folder : entry.kind === "image" ? FileImage : entry.kind === "pdf" ? FileUp : FileText;
+  const ppmT = usePpmTranslation();
+  const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [activeId, setActiveId] = useState(selectedId);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const allRows = useMemo(
+    () => flattenVaultTree(entries, new Set(flattenEntries(entries).map(({ id }) => id))),
+    [entries]
+  );
+  const parentById = useMemo(() => new Map(allRows.map((row) => [row.id, row.parentId])), [allRows]);
+  const rows = useMemo(
+    () =>
+      flattenVaultTree(
+        entries,
+        new Set(allRows.filter((row) => row.hasChildren && !collapsedIds.has(row.id)).map((row) => row.id))
+      ),
+    [allRows, collapsedIds, entries]
+  );
+
+  // A selection made elsewhere (backlinks, connection map, reload) becomes the tab stop and is revealed.
+  useEffect(() => {
+    if (!selectedId) return;
+    setActiveId(selectedId);
+    setCollapsedIds((current) => {
+      const next = new Set(current);
+      for (let id = parentById.get(selectedId); id; id = parentById.get(id)) next.delete(id);
+      return next.size === current.size ? current : next;
+    });
+  }, [parentById, selectedId]);
+
+  // The tab stop falls back to the nearest visible ancestor, then to the first row.
+  const visibleIds = new Set(rows.map((row) => row.id));
+  let tabStopId = activeId;
+  while (tabStopId && !visibleIds.has(tabStopId)) tabStopId = parentById.get(tabStopId);
+  tabStopId ??= rows[0]?.id;
+
+  const setExpanded = (entryId: string, expanded: boolean) =>
+    setCollapsedIds((current) => {
+      const next = new Set(current);
+      if (expanded) next.delete(entryId);
+      else next.add(entryId);
+      return next;
+    });
+  const focusRow = (entryId?: string) => {
+    if (entryId) rowRefs.current.get(entryId)?.focus();
+  };
+  const onRowKeyDown = (event: KeyboardEvent<HTMLDivElement>, index: number) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const row = rows[index];
+    const action = getVaultTreeKeyAction(event.code, row);
+    if (!action) return;
+    event.preventDefault();
+    if (action === "next") focusRow(rows[index + 1]?.id);
+    else if (action === "prev") focusRow(rows[index - 1]?.id);
+    else if (action === "first") focusRow(rows[0]?.id);
+    else if (action === "last") focusRow(rows[rows.length - 1]?.id);
+    else if (action === "parent") focusRow(row.parentId);
+    else if (action === "expand" || action === "collapse") setExpanded(row.id, action === "expand");
+    else onSelect(row.id);
+  };
+
   return (
-    <div role="treeitem" aria-selected={selectedId === entry.id}>
-      <button
-        type="button"
-        className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-12 text-secondary hover:bg-layer-1 hover:text-primary data-[selected=true]:bg-layer-1 data-[selected=true]:font-semibold data-[selected=true]:text-primary"
-        data-selected={selectedId === entry.id}
-        style={{ paddingLeft: `${8 + level * 18}px` }}
-        onClick={() => onSelect(entry.id)}
-      >
-        <Icon className="size-4 shrink-0 text-accent-primary" aria-hidden="true" />
-        <span className="truncate">{entry.name}</span>
-      </button>
-      {entry.children?.map((child) => (
-        <VaultTreeEntry entry={child} key={child.id} level={level + 1} onSelect={onSelect} selectedId={selectedId} />
-      ))}
+    <div className="space-y-1" role="tree" aria-label={ppmT("vault.tree_label")}>
+      {rows.map((row, index) => {
+        const { entry } = row;
+        const Icon =
+          entry.kind === "folder"
+            ? Folder
+            : entry.kind === "image"
+              ? FileImage
+              : entry.kind === "pdf"
+                ? FileUp
+                : FileText;
+        const isSelected = selectedId === entry.id;
+        return (
+          <div
+            key={entry.id}
+            ref={(node) => {
+              if (node) rowRefs.current.set(entry.id, node);
+              else rowRefs.current.delete(entry.id);
+            }}
+            role="treeitem"
+            aria-level={row.level}
+            aria-selected={isSelected}
+            aria-expanded={row.hasChildren ? row.expanded : undefined}
+            tabIndex={entry.id === tabStopId ? 0 : -1}
+            className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-left text-12 text-secondary hover:bg-layer-1-hover hover:text-primary data-[selected=true]:bg-layer-1-selected data-[selected=true]:font-semibold data-[selected=true]:text-primary"
+            data-selected={isSelected}
+            style={{ paddingLeft: `${8 + (row.level - 1) * 18}px` }}
+            onClick={() => onSelect(entry.id)}
+            onFocus={() => setActiveId(entry.id)}
+            onKeyDown={(event) => onRowKeyDown(event, index)}
+          >
+            {row.hasChildren ? (
+              // Mouse affordance only: keyboard users toggle with ArrowLeft/ArrowRight.
+              <span
+                aria-hidden="true"
+                className="grid size-4 shrink-0 place-items-center rounded text-tertiary hover:text-primary"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setExpanded(entry.id, !row.expanded);
+                }}
+              >
+                {row.expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+              </span>
+            ) : (
+              <span aria-hidden="true" className="size-4 shrink-0" />
+            )}
+            <Icon className="size-4 shrink-0 text-accent-primary" aria-hidden="true" />
+            <span className="truncate">{entry.name}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }

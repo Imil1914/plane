@@ -37,9 +37,19 @@ function MockMenuItem({ children, className }: { children?: ReactNode; className
   return <div className={className}>{children}</div>;
 }
 
-function MockCommandList({ children, className, id }: { children?: ReactNode; className?: string; id?: string }) {
+function MockCommandList({
+  children,
+  className,
+  id,
+  label,
+}: {
+  children?: ReactNode;
+  className?: string;
+  id?: string;
+  label?: string;
+}) {
   return (
-    <div id={id} className={className}>
+    <div id={id} className={className} aria-label={label}>
       {children}
     </div>
   );
@@ -163,7 +173,7 @@ describe("project navigation accessibility", () => {
     );
 
     expect(markup).toContain('aria-current="page"');
-    expect(markup).toContain("focus-visible:outline-accent-primary");
+    expect(markup).toContain("focus-visible:outline-accent-strong");
     expect(markup).toContain("Задачи");
   });
 
@@ -198,5 +208,11 @@ describe("project navigation accessibility", () => {
     expect(markup).toContain('aria-controls="top-nav-command-list"');
     expect(markup).toContain('id="top-nav-command-list"');
     expect(markup).not.toContain('role="button"');
+  });
+
+  it("labels the command results list for screen readers under the PPM shell", () => {
+    const markup = renderToStaticMarkup(<TopNavPowerK />);
+
+    expect(markup).toContain('aria-label="Результаты поиска команд"');
   });
 });

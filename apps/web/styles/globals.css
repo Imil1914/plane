@@ -175,7 +175,7 @@
 
 /* Progress Bar Styles */
 :root {
-  --bprogress-color: var(--background-color-accent-primary);
+  --bprogress-color: var(--background-color-accent-primary) !important;
   --bprogress-height: 2.5px !important;
 }
 

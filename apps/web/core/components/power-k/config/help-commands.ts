@@ -4,7 +4,8 @@
  * See the LICENSE file for details.
  */
 
-import { FileText, GithubIcon, MessageSquare, Rocket } from "lucide-react";
+import { BookOpen, FileText, GithubIcon, MessageSquare, Rocket } from "lucide-react";
+import { isPpmShellEnabled, PPM_SOURCE_ATTRIBUTION } from "@ppm/brand";
 // components
 import type { TPowerKCommandConfig } from "@/components/power-k/core/types";
 // hooks
@@ -16,6 +17,7 @@ import { usePowerK } from "@/hooks/store/use-power-k";
 export const usePowerKHelpCommands = (): TPowerKCommandConfig[] => {
   // store
   const { toggleShortcutsListModal } = usePowerK();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
   return [
     {
@@ -35,9 +37,10 @@ export const usePowerKHelpCommands = (): TPowerKCommandConfig[] => {
       type: "action",
       group: "help",
       i18n_title: "power_k.help_actions.open_plane_documentation",
-      icon: FileText,
+      icon: isPpmShell ? BookOpen : FileText,
       action: () => {
-        window.open("https://docs.plane.so/", "_blank", "noopener,noreferrer");
+        const href = isPpmShell ? "/about/ppm-guide" : "https://docs.plane.so/";
+        window.open(href, "_blank", "noopener,noreferrer");
       },
       isEnabled: () => true,
       isVisible: () => true,
@@ -53,7 +56,7 @@ export const usePowerKHelpCommands = (): TPowerKCommandConfig[] => {
         window.open("https://forum.plane.so", "_blank", "noopener,noreferrer");
       },
       isEnabled: () => true,
-      isVisible: () => true,
+      isVisible: () => !isPpmShell,
       closeOnSelect: true,
     },
     {
@@ -63,7 +66,10 @@ export const usePowerKHelpCommands = (): TPowerKCommandConfig[] => {
       i18n_title: "power_k.help_actions.report_bug",
       icon: GithubIcon,
       action: () => {
-        window.open("https://github.com/makeplane/plane/issues/new/choose", "_blank", "noopener,noreferrer");
+        const href = isPpmShell
+          ? `${PPM_SOURCE_ATTRIBUTION.repository}/issues/new`
+          : "https://github.com/makeplane/plane/issues/new/choose";
+        window.open(href, "_blank", "noopener,noreferrer");
       },
       isEnabled: () => true,
       isVisible: () => true,

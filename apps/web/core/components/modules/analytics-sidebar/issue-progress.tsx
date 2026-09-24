@@ -15,6 +15,7 @@ import { ChevronUpIcon, ChevronDownIcon } from "@plane/propel/icons";
 import type { TModulePlotType } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 import { CustomSelect, Spinner } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 // constants
 // helpers
@@ -25,6 +26,7 @@ import { ModuleProgressStats } from "@/components/modules";
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useModule } from "@/hooks/store/use-module";
 import { useWorkItemFilters } from "@/hooks/store/work-item-filters/use-work-item-filters";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web constants
 type TModuleAnalyticsProgress = {
   workspaceSlug: string;
@@ -45,6 +47,8 @@ export const ModuleAnalyticsProgress = observer(function ModuleAnalyticsProgress
   const peekModule = searchParams.get("peekModule") || undefined;
   // plane hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // hooks
   const { areEstimateEnabledByProjectId, currentActiveEstimateId, estimateById } = useProjectEstimates();
   const { getPlotTypeByModuleId, setPlotType, getModuleById, fetchModuleDetails, fetchArchivedModuleDetails } =
@@ -165,7 +169,9 @@ export const ModuleAnalyticsProgress = observer(function ModuleAnalyticsProgress
               </div>
             ) : (
               <div className="relative flex w-full items-center justify-between gap-2">
-                <div className="text-13 font-medium text-secondary">Progress</div>
+                <div className="text-13 font-medium text-secondary">
+                  {isPpmShell ? t("common.progress") : "Progress"}
+                </div>
                 <div className="flex items-center gap-1">
                   <AlertCircle height={14} width={14} className="text-secondary" />
                   <span className="text-11 text-secondary italic">
@@ -188,12 +194,20 @@ export const ModuleAnalyticsProgress = observer(function ModuleAnalyticsProgress
                           distribution={completionChartDistributionData}
                           totalIssues={totalEstimatePoints}
                           plotTitle={"points"}
+                          currentLabel={isPpmShell ? ppmT("cycle.chart_current_points") : undefined}
+                          idealLabel={isPpmShell ? ppmT("cycle.chart_ideal_points") : undefined}
+                          dateAxisLabel={isPpmShell ? ppmT("cycle.chart_axis_date") : undefined}
+                          completionAxisLabel={isPpmShell ? ppmT("cycle.chart_axis_completion") : undefined}
                         />
                       ) : (
                         <ProgressChart
                           distribution={completionChartDistributionData}
                           totalIssues={totalIssues}
                           plotTitle={"work items"}
+                          currentLabel={isPpmShell ? ppmT("cycle.chart_current_work_items") : undefined}
+                          idealLabel={isPpmShell ? ppmT("cycle.chart_ideal_work_items") : undefined}
+                          dateAxisLabel={isPpmShell ? ppmT("cycle.chart_axis_date") : undefined}
+                          completionAxisLabel={isPpmShell ? ppmT("cycle.chart_axis_completion") : undefined}
                         />
                       )}
                     </Fragment>

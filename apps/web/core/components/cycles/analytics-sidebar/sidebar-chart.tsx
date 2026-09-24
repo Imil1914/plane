@@ -11,12 +11,14 @@ import { useTranslation } from "@plane/i18n";
 import type { TCycleEstimateType } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { getDate } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import ProgressChart from "@/components/core/sidebar/progress-chart";
 import { validateCycleSnapshot } from "@/components/cycles/analytics-sidebar/issue-progress";
 import { EstimateTypeDropdown } from "@/components/cycles/dropdowns";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type ProgressChartProps = {
   workspaceSlug: string;
@@ -30,6 +32,8 @@ export const SidebarChart = observer(function SidebarChart(props: ProgressChartP
   const { getEstimateTypeByCycleId, getCycleById, fetchCycleDetails, fetchArchivedCycleDetails, setEstimateType } =
     useCycle();
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
   // derived data
   const cycleDetails = validateCycleSnapshot(getCycleById(cycleId));
@@ -76,6 +80,18 @@ export const SidebarChart = observer(function SidebarChart(props: ProgressChartP
                 distribution={completionChartDistributionData}
                 totalIssues={estimateType === "points" ? totalEstimatePoints : totalIssues}
                 plotTitle={estimateType === "points" ? t("points") : t("work_items")}
+                currentLabel={
+                  isPpmShell
+                    ? ppmT(estimateType === "points" ? "cycle.chart_current_points" : "cycle.chart_current_work_items")
+                    : undefined
+                }
+                idealLabel={
+                  isPpmShell
+                    ? ppmT(estimateType === "points" ? "cycle.chart_ideal_points" : "cycle.chart_ideal_work_items")
+                    : undefined
+                }
+                dateAxisLabel={isPpmShell ? ppmT("cycle.chart_axis_date") : undefined}
+                completionAxisLabel={isPpmShell ? ppmT("cycle.chart_axis_completion") : undefined}
               />
             </Fragment>
           ) : (

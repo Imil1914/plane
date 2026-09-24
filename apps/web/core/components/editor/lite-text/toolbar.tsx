@@ -21,6 +21,9 @@ import { Tooltip } from "@plane/propel/tooltip";
 import { cn } from "@plane/utils";
 import type { ToolbarMenuItem } from "@plane/editor";
 import { TOOLBAR_ITEMS } from "@plane/editor";
+// ppm
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { LITE_TOOLBAR_A11Y_KEY } from "./toolbar-a11y";
 // helpers
 
 type Props = {
@@ -59,6 +62,7 @@ const toolbarItems = TOOLBAR_ITEMS.lite;
 
 export function IssueCommentToolbar(props: Props) {
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
   const {
     accessSpecifier,
     executeCommand,
@@ -117,6 +121,12 @@ export function IssueCommentToolbar(props: Props) {
                   className={cn("grid aspect-square place-items-center rounded-xs p-1 hover:bg-layer-1", {
                     "bg-layer-1": isAccessActive,
                   })}
+                  aria-label={t(
+                    access.key === EIssueCommentAccessSpecifier.INTERNAL
+                      ? "common.access.private"
+                      : "common.access.public"
+                  )}
+                  aria-pressed={isAccessActive}
                 >
                   <access.icon
                     className={cn("h-3.5 w-3.5 text-placeholder", {
@@ -161,6 +171,10 @@ export function IssueCommentToolbar(props: Props) {
                           "bg-layer-1 text-primary": isItemActive,
                         }
                       )}
+                      aria-label={
+                        LITE_TOOLBAR_A11Y_KEY[item.renderKey] ? ppmT(LITE_TOOLBAR_A11Y_KEY[item.renderKey]) : item.name
+                      }
+                      aria-pressed={isItemActive}
                     >
                       <item.icon
                         className={cn("h-3.5 w-3.5", {

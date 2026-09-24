@@ -114,7 +114,7 @@ export function Avatar(props: Props) {
           className={cn(sizeInfo.fontSize, "grid h-full w-full place-items-center", getBorderRadius(shape), className)}
           style={{
             backgroundColor: fallbackBackgroundColor ?? "var(--background-color-accent-primary)",
-            color: fallbackTextColor ?? "var(--text-color-on-color)",
+            color: fallbackTextColor ?? "var(--txt-on-accent, var(--text-color-on-color))",
           }}
         >
           {fallbackLetter}

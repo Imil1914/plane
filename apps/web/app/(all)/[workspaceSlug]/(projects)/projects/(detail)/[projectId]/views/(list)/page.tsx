@@ -14,6 +14,7 @@ import type { EViewAccess, TViewFilterProps } from "@plane/types";
 import { EUserProjectRoles } from "@plane/types";
 import { Header, EHeaderVariant } from "@plane/ui";
 import { calculateTotalFilters } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // assets
 import darkViewsAsset from "@/app/assets/empty-state/disabled-feature/views-dark.webp?url";
 import lightViewsAsset from "@/app/assets/empty-state/disabled-feature/views-light.webp?url";
@@ -27,6 +28,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useProjectView } from "@/hooks/store/use-project-view";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import type { Route } from "./+types/page";
 
 function ProjectViewsPage({ params }: Route.ComponentProps) {
@@ -37,13 +39,17 @@ function ProjectViewsPage({ params }: Route.ComponentProps) {
   const { resolvedTheme } = useTheme();
   // plane hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
   // store
   const { getProjectById, currentProjectDetails } = useProject();
   const { filters, updateFilters, clearAllFilters } = useProjectView();
   const { allowPermissions } = useUserPermissions();
   // derived values
   const project = getProjectById(projectId);
-  const pageTitle = project?.name ? `${project?.name} - Views` : undefined;
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const viewsTitleLabel = isPpmShell ? ppmT("project.views") : "Views";
+  const viewsTitleSeparator = isPpmShell ? "—" : "-";
+  const pageTitle = project?.name ? `${project.name} ${viewsTitleSeparator} ${viewsTitleLabel}` : undefined;
   const canPerformEmptyStateActions = allowPermissions([EUserProjectRoles.ADMIN], EUserPermissionsLevel.PROJECT);
   const resolvedPath = resolvedTheme === "light" ? lightViewsAsset : darkViewsAsset;
 

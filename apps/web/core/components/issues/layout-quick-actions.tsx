@@ -10,8 +10,9 @@ import type { TContextMenuItem } from "@plane/ui";
 import { CustomMenu } from "@plane/ui";
 import { copyUrlToClipboard, cn } from "@plane/utils";
 import { useLayoutMenuItems } from "@/components/common/quick-actions-helper";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { Ellipsis } from "lucide-react";
-import { IconButton } from "@plane/propel/icon-button";
+import { getIconButtonStyling } from "@plane/propel/icon-button";
 
 type Props = {
   workspaceSlug: string;
@@ -21,6 +22,7 @@ type Props = {
 
 export const LayoutQuickActions = observer(function LayoutQuickActions(props: Props) {
   const { workspaceSlug, projectId, storeType } = props;
+  const ppmT = usePpmTranslation();
 
   const layoutLink = `${workspaceSlug}/projects/${projectId}/${storeType === "EPIC" ? "epics" : "issues"}`;
 
@@ -50,12 +52,13 @@ export const LayoutQuickActions = observer(function LayoutQuickActions(props: Pr
     <>
       {additionalModals}
       <CustomMenu
-        ellipsis
         placement="bottom-end"
         closeOnSelect
         maxHeight="lg"
         className="flex size-[26px] flex-shrink-0 items-center justify-center rounded"
-        customButton={<IconButton size="lg" variant="tertiary" icon={Ellipsis} />}
+        customButton={<Ellipsis className="size-4" aria-hidden="true" />}
+        customButtonClassName={getIconButtonStyling("tertiary", "lg")}
+        ariaLabel={ppmT("a11y.more_actions")}
       >
         {MENU_ITEMS.map((item) => {
           if (item.shouldRender === false) return null;

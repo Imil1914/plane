@@ -44,6 +44,8 @@ export function LayoutSelection(props: Props) {
               }
             )}
             onClick={() => handleOnChange(layout.key)}
+            aria-label={t(layout.i18n_title)}
+            aria-pressed={selectedLayout === layout.key}
           >
             <IssueLayoutIcon
               layout={layout.key}

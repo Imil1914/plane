@@ -4,14 +4,22 @@
  * See the LICENSE file for details.
  */
 
+// plane imports
+import { useTranslation } from "@plane/i18n";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { PageHead } from "@/components/core/page-title";
 import { WorkspaceDraftIssuesRoot } from "@/components/issues/workspace-draft";
+import { useWorkspace } from "@/hooks/store/use-workspace";
 import type { Route } from "./+types/page";
 
 function WorkspaceDraftPage({ params }: Route.ComponentProps) {
   const { workspaceSlug } = params;
-  const pageTitle = "Workspace Draft";
+  const { currentWorkspace } = useWorkspace();
+  const { t } = useTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const draftsLabel = currentWorkspace?.name ? `${currentWorkspace.name} — ${t("drafts")}` : t("drafts");
+  const pageTitle = isPpmShell ? draftsLabel : "Workspace Draft";
 
   return (
     <>

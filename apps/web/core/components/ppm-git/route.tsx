@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Dialog } from "@headlessui/react";
 import {
   Archive,
   Check,
@@ -20,11 +21,15 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
+import { EModalWidth, ModalCore } from "@plane/ui";
 import type { TPpmWorkItemProjection } from "@ppm/canvas";
 import { PageHead } from "@/components/core/page-title";
+import { usePpmConfirm } from "@/components/ppm-shell/use-ppm-confirm";
+import { handlePpmDialogKeyDown, shouldDismissPpmDialog } from "@/helpers/ppm-dialog-dismiss.helper";
 import { getPpmGitWebhookStatus, type TPpmGitWebhookStatus } from "@/helpers/ppm-git-webhook-status.helper";
 import { useProject } from "@/hooks/store/use-project";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { PpmCanvasService } from "@/services/ppm-canvas.service";
 import {
   PpmGitService,
@@ -115,6 +120,8 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
   const workspace = getWorkspaceBySlug(workspaceSlug);
   const service = useMemo(() => new PpmGitService(), []);
   const canvasService = useMemo(() => new PpmCanvasService(), []);
+  const ppmT = usePpmTranslation();
+  const { confirm, confirmDialog } = usePpmConfirm();
   const [overview, setOverview] = useState<TPpmGitOverview>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -258,7 +265,14 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
   };
 
   const disconnectConnection = async (connection: TPpmGitConnection) => {
-    if (!workspace || !window.confirm(`Отключить ${connection.provider_full_name} от проекта?`)) return;
+    if (!workspace) return;
+    const confirmed = await confirm({
+      title: ppmT("code.confirm_disconnect_title").replace("{name}", connection.provider_full_name),
+      content: ppmT("code.confirm_disconnect_description"),
+      confirmLabel: ppmT("code.confirm_disconnect_action"),
+      variant: "danger",
+    });
+    if (!confirmed) return;
     setSaving(true);
     try {
       await service.disconnectConnection(workspace.id, projectId, connection.id);
@@ -271,7 +285,14 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
   };
 
   const archiveRepository = async (repository: TPpmGitRepository) => {
-    if (!workspace || !window.confirm(`Убрать ${repository.name} из проекта? Репозиторий в Git не изменится.`)) return;
+    if (!workspace) return;
+    const confirmed = await confirm({
+      title: ppmT("code.confirm_archive_title").replace("{name}", repository.name),
+      content: ppmT("code.confirm_archive_description"),
+      confirmLabel: ppmT("code.confirm_archive_action"),
+      variant: "danger",
+    });
+    if (!confirmed) return;
     setSaving(true);
     try {
       await service.archiveRepository(workspace.id, projectId, repository.id);
@@ -300,7 +321,12 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
     if (!workspace) return;
     if (
       !enabled &&
-      !window.confirm("Выключить поиск по коду? Производный индекс будет удалён, репозиторий не изменится.")
+      !(await confirm({
+        title: ppmT("code.confirm_disable_index_title"),
+        content: ppmT("code.confirm_disable_index_description"),
+        confirmLabel: ppmT("code.confirm_disable_index_action"),
+        variant: "danger",
+      }))
     )
       return;
     setSaving(true);
@@ -490,7 +516,7 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
                 overview.connections.some((connection) => connection.status === "active") && (
                   <button
                     type="button"
-                    className="border-accent-primary/40 inline-flex items-center gap-2 rounded-md border bg-accent-primary/5 px-3 py-2 text-12 font-semibold text-accent-primary hover:bg-accent-primary/10"
+                    className="inline-flex items-center gap-2 rounded-md border border-accent-strong/40 bg-accent-primary/5 px-3 py-2 text-12 font-semibold text-accent-primary hover:bg-accent-primary/10"
                     onClick={openWriteActionDialog}
                   >
                     <GitPullRequest className="size-4" aria-hidden="true" /> Подготовить ветку и draft PR
@@ -508,7 +534,7 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
               {overview.capabilities.manage_repositories && (
                 <button
                   type="button"
-                  className="inline-flex items-center gap-2 rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-color"
+                  className="inline-flex items-center gap-2 rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-accent"
                   onClick={() => setRepositoryDialog(true)}
                 >
                   <Plus className="size-4" aria-hidden="true" /> Добавить вручную
@@ -519,7 +545,7 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
 
           {error && (
             <div
-              className="border-red-500/30 bg-red-500/10 flex items-start justify-between gap-3 rounded-lg border p-3 text-12 text-primary"
+              className="flex items-start justify-between gap-3 rounded-lg border border-danger-subtle bg-danger-subtle p-3 text-12 text-primary"
               role="alert"
             >
               <span>{error}</span>
@@ -541,7 +567,7 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
             onSync={(connection) => void syncConnection(connection)}
           />
 
-          <div className="border-cyan-500/20 bg-cyan-500/5 flex items-start gap-3 rounded-xl border p-4">
+          <div className="flex items-start gap-3 rounded-xl border border-subtle bg-layer-1 p-4">
             <ShieldCheck className="mt-0.5 size-5 shrink-0 text-accent-primary" aria-hidden="true" />
             <div>
               <p className="text-13 font-semibold text-primary">Без хранения токенов и SSH-ключей</p>
@@ -576,7 +602,7 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
             {overview.repositories.length === 0 ? (
               <div className="rounded-xl border border-dashed border-subtle bg-surface-2 p-8 text-center">
                 <Code2 className="mx-auto size-8 text-accent-primary" aria-hidden="true" />
-                <h3 className="text-15 mt-3 font-semibold text-primary">Добавьте первый репозиторий</h3>
+                <h3 className="mt-3 text-16 font-semibold text-primary">Добавьте первый репозиторий</h3>
                 <p className="mx-auto mt-2 max-w-lg text-12 leading-5 text-secondary">
                   Укажите безопасные адреса клонирования HTTPS/SSH. PPM не подключается к поставщику Git и не
                   запрашивает пароль.
@@ -658,7 +684,7 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
           </section>
 
           <section className="rounded-xl border border-subtle bg-surface-2 p-5" aria-labelledby="ppm-git-guide-title">
-            <h2 id="ppm-git-guide-title" className="text-15 font-semibold text-primary">
+            <h2 id="ppm-git-guide-title" className="text-16 font-semibold text-primary">
               Соглашение команды
             </h2>
             <p className="mt-1 text-12 text-secondary">Ключ задачи связывает работу в PPM с обычным Git-процессом.</p>
@@ -746,6 +772,7 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
           onSubmit={createWriteActionPreview}
         />
       )}
+      {confirmDialog}
     </>
   );
 }
@@ -762,8 +789,8 @@ const CONNECTION_STATUS_LABELS: Record<TPpmGitConnection["status"], string> = {
 };
 
 const WEBHOOK_STATUS_CLASS_NAMES: Record<TPpmGitWebhookStatus["tone"], string> = {
-  confirmed: "border-green-500/20 bg-green-500/10 text-green-500",
-  waiting: "border-amber-500/20 bg-amber-500/10 text-amber-500",
+  confirmed: "border-success-subtle bg-success-subtle text-success-primary",
+  waiting: "border-warning-subtle bg-warning-subtle text-warning-primary",
   inactive: "border-subtle bg-surface-2 text-tertiary",
 };
 
@@ -801,12 +828,12 @@ function GitWriteActionsPanel({
     <section className="rounded-xl border border-subtle bg-surface-2 p-5" aria-labelledby="ppm-git-write-title">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 id="ppm-git-write-title" className="text-15 font-semibold text-primary">
+          <h2 id="ppm-git-write-title" className="text-16 font-semibold text-primary">
             Ветка и draft PR с подтверждением
           </h2>
           <p className="mt-1 max-w-2xl text-12 leading-5 text-secondary">
-            Сначала PPM показывает точный preview. Подтверждение сохраняет ваше решение, но в этой сборке ещё не
-            вызывает GitHub и не может выполнить merge.
+            PPM показывает предпросмотр ветки и черновика PR и сохраняет ваше решение. Репозиторий в GitHub при этом не
+            меняется.
           </p>
         </div>
         {canPrepare && (
@@ -820,9 +847,9 @@ function GitWriteActionsPanel({
         )}
       </div>
       {!applyAvailable && (
-        <p className="border-amber-500/20 bg-amber-500/5 mt-3 rounded-lg border p-3 text-11 leading-5 text-secondary">
-          Внешняя запись выключена до утверждения прав GitHub App. Можно безопасно проверить preview и approve/reject —
-          репозиторий останется без изменений.
+        <p className="mt-3 rounded-lg border border-warning-subtle bg-warning-subtle p-3 text-12 leading-5 text-secondary">
+          Запись в GitHub выключена. Можно проверить предпросмотр и принять или отклонить предложение — репозиторий не
+          изменится.
         </p>
       )}
       <GitWriteReadiness
@@ -840,7 +867,7 @@ function GitWriteActionsPanel({
             >
               <div className="min-w-0 flex-1">
                 <p className="truncate text-12 font-semibold text-primary">{action.preview.draft_pull_request.title}</p>
-                <p className="mt-0.5 truncate text-11 text-secondary">
+                <p className="mt-0.5 truncate text-12 text-secondary">
                   {action.preview.repository.full_name} · {action.preview.branch.base_ref} →{" "}
                   {action.preview.branch.head_ref}
                 </p>
@@ -883,15 +910,15 @@ function GitWriteReadiness({
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-12 font-semibold text-primary">Готовность GitHub App</p>
-          <p className="mt-1 text-11 leading-5 text-secondary">
-            Проектируемый безопасный порядок: создать ветку, отправить commit, отдельно подтвердить draft PR.
+          <p className="mt-1 text-12 leading-5 text-secondary">
+            Порядок: ветка → commit → черновик PR. Каждый шаг подтверждается отдельно.
           </p>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 sm:mt-0 sm:justify-end">
           {canRefresh && (
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-subtle px-2.5 py-1.5 text-10 font-semibold text-secondary hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-md border border-subtle px-2.5 py-1.5 text-12 font-semibold text-secondary hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
               disabled={refreshing}
               onClick={onRefresh}
             >
@@ -900,10 +927,10 @@ function GitWriteReadiness({
             </button>
           )}
           <span
-            className={`inline-flex w-fit items-center gap-1 rounded-full border px-2 py-1 text-10 font-semibold ${
+            className={`inline-flex w-fit items-center gap-1 rounded-full border px-2 py-1 text-11 font-semibold ${
               readiness.apply_available
-                ? "border-green-500/30 bg-green-500/10 text-green-500"
-                : "border-amber-500/30 bg-amber-500/10 text-amber-500"
+                ? "border-success-subtle bg-success-subtle text-success-primary"
+                : "border-warning-subtle bg-warning-subtle text-warning-primary"
             }`}
           >
             {readiness.apply_available ? <Check className="size-3" /> : <X className="size-3" />}
@@ -920,15 +947,15 @@ function GitWriteReadiness({
           return (
             <div className="flex items-start gap-2 rounded-md border border-subtle bg-surface-2 p-2" key={permission}>
               {ready ? (
-                <Check className="text-green-500 mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                <Check className="mt-0.5 size-3.5 shrink-0 text-icon-success-primary" aria-hidden="true" />
               ) : (
-                <X className="text-amber-500 mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                <X className="mt-0.5 size-3.5 shrink-0 text-icon-warning-primary" aria-hidden="true" />
               )}
               <div>
-                <p className="text-10 font-semibold text-primary">
+                <p className="text-12 font-semibold text-primary">
                   {WRITE_PERMISSION_LABELS[permission] ?? permission}
                 </p>
-                <p className="mt-0.5 text-10 text-tertiary">Требуется: {level}</p>
+                <p className="mt-0.5 text-11 text-tertiary">Требуется: {level}</p>
               </div>
             </div>
           );
@@ -938,9 +965,9 @@ function GitWriteReadiness({
       {readiness.connections.length > 0 && (
         <div className="mt-3 grid gap-2">
           {readiness.connections.map((connection) => (
-            <div className="flex flex-wrap items-center justify-between gap-2 text-11" key={connection.connection_id}>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-12" key={connection.connection_id}>
               <span className="font-medium text-secondary">{connection.repository_full_name}</span>
-              <span className={connection.permission_ready ? "text-green-500" : "text-amber-500"}>
+              <span className={connection.permission_ready ? "text-success-primary" : "text-warning-primary"}>
                 {connection.permission_ready
                   ? "Права готовы"
                   : `Не хватает: ${connection.missing_permissions.join(", ") || "активного подключения"}`}
@@ -951,27 +978,33 @@ function GitWriteReadiness({
       )}
 
       {readiness.blockers.includes("GITHUB_PERMISSIONS_MISSING") && (
-        <div className="border-amber-500/20 bg-amber-500/5 mt-3 rounded-md border p-3">
-          <p className="text-11 font-semibold text-primary">Как выдать права безопасно</p>
-          <ol className="mt-2 grid list-decimal gap-1 pl-4 text-10 leading-5 text-secondary">
+        <div className="mt-3 rounded-md border border-warning-subtle bg-warning-subtle p-3">
+          <p className="text-12 font-semibold text-primary">Как выдать права безопасно</p>
+          <ol className="mt-2 grid list-decimal gap-1 pl-4 text-12 leading-5 text-secondary">
             <li>В настройках GitHub App откройте «Permissions &amp; events» → «Repository permissions».</li>
             <li>Для «Contents» и «Pull requests» выберите «Read and write», затем сохраните изменения.</li>
             <li>В установке приложения подтвердите запрос новых прав только для нужных репозиториев.</li>
-            <li>Вернитесь сюда и нажмите «Проверить права».</li>
+            {canRefresh ? (
+              <li>Вернитесь сюда и нажмите «Проверить права».</li>
+            ) : (
+              <li>Попросите администратора проекта проверить права на этой странице.</li>
+            )}
           </ol>
-          <p className="mt-2 text-10 leading-5 text-tertiary">
+          <p className="mt-2 text-12 leading-5 text-tertiary">
             Эти права ещё ничего не создают сами по себе: ветка и draft PR потребуют отдельных подтверждений в PPM.
           </p>
         </div>
       )}
 
-      <ul className="mt-3 grid gap-1 border-t border-subtle pt-3 text-10 leading-5 text-tertiary">
-        {readiness.blockers.map((blocker) => (
-          <li className="flex gap-2" key={blocker}>
-            <span aria-hidden="true">•</span>
-            <span>{WRITE_BLOCKER_LABELS[blocker]}</span>
-          </li>
-        ))}
+      <ul className="mt-3 grid gap-1 border-t border-subtle pt-3 text-12 leading-5 text-tertiary">
+        {readiness.blockers
+          .filter((blocker) => blocker !== "OWNER_DECISION_REQUIRED" && blocker !== "APPLY_ENDPOINT_PENDING")
+          .map((blocker) => (
+            <li className="flex gap-2" key={blocker}>
+              <span aria-hidden="true">•</span>
+              <span>{WRITE_BLOCKER_LABELS[blocker]}</span>
+            </li>
+          ))}
       </ul>
     </div>
   );
@@ -1017,7 +1050,7 @@ function GitWriteActionDialog({
   if (action) {
     const preview = action.preview;
     return (
-      <DialogFrame onClose={onClose} title="Проверка ветки и draft PR">
+      <DialogFrame onClose={onClose} saving={saving} title="Проверка ветки и draft PR">
         <div className="grid gap-3">
           <PreviewRow label="Репозиторий" value={preview.repository.full_name} />
           <div className="grid gap-3 sm:grid-cols-2">
@@ -1027,15 +1060,15 @@ function GitWriteActionDialog({
           <PreviewRow label="Связанная задача" value={`${preview.work_item.identifier} · ${preview.work_item.title}`} />
           <PreviewRow label="Название draft PR" value={preview.draft_pull_request.title} />
           <div className="rounded-lg border border-subtle bg-layer-1 p-3">
-            <p className="text-10 font-semibold tracking-wide text-tertiary uppercase">Описание draft PR</p>
-            <pre className="mt-2 max-h-48 overflow-auto text-11 leading-5 whitespace-pre-wrap text-secondary">
+            <p className="text-11 font-semibold tracking-wide text-tertiary uppercase">Описание draft PR</p>
+            <pre className="mt-2 max-h-48 overflow-auto text-12 leading-5 whitespace-pre-wrap text-secondary">
               {preview.draft_pull_request.body || "Без описания"}
             </pre>
           </div>
-          <div className="border-cyan-500/20 bg-cyan-500/5 rounded-lg border p-3 text-11 leading-5 text-secondary">
+          <div className="rounded-lg border border-subtle bg-layer-1 p-3 text-12 leading-5 text-secondary">
             {preview.safety.message} Автоматический merge запрещён.
           </div>
-          {action.error && <p className="text-red-500 text-12">{action.error.message}</p>}
+          {action.error && <p className="text-12 text-danger-primary">{action.error.message}</p>}
           {action.status === "proposed" ? (
             <div className="mt-2 flex flex-wrap justify-end gap-2 border-t border-subtle pt-4">
               <button
@@ -1048,7 +1081,7 @@ function GitWriteActionDialog({
               </button>
               <button
                 type="button"
-                className="rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-color disabled:opacity-50"
+                className="rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-accent disabled:opacity-50"
                 disabled={saving}
                 onClick={() => onDecision("approve")}
               >
@@ -1059,7 +1092,7 @@ function GitWriteActionDialog({
             <div className="mt-2 rounded-lg border border-subtle bg-layer-1 p-3 text-12 text-secondary">
               <strong className="text-primary">{WRITE_ACTION_STATUS_LABELS[action.status]}.</strong>{" "}
               {action.status === "approved"
-                ? "Решение сохранено. GitHub пока не изменён: внешнее применение появится после утверждения write‑прав."
+                ? "Решение сохранено. Репозиторий в GitHub не изменён."
                 : "GitHub не изменялся."}
             </div>
           )}
@@ -1069,7 +1102,7 @@ function GitWriteActionDialog({
   }
 
   return (
-    <DialogFrame onClose={onClose} title="Подготовить ветку и draft PR">
+    <DialogFrame onClose={onClose} saving={saving} title="Подготовить ветку и draft PR">
       <form className="grid gap-4" onSubmit={onSubmit}>
         <label className="text-12 font-semibold text-secondary">
           Подключённый репозиторий
@@ -1107,7 +1140,7 @@ function GitWriteActionDialog({
             </button>
           </div>
           {selectedWorkItem && (
-            <div className="border-accent-primary/40 mt-2 rounded-md border bg-accent-primary/5 p-2 text-12 text-primary">
+            <div className="mt-2 rounded-md border border-accent-strong/40 bg-accent-primary/5 p-2 text-12 text-primary">
               <strong>{selectedWorkItem.identity.identifier}</strong> · {selectedWorkItem.display.title}
             </div>
           )}
@@ -1150,13 +1183,13 @@ function GitWriteActionDialog({
         <label className="text-12 font-semibold text-secondary">
           Описание draft PR
           <textarea
-            className="focus:border-accent-primary mt-2 min-h-36 w-full resize-y rounded-md border border-subtle bg-surface-2 px-3 py-2 text-13 text-primary outline-none"
+            className="mt-2 min-h-36 w-full resize-y rounded-md border border-subtle bg-surface-2 px-3 py-2 text-13 text-primary outline-none focus:border-accent-strong"
             maxLength={20000}
             value={form.body}
             onChange={(event) => onChange({ ...form, body: event.target.value })}
           />
         </label>
-        <p className="text-11 leading-5 text-tertiary">
+        <p className="text-12 leading-5 text-tertiary">
           На этом шаге создаётся только проверяемое предложение. GitHub, ветки и PR не изменяются.
         </p>
         <DialogActions
@@ -1173,7 +1206,7 @@ function GitWriteActionDialog({
 function PreviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-subtle bg-layer-1 p-3">
-      <p className="text-10 font-semibold tracking-wide text-tertiary uppercase">{label}</p>
+      <p className="text-11 font-semibold tracking-wide text-tertiary uppercase">{label}</p>
       <p className="mt-1 text-12 font-semibold break-words text-primary">{value}</p>
     </div>
   );
@@ -1209,7 +1242,7 @@ function GithubProviderPanel({
             <Github className="size-5" aria-hidden="true" />
           </div>
           <div>
-            <h2 id="ppm-github-title" className="text-15 font-semibold text-primary">
+            <h2 id="ppm-github-title" className="text-16 font-semibold text-primary">
               GitHub App
             </h2>
             <p className="mt-1 max-w-2xl text-12 leading-5 text-secondary">
@@ -1217,7 +1250,7 @@ function GithubProviderPanel({
               выбранным репозиториям этого проекта.
             </p>
             {installation && (
-              <p className="mt-2 text-11 text-tertiary">
+              <p className="mt-2 text-12 text-tertiary">
                 Учётная запись: <span className="font-semibold text-secondary">{installation.account_login}</span>
               </p>
             )}
@@ -1226,13 +1259,13 @@ function GithubProviderPanel({
         {canManage && (
           <div className="flex shrink-0 flex-wrap gap-2">
             {!configured ? (
-              <span className="rounded-md border border-subtle px-3 py-2 text-11 text-tertiary">
+              <span className="rounded-md border border-subtle px-3 py-2 text-12 text-tertiary">
                 Требуется настройка администратором PPM
               </span>
             ) : installation ? (
               <button
                 type="button"
-                className="rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-color disabled:opacity-50"
+                className="rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-accent disabled:opacity-50"
                 disabled={saving}
                 onClick={onSelectRepository}
               >
@@ -1241,7 +1274,7 @@ function GithubProviderPanel({
             ) : (
               <button
                 type="button"
-                className="inline-flex items-center gap-2 rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-color disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-accent disabled:opacity-50"
                 disabled={saving}
                 onClick={onConnect}
               >
@@ -1270,7 +1303,7 @@ function GithubProviderPanel({
                       : ""}
                   </p>
                   <p
-                    className={`mt-2 inline-flex max-w-full flex-wrap items-center gap-x-1 rounded-md border px-2 py-1 text-10 ${WEBHOOK_STATUS_CLASS_NAMES[webhookStatus.tone]}`}
+                    className={`mt-2 inline-flex max-w-full flex-wrap items-center gap-x-1 rounded-md border px-2 py-1 text-11 ${WEBHOOK_STATUS_CLASS_NAMES[webhookStatus.tone]}`}
                     aria-label={`Статус webhook: ${webhookStatus.label}, ${webhookStatus.detail}`}
                   >
                     <span className="font-semibold">{webhookStatus.label}</span>
@@ -1278,14 +1311,14 @@ function GithubProviderPanel({
                     <span>{webhookStatus.detail}</span>
                   </p>
                   {connection.last_error && (
-                    <p className="text-red-500 mt-1 text-11">{connection.last_error.message}</p>
+                    <p className="mt-1 text-12 text-danger-primary">{connection.last_error.message}</p>
                   )}
                 </div>
                 {canManage && !["disconnected", "revoked"].includes(connection.status) && (
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      className="inline-flex items-center gap-1.5 rounded-md border border-subtle px-2.5 py-1.5 text-11 text-primary disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-subtle px-2.5 py-1.5 text-12 text-primary disabled:opacity-50"
                       disabled={saving}
                       onClick={() => onSync(connection)}
                     >
@@ -1293,7 +1326,7 @@ function GithubProviderPanel({
                     </button>
                     <button
                       type="button"
-                      className="hover:bg-red-500/10 hover:text-red-500 rounded-md px-2.5 py-1.5 text-11 text-secondary"
+                      className="rounded-md px-2.5 py-1.5 text-12 text-secondary hover:bg-danger-subtle hover:text-danger-primary"
                       disabled={saving}
                       onClick={() => onDisconnect(connection)}
                     >
@@ -1326,7 +1359,7 @@ function GithubRepositoryDialog({
   saving: boolean;
 }) {
   return (
-    <DialogFrame onClose={onClose} title="Подключить репозиторий GitHub">
+    <DialogFrame onClose={onClose} saving={saving} title="Подключить репозиторий GitHub">
       {repositories.length === 0 ? (
         <div className="rounded-lg border border-dashed border-subtle p-6 text-center text-12 text-secondary">
           GitHub App не видит доступных репозиториев. Добавьте репозиторий в настройках установки GitHub App.
@@ -1347,7 +1380,7 @@ function GithubRepositoryDialog({
               ))}
             </select>
           </label>
-          <p className="text-11 leading-5 text-tertiary">
+          <p className="text-12 leading-5 text-tertiary">
             PPM запросит только чтение метаданных. Пароли, SSH-ключи и токены в базе не сохраняются.
           </p>
           <DialogActions disabled={!repositoryId} onClose={onClose} saving={saving} submitLabel="Подключить" />
@@ -1394,7 +1427,7 @@ function RepositoryCard({
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="truncate text-14 font-semibold text-primary">{repository.name}</h3>
             {repository.is_default && (
-              <span className="bg-amber-500/10 text-amber-500 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-10 font-semibold">
+              <span className="inline-flex items-center gap-1 rounded-full bg-warning-subtle px-2 py-0.5 text-11 font-semibold text-warning-primary">
                 <Star className="size-3 fill-current" aria-hidden="true" /> Основной
               </span>
             )}
@@ -1433,10 +1466,10 @@ function RepositoryCard({
       <div className="mt-3 rounded-lg border border-subtle bg-layer-1 p-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="flex items-center gap-1.5 text-11 font-semibold text-primary">
+            <p className="flex items-center gap-1.5 text-12 font-semibold text-primary">
               <Search className="size-3.5 text-accent-primary" aria-hidden="true" /> Поиск по коду
             </p>
-            <p className="mt-1 text-11 leading-5 text-secondary">
+            <p className="mt-1 text-12 leading-5 text-secondary">
               {!repository.code_index.enabled
                 ? "Выключен: PPM не читает содержимое файлов."
                 : snapshot
@@ -1445,20 +1478,20 @@ function RepositoryCard({
             </p>
           </div>
           <span
-            className={`mt-0.5 size-2 shrink-0 rounded-full ${
+            className={`mt-0.5 size-2 shrink-0 rounded-full bg-current ${
               snapshot?.status === "ready"
-                ? "bg-green-500"
+                ? "text-icon-success-primary"
                 : snapshot?.status === "failed"
-                  ? "bg-red-500"
+                  ? "text-icon-danger-primary"
                   : repository.code_index.enabled
-                    ? "bg-amber-500"
-                    : "bg-secondary"
+                    ? "text-icon-warning-primary"
+                    : "text-icon-tertiary"
             }`}
             aria-hidden="true"
           />
         </div>
         {repository.code_index.enabled && snapshot && (
-          <div className="mt-2 text-10 leading-5 text-tertiary">
+          <div className="mt-2 text-11 leading-5 text-tertiary">
             <p>
               Ветка {snapshot.branch} · коммит {snapshot.commit_sha.slice(0, 12)}
             </p>
@@ -1467,7 +1500,7 @@ function RepositoryCard({
                 {snapshot.file_count} файлов · {formatBytes(snapshot.total_bytes)} безопасного текста
               </p>
             )}
-            {snapshot.error?.message && <p className="text-red-500">{snapshot.error.message}</p>}
+            {snapshot.error?.message && <p className="text-danger-primary">{snapshot.error.message}</p>}
           </div>
         )}
         {canManageCode && (
@@ -1476,7 +1509,7 @@ function RepositoryCard({
               <>
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-subtle px-2.5 py-1.5 text-10 font-semibold text-primary hover:bg-layer-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-subtle px-2.5 py-1.5 text-12 font-semibold text-primary hover:bg-layer-2 disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={saving || !hasActiveConnection}
                   onClick={() => onSyncCode(repository)}
                 >
@@ -1484,7 +1517,7 @@ function RepositoryCard({
                 </button>
                 <button
                   type="button"
-                  className="hover:bg-red-500/10 hover:text-red-500 rounded-md px-2.5 py-1.5 text-10 text-secondary disabled:opacity-50"
+                  className="rounded-md px-2.5 py-1.5 text-12 text-secondary hover:bg-danger-subtle hover:text-danger-primary disabled:opacity-50"
                   disabled={saving}
                   onClick={() => onToggleCode(repository, false)}
                 >
@@ -1494,7 +1527,7 @@ function RepositoryCard({
             ) : (
               <button
                 type="button"
-                className="rounded-md border border-subtle px-2.5 py-1.5 text-10 font-semibold text-primary hover:bg-layer-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-md border border-subtle px-2.5 py-1.5 text-12 font-semibold text-primary hover:bg-layer-2 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={saving || !hasActiveConnection}
                 title={hasActiveConnection ? undefined : "Сначала подключите репозиторий через GitHub"}
                 onClick={() => onToggleCode(repository, true)}
@@ -1505,13 +1538,13 @@ function RepositoryCard({
           </div>
         )}
         {!hasActiveConnection && canManageCode && (
-          <p className="mt-2 text-10 text-tertiary">Для поиска сначала подключите этот репозиторий через GitHub.</p>
+          <p className="mt-2 text-12 text-tertiary">Для поиска сначала подключите этот репозиторий через GitHub.</p>
         )}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-subtle pt-3">
         <Link
-          className="inline-flex items-center gap-1.5 rounded-md border border-subtle px-2.5 py-1.5 text-11 font-semibold text-primary hover:bg-layer-1"
+          className="inline-flex items-center gap-1.5 rounded-md border border-subtle px-2.5 py-1.5 text-12 font-semibold text-primary hover:bg-layer-1"
           href={gitCanvasHref(workspaceSlug, projectId, repository)}
         >
           <Code2 className="size-3.5" aria-hidden="true" /> На холст
@@ -1519,7 +1552,7 @@ function RepositoryCard({
         {canManage && !repository.is_default && (
           <button
             type="button"
-            className="rounded-md px-2.5 py-1.5 text-11 text-secondary hover:bg-layer-1 hover:text-primary"
+            className="rounded-md px-2.5 py-1.5 text-12 text-secondary hover:bg-layer-1 hover:text-primary"
             onClick={() => onMakeDefault(repository)}
           >
             Сделать основным
@@ -1528,7 +1561,7 @@ function RepositoryCard({
         {canManage && (
           <button
             type="button"
-            className="hover:bg-red-500/10 hover:text-red-500 ml-auto inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-11 text-secondary"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-12 text-secondary hover:bg-danger-subtle hover:text-danger-primary"
             onClick={() => onArchive(repository)}
           >
             <Archive className="size-3.5" aria-hidden="true" /> Убрать
@@ -1558,8 +1591,8 @@ function CloneRow({
 }) {
   return (
     <div className="mt-3 grid grid-cols-[3.2rem_minmax(0,1fr)_2rem] items-center gap-2 rounded-md border border-subtle bg-layer-1 px-2 py-1.5">
-      <span className="text-10 font-semibold text-tertiary">{label}</span>
-      <code className="truncate text-11 text-secondary" title={value}>
+      <span className="text-11 font-semibold text-tertiary">{label}</span>
+      <code className="truncate text-12 text-secondary" title={value}>
         {value}
       </code>
       <button
@@ -1568,7 +1601,7 @@ function CloneRow({
         aria-label={`Копировать ${label}`}
         onClick={onCopy}
       >
-        {copied ? <Check className="text-green-500 size-3.5" /> : <Clipboard className="size-3.5" />}
+        {copied ? <Check className="size-3.5 text-icon-success-primary" /> : <Clipboard className="size-3.5" />}
       </button>
     </div>
   );
@@ -1593,7 +1626,7 @@ function GitObjectRow({
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-13 font-semibold text-primary">{gitObject.title}</p>
-        <p className="mt-0.5 truncate text-11 text-secondary">
+        <p className="mt-0.5 truncate text-12 text-secondary">
           {OBJECT_LABELS[gitObject.object_type]}
           {gitObject.ref ? ` · ${gitObject.ref}` : ""}
           {repository ? ` · ${repository.name}` : ""}
@@ -1648,7 +1681,7 @@ function GitLinkRow({
           </span>
         </div>
         <p className="mt-1 truncate text-13 font-semibold text-primary">{link.title}</p>
-        <p className="mt-0.5 truncate text-11 text-secondary">{link.work_item.title}</p>
+        <p className="mt-0.5 truncate text-12 text-secondary">{link.work_item.title}</p>
       </div>
       <div className="flex items-center gap-1">
         <a
@@ -1670,7 +1703,7 @@ function GitLinkRow({
         {canUnlink && (
           <button
             type="button"
-            className="hover:bg-red-500/10 hover:text-red-500 grid size-8 place-items-center rounded-md text-secondary"
+            className="grid size-8 place-items-center rounded-md text-secondary hover:bg-danger-subtle hover:text-danger-primary"
             aria-label="Убрать связь"
             onClick={() => onUnlink(link)}
           >
@@ -1696,7 +1729,7 @@ function RepositoryDialog({
   saving: boolean;
 }) {
   return (
-    <DialogFrame onClose={onClose} title="Добавить репозиторий">
+    <DialogFrame onClose={onClose} saving={saving} title="Добавить репозиторий">
       <form className="grid gap-4" onSubmit={onSubmit}>
         <FormInput
           label="Название"
@@ -1808,7 +1841,7 @@ function LinkDialog({
   workItems: TPpmWorkItemProjection[];
 }) {
   return (
-    <DialogFrame onClose={onClose} title="Связать Git с задачей">
+    <DialogFrame onClose={onClose} saving={saving} title="Связать Git с задачей">
       <form className="grid gap-4" onSubmit={onSubmit}>
         <label className="text-12 font-semibold text-secondary">
           Репозиторий
@@ -1846,7 +1879,7 @@ function LinkDialog({
             </button>
           </div>
           {selectedWorkItem && (
-            <div className="border-accent-primary/40 mt-2 rounded-md border bg-accent-primary/5 p-2 text-12 text-primary">
+            <div className="mt-2 rounded-md border border-accent-strong/40 bg-accent-primary/5 p-2 text-12 text-primary">
               <strong>{selectedWorkItem.identity.identifier}</strong> · {selectedWorkItem.display.title}
             </div>
           )}
@@ -1912,24 +1945,48 @@ function LinkDialog({
   );
 }
 
-function DialogFrame({ children, onClose, title }: { children: ReactNode; onClose: () => void; title: string }) {
+// Plane ModalCore: focus trap and focus return. Esc closes (not during a request); a backdrop click does not,
+// so typed input survives a stray click — focus goes back to the field the user was in.
+function DialogFrame({
+  children,
+  onClose,
+  saving = false,
+  title,
+}: {
+  children: ReactNode;
+  onClose: () => void;
+  saving?: boolean;
+  title: string;
+}) {
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/65 p-4" role="presentation">
+    <ModalCore
+      isOpen
+      handleClose={() => {
+        if (shouldDismissPpmDialog({ reason: "backdrop", saving })) onClose();
+        else lastFocusedRef.current?.focus();
+      }}
+      width={EModalWidth.XL}
+    >
       <section
-        className="shadow-2xl max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-xl border border-subtle bg-surface-1 p-5"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
+        className="max-h-[90vh] overflow-y-auto p-5"
+        role="presentation"
+        onFocus={(event) => {
+          lastFocusedRef.current = event.target;
+        }}
+        onKeyDown={(event) => handlePpmDialogKeyDown(event, { saving, onClose })}
       >
         <div className="mb-5 flex items-center justify-between gap-3">
-          <h2 className="text-16 font-semibold text-primary">{title}</h2>
+          <Dialog.Title as="h2" className="text-16 font-semibold text-primary">
+            {title}
+          </Dialog.Title>
           <button type="button" aria-label="Закрыть" onClick={onClose}>
-            <X className="size-4" />
+            <X className="size-4" aria-hidden="true" />
           </button>
         </div>
         {children}
       </section>
-    </div>
+    </ModalCore>
   );
 }
 
@@ -1955,7 +2012,7 @@ function DialogActions({
       </button>
       <button
         type="submit"
-        className="rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-color disabled:opacity-50"
+        className="rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-accent disabled:opacity-50"
         disabled={saving || disabled}
       >
         {saving ? "Сохраняем…" : submitLabel}
@@ -1981,7 +2038,7 @@ function FormInput({
     <label className="text-12 font-semibold text-secondary">
       {label}
       <input
-        className="focus:border-accent-primary mt-2 w-full rounded-md border border-subtle bg-surface-2 px-3 py-2 text-13 text-primary outline-none"
+        className="mt-2 w-full rounded-md border border-subtle bg-surface-2 px-3 py-2 text-13 text-primary outline-none focus:border-accent-strong"
         placeholder={placeholder}
         required={required}
         value={value}

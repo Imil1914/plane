@@ -19,6 +19,7 @@ interface AppSidebarItemData {
   onClick?: () => void;
   disabled?: boolean;
   showLabel?: boolean;
+  ariaLabel?: string;
 }
 
 interface AppSidebarItemProps {
@@ -40,6 +41,8 @@ interface AppSidebarLinkItemProps {
   href?: string;
   children: React.ReactNode;
   className?: string;
+  ariaLabel?: string;
+  isActive?: boolean;
 }
 
 interface AppSidebarButtonItemProps {
@@ -47,6 +50,7 @@ interface AppSidebarButtonItemProps {
   onClick?: () => void;
   disabled?: boolean;
   className?: string;
+  ariaLabel?: string;
 }
 
 // ============================================================================
@@ -97,19 +101,36 @@ function AppSidebarItemIcon({ icon, highlight }: AppSidebarItemIconProps) {
   );
 }
 
-function AppSidebarLinkItem({ href, children, className }: AppSidebarLinkItemProps) {
+function AppSidebarLinkItem({ href, children, className, ariaLabel, isActive }: AppSidebarLinkItemProps) {
   if (!href) return null;
 
   return (
-    <Link href={href} className={cn(styles.base, className)}>
+    <Link
+      href={href}
+      className={cn(styles.base, className)}
+      aria-label={ariaLabel}
+      aria-current={isActive ? "page" : undefined}
+    >
       {children}
     </Link>
   );
 }
 
-function AppSidebarButtonItem({ children, onClick, disabled = false, className }: AppSidebarButtonItemProps) {
+function AppSidebarButtonItem({
+  children,
+  onClick,
+  disabled = false,
+  className,
+  ariaLabel,
+}: AppSidebarButtonItemProps) {
   return (
-    <button className={cn(styles.base, className)} onClick={onClick} disabled={disabled} type="button">
+    <button
+      className={cn(styles.base, className)}
+      onClick={onClick}
+      disabled={disabled}
+      type="button"
+      aria-label={ariaLabel}
+    >
       {children}
     </button>
   );
@@ -129,7 +150,7 @@ export type AppSidebarItemComponent = React.FC<AppSidebarItemProps> & {
 function AppSidebarItem({ variant = "link", item }: AppSidebarItemProps) {
   if (!item) return null;
 
-  const { icon, isActive, label, href, onClick, disabled, showLabel = true } = item;
+  const { icon, isActive, label, href, onClick, disabled, showLabel = true, ariaLabel } = item;
 
   const commonItems = (
     <>
@@ -139,11 +160,15 @@ function AppSidebarItem({ variant = "link", item }: AppSidebarItemProps) {
   );
 
   if (variant === "link") {
-    return <AppSidebarLinkItem href={href}>{commonItems}</AppSidebarLinkItem>;
+    return (
+      <AppSidebarLinkItem href={href} ariaLabel={ariaLabel} isActive={isActive}>
+        {commonItems}
+      </AppSidebarLinkItem>
+    );
   }
 
   return (
-    <AppSidebarButtonItem onClick={onClick} disabled={disabled}>
+    <AppSidebarButtonItem onClick={onClick} disabled={disabled} ariaLabel={ariaLabel}>
       {commonItems}
     </AppSidebarButtonItem>
   );

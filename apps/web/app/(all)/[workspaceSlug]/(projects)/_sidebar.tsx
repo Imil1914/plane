@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import { useParams, usePathname } from "next/navigation";
 import { SIDEBAR_WIDTH } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { ResizableSidebar } from "@/components/sidebar/resizable-sidebar";
 // hooks
@@ -38,11 +39,12 @@ export const ProjectAppSidebar = observer(function ProjectAppSidebar() {
   const isAnyExtendedSidebarOpen = isExtendedSidebarOpened;
 
   const isNotificationsPath = pathname.includes(`/${workspaceSlug}/notifications`);
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
   // handlers
   const handleWidthChange = (width: number) => setValue(width);
 
-  if (isNotificationsPath) return null;
+  if (isNotificationsPath && !isPpmShell) return null;
 
   return (
     <>

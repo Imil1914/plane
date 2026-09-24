@@ -62,6 +62,7 @@ export const NotificationSidebarHeaderOptions = observer(function NotificationSi
           onClick={() => {
             handleMarkAllNotificationsAsRead();
           }}
+          aria-label={t("notification.options.mark_all_as_read")}
         />
       </Tooltip>
 
@@ -73,6 +74,7 @@ export const NotificationSidebarHeaderOptions = observer(function NotificationSi
           icon={RefreshCw}
           className={loader === ENotificationLoader.MUTATION_LOADER ? "animate-spin" : ""}
           onClick={refreshNotifications}
+          aria-label={t("notification.options.refresh")}
         />
       </Tooltip>
 

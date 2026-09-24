@@ -842,6 +842,7 @@
   --text-color-accent-primary: var(--txt-accent-primary);
   --text-color-accent-secondary: var(--txt-accent-secondary);
   --text-color-on-color: var(--txt-on-color);
+  --text-color-on-accent: var(--txt-on-accent, var(--txt-on-color));
   --text-color-on-color-disabled: var(--txt-on-color-disabled);
   --text-color-inverse: var(--txt-inverse);
   --text-color-success-primary: var(--txt-success-primary);

@@ -2074,6 +2074,12 @@ export function isPpmAntyFlowShellEnabled(value: string | undefined): boolean {
   return !new Set(["0", "false", "no", "off", "disabled"]).has(value.trim().toLowerCase());
 }
 
+/** Owner decision 2026-09-24: PPM 1.0 ships without generative answers and agents; the panel keeps non-AI search. */
+export function isPpmProjectAskEnabled(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  return new Set(["1", "true", "yes", "on", "enabled"]).has(value.trim().toLowerCase());
+}
+
 function migrateNodeToCurrent(
   raw: Record<string, unknown>,
   kind: TPpmCanvasNodeKind,

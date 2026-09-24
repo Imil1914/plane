@@ -4,14 +4,21 @@
  * This is the single source of truth for PPM foundation tokens and the
  * compatibility bridge to Plane/Propel semantic variables. The bridge is
  * deliberately gated, so PPM_BRAND_ENABLED=0 restores the upstream theme.
+ *
+ * UX0.2 contract (see __tests__/brand.test.ts "PPM token contract"):
+ * - role values are OKLCH; every text role >= 4.5:1 on every surface/state, control borders >= 3:1;
+ * - selectors are :where()-flattened to (0,1,0) and win over Plane only by source order;
+ * - --border-* are bridged only outside light-contrast/dark-contrast, so Plane's high-contrast
+ *   borders (variables.css @variant *-high-contrast) apply with PPM neutrals;
+ * - --txt-on-color keeps the upstream (light) meaning; dark ink lives in --txt-on-accent.
  */
 
 @layer base {
   [data-ppm-brand="enabled"] {
-    --ppm-color-accent: #22d3ee;
-    --ppm-color-accent-hover: #06b6d4;
-    --ppm-color-accent-active: #0891b2;
-    --ppm-color-focus: #67e8f9;
+    --ppm-color-accent: oklch(0.7971 0.1339 211.53); /* #22d3ee */
+    --ppm-color-accent-hover: oklch(0.7148 0.1257 215.22); /* #06b6d4 */
+    --ppm-color-accent-active: oklch(0.66 0.118 218); /* #04a3c2, was #0891b2 (ink 4.08:1) */
+    --ppm-color-focus: oklch(0.8651 0.1153 207.08); /* #67e8f9 */
     --ppm-color-success: #22c55e;
     --ppm-color-warning: #f59e0b;
     --ppm-color-danger: #ef4444;
@@ -36,184 +43,215 @@
     --font-code: var(--ppm-font-mono);
   }
 
-  html[data-ppm-brand="enabled"],
-  [data-ppm-brand="enabled"] [data-theme*="light"] {
+  /* ---------------- Light (default) role values ---------------- */
+  :where(html)[data-ppm-brand="enabled"],
+  :where([data-ppm-brand="enabled"]) [data-theme*="light"] {
     color-scheme: light;
-    --ppm-color-focus: #0891b2;
-    --ppm-color-canvas: #eef0f3;
-    --ppm-color-surface-1: #ffffff;
-    --ppm-color-surface-2: #f4f6f9;
-    --ppm-color-layer: #e7ebf0;
-    --ppm-color-border: #d5dae1;
-    --ppm-color-border-strong: #aeb6c2;
-    --ppm-color-text: #1a1d23;
-    --ppm-color-text-secondary: #4b5563;
-    --ppm-color-text-muted: #6b7280;
+    --ppm-color-canvas: oklch(0.9545 0.0046 258.32); /* #eef0f3 */
+    --ppm-color-surface-1: oklch(1 0 0); /* #ffffff */
+    --ppm-color-surface-2: oklch(0.9725 0.0045 258.32); /* #f4f6f9 */
+    --ppm-color-layer-1: oklch(0.949 0.006 258); /* #eceff2 */
+    --ppm-color-layer-1-hover: oklch(0.915 0.008 258); /* #e0e3e8 */
+    --ppm-color-layer-1-selected: oklch(0.896 0.01 258); /* #d9dde3 */
+    --ppm-color-layer-2: oklch(1 0 0);
+    --ppm-color-layer-2-hover: oklch(0.965 0.005 258); /* #f1f4f7 */
+    --ppm-color-layer-2-selected: oklch(0.912 0.009 258); /* #dee2e8 */
+    --ppm-color-layer-3: oklch(0.948 0.006 258); /* #ebeef2 */
+    --ppm-color-layer-3-hover: oklch(0.915 0.008 258); /* #e0e3e8 */
+    --ppm-color-layer-3-selected: oklch(0.898 0.01 258); /* #d9dee4 */
+    --ppm-color-layer-disabled: oklch(0.935 0.006 258); /* #e7eaee */
+    --ppm-color-alpha-hover: oklch(0.1482 0.0034 196.79 / 6%);
+    --ppm-color-alpha-active: oklch(0.1482 0.0034 196.79 / 9%);
+    --ppm-color-alpha-selected: oklch(0.1482 0.0034 196.79 / 11%);
+    --ppm-color-border: oklch(0.9 0.01 258); /* #dadee5, dividers */
+    --ppm-color-border-control: oklch(0.62 0.022 258); /* #7e8794, >= 3:1 */
+    --ppm-color-border-strong: oklch(0.6 0.022 258); /* #78818e, >= 3:1 */
+    --ppm-color-border-emphasis: oklch(0.55 0.022 258); /* #6a727f */
+    --ppm-color-selection: oklch(0.6089 0.1109 221.72); /* #0891b2, selection border, != focus */
+    --ppm-color-text: oklch(0.2303 0.0125 264.29); /* #1a1d23 */
+    --ppm-color-text-secondary: oklch(0.42 0.024 258); /* #454e5a */
+    --ppm-color-text-muted: oklch(0.475 0.022 262); /* #555d69 */
+    --ppm-color-text-placeholder: oklch(0.488 0.02 262); /* #5a606c */
+    --ppm-color-text-disabled: oklch(0.68 0.018 262); /* #9299a4, inactive UI (SC 1.4.3 exempt) */
+    --ppm-color-accent-text: oklch(0.48 0.085 225); /* #136782, was #0891b2 3.68:1 */
+    --ppm-color-accent-text-hover: oklch(0.42 0.075 228); /* #11556d */
+    --ppm-color-icon-accent-subtle: oklch(0.6 0.11 222); /* #058eaf, icon >= 3:1 */
+    --ppm-color-focus: oklch(0.5 0.09 224); /* #0f6e89 */
+    --ppm-color-focus-gap: var(--ppm-color-surface-1);
 
-    /* Plane neutral and brand scales. */
-    --neutral-white: #ffffff;
-    --neutral-100: #fafbfc;
-    --neutral-200: #f4f6f9;
-    --neutral-300: #eef0f3;
-    --neutral-400: #e7ebf0;
-    --neutral-500: #d5dae1;
-    --neutral-600: #c2c9d2;
-    --neutral-700: #aeb6c2;
-    --neutral-800: #8b93a3;
-    --neutral-900: #6b7280;
-    --neutral-1000: #4b5563;
-    --neutral-1100: #343a46;
-    --neutral-1200: #1a1d23;
-    --neutral-black: #0e0f12;
-    --brand-100: #ecfeff;
-    --brand-200: #cffafe;
-    --brand-300: #a5f3fc;
-    --brand-400: #67e8f9;
-    --brand-500: #22d3ee;
-    --brand-600: #06b6d4;
-    --brand-700: #0891b2;
-    --brand-800: #0e7490;
+    /* Plane neutral and brand scales (Plane maps unbridged tokens and high-contrast borders through them). */
+    --neutral-white: oklch(1 0 0);
+    --neutral-100: oklch(0.9876 0.0017 247.84); /* #fafbfc */
+    --neutral-200: oklch(0.9725 0.0045 258.32); /* #f4f6f9 */
+    --neutral-300: oklch(0.9545 0.0046 258.32); /* #eef0f3 */
+    --neutral-400: oklch(0.9385 0.008 253.85); /* #e7ebf0 */
+    --neutral-500: oklch(0.896 0.01 258); /* #d9dde3 */
+    --neutral-600: oklch(0.8332 0.0147 254.62); /* #c2c9d2 */
+    --neutral-700: oklch(0.68 0.018 262); /* #9299a4 */
+    --neutral-800: oklch(0.62 0.022 258); /* #7e8794 */
+    --neutral-900: oklch(0.488 0.02 262); /* #5a606c */
+    --neutral-1000: oklch(0.475 0.022 262); /* #555d69 */
+    --neutral-1100: oklch(0.42 0.024 258); /* #454e5a */
+    --neutral-1200: oklch(0.2303 0.0125 264.29); /* #1a1d23 */
+    --neutral-black: oklch(0.1687 0.0065 271.01); /* #0e0f12 */
+    --brand-100: oklch(0.9841 0.0189 200.87); /* #ecfeff */
+    --brand-200: oklch(0.9563 0.0443 203.39); /* #cffafe */
+    --brand-300: oklch(0.9167 0.0772 205.04); /* #a5f3fc */
+    --brand-400: oklch(0.8651 0.1153 207.08); /* #67e8f9 */
+    --brand-500: oklch(0.7971 0.1339 211.53); /* #22d3ee */
+    --brand-600: oklch(0.7148 0.1257 215.22); /* #06b6d4 */
+    --brand-700: oklch(0.6089 0.1109 221.72); /* #0891b2 */
+    --brand-800: oklch(0.5198 0.0936 223.13); /* #0e7490 */
     --brand-900: #155e75;
     --brand-1000: #164e63;
     --brand-1100: #083344;
     --brand-1200: #052f3b;
-    --brand-default: var(--ppm-color-accent);
+    /* light-contrast maps --border-accent-strong to brand-default: keep it >= 3:1 on white */
+    --brand-default: var(--ppm-color-accent-text);
 
-    /* Direct semantic bridge for stable component rendering. */
-    --bg-canvas: var(--ppm-color-canvas);
-    --bg-surface-1: var(--ppm-color-surface-1);
-    --bg-surface-2: var(--ppm-color-surface-2);
-    --bg-layer-1: var(--ppm-color-surface-2);
-    --bg-layer-1-hover: var(--ppm-color-layer);
-    --bg-layer-1-active: var(--neutral-500);
-    --bg-layer-1-selected: var(--neutral-500);
-    --bg-layer-2: var(--ppm-color-surface-1);
-    --bg-layer-2-hover: var(--ppm-color-surface-2);
-    --bg-layer-2-active: var(--ppm-color-layer);
-    --bg-layer-2-selected: var(--ppm-color-layer);
-    --bg-layer-3: var(--ppm-color-canvas);
-    --bg-layer-3-hover: var(--ppm-color-layer);
-    --bg-layer-3-active: var(--neutral-500);
-    --bg-layer-3-selected: var(--neutral-500);
-    --bg-layer-disabled: var(--neutral-400);
-    --bg-accent-primary: var(--ppm-color-accent);
-    --bg-accent-primary-hover: var(--ppm-color-accent-hover);
-    --bg-accent-primary-active: var(--ppm-color-accent-active);
-    --bg-accent-subtle: var(--brand-100);
-    --bg-accent-subtle-hover: var(--brand-200);
-    --bg-accent-subtle-active: var(--brand-300);
-    --border-subtle: var(--neutral-400);
-    --border-subtle-1: var(--ppm-color-border);
-    --border-strong: var(--neutral-600);
-    --border-strong-1: var(--ppm-color-border-strong);
-    --border-accent-strong: var(--ppm-color-accent-active);
-    --border-accent-subtle: var(--brand-300);
-    --txt-primary: var(--ppm-color-text);
-    --txt-secondary: var(--ppm-color-text-secondary);
-    --txt-tertiary: var(--ppm-color-text-muted);
-    --txt-placeholder: var(--neutral-800);
-    --txt-disabled: var(--neutral-700);
-    --txt-accent-primary: var(--ppm-color-accent-active);
-    --txt-accent-secondary: var(--brand-800);
-    --txt-on-color: #062b32;
-    --txt-icon-primary: var(--ppm-color-text);
-    --txt-icon-secondary: var(--ppm-color-text-secondary);
-    --txt-icon-tertiary: var(--ppm-color-text-muted);
-    --txt-icon-placeholder: var(--neutral-800);
-    --txt-icon-disabled: var(--neutral-700);
-    --txt-icon-accent-primary: var(--ppm-color-accent-active);
-    --txt-icon-accent-subtle: var(--ppm-color-accent);
-    --txt-link-primary: var(--ppm-color-accent-active);
-    --txt-link-primary-hover: var(--brand-800);
+    /* Upstream on-color (light label on danger/dark fills) and PPM ink for bright fills. */
+    --txt-on-color: var(--neutral-100);
+    --txt-on-accent: oklch(0.2674 0.042 213.14); /* #062b32 */
   }
 
-  html[data-ppm-brand="enabled"][data-theme*="dark"],
-  [data-ppm-brand="enabled"] [data-theme*="dark"] {
+  /* ---------------- Dark (Graphite) role values ---------------- */
+  :where(html)[data-ppm-brand="enabled"]:where([data-theme*="dark"]),
+  :where([data-ppm-brand="enabled"]) [data-theme*="dark"] {
     color-scheme: dark;
-    --ppm-color-focus: #67e8f9;
-    --ppm-color-canvas: #0e0f12;
-    --ppm-color-surface-1: #15171c;
-    --ppm-color-surface-2: #1b1e24;
-    --ppm-color-layer: #20242b;
-    --ppm-color-border: #272b34;
-    --ppm-color-border-strong: #3b424f;
-    --ppm-color-text: #e7eaf0;
-    --ppm-color-text-secondary: #b4bbc7;
-    --ppm-color-text-muted: #8b93a3;
+    --ppm-color-canvas: oklch(0.1687 0.0065 271.01); /* #0e0f12 */
+    --ppm-color-surface-1: oklch(0.2047 0.0104 268.17); /* #15171c */
+    --ppm-color-surface-2: oklch(0.2345 0.0124 264.3); /* #1b1e24 */
+    --ppm-color-layer-1: oklch(0.2593 0.0144 261.67); /* #20242b */
+    --ppm-color-layer-1-hover: oklch(0.292 0.016 262); /* #272c34 */
+    --ppm-color-layer-1-selected: oklch(0.325 0.018 262); /* #2f343e */
+    --ppm-color-layer-2: oklch(0.28 0.015 262); /* #252930, no longer darker than layer-1 */
+    --ppm-color-layer-2-hover: oklch(0.31 0.017 262); /* #2c3039 */
+    --ppm-color-layer-2-selected: oklch(0.345 0.019 262); /* #343943 */
+    --ppm-color-layer-3: oklch(0.3 0.016 262); /* #292e36 */
+    --ppm-color-layer-3-hover: oklch(0.33 0.018 262); /* #30363f */
+    --ppm-color-layer-3-selected: oklch(0.355 0.02 262); /* #363c47 */
+    --ppm-color-layer-disabled: oklch(0.3 0.016 262);
+    --ppm-color-alpha-hover: oklch(1 0 0 / 7%);
+    --ppm-color-alpha-active: oklch(1 0 0 / 10%);
+    --ppm-color-alpha-selected: oklch(1 0 0 / 13%);
+    --ppm-color-border: oklch(0.3 0.018 264); /* #292e37, dividers */
+    --ppm-color-border-control: oklch(0.55 0.026 262); /* #697281, >= 3:1 */
+    --ppm-color-border-strong: oklch(0.57 0.026 262); /* #6f7887 */
+    --ppm-color-border-emphasis: oklch(0.62 0.026 262); /* #7e8796 */
+    --ppm-color-selection: oklch(0.7971 0.1339 211.53); /* accent, no longer = focus */
+    --ppm-color-text: oklch(0.9365 0.0087 264.52); /* #e7eaf0 */
+    --ppm-color-text-secondary: oklch(0.82 0.018 261); /* #bec4d0 */
+    --ppm-color-text-muted: oklch(0.765 0.021 258); /* #abb3c0 */
+    --ppm-color-text-placeholder: oklch(0.73 0.022 262); /* #a0a8b6 */
+    --ppm-color-text-disabled: oklch(0.55 0.026 263); /* #6a7281 */
+    --ppm-color-accent-text: oklch(0.7971 0.1339 211.53); /* #22d3ee */
+    --ppm-color-accent-text-hover: oklch(0.8651 0.1153 207.08); /* #67e8f9 */
+    --ppm-color-icon-accent-subtle: oklch(0.8651 0.1153 207.08);
+    --ppm-color-focus: oklch(0.8651 0.1153 207.08); /* #67e8f9 */
+    --ppm-color-focus-gap: var(--ppm-color-surface-1);
 
-    --neutral-black: #0a0b0d;
-    --neutral-100: #0e0f12;
-    --neutral-200: #15171c;
-    --neutral-300: #1b1e24;
-    --neutral-400: #20242b;
-    --neutral-500: #272b34;
-    --neutral-600: #303641;
-    --neutral-700: #3b424f;
-    --neutral-800: #737c8d;
-    --neutral-900: #8b93a3;
-    --neutral-1000: #a4adba;
-    --neutral-1100: #c5cad3;
-    --neutral-1200: #e7eaf0;
-    --neutral-white: #f7f9fc;
-    --brand-100: #082f36;
-    --brand-200: #0b3d45;
-    --brand-300: #0e5661;
-    --brand-400: #117889;
-    --brand-500: #0891b2;
-    --brand-600: #06b6d4;
-    --brand-700: #22d3ee;
-    --brand-800: #67e8f9;
+    --neutral-black: oklch(0.1493 0.0046 264.47); /* #0a0b0d */
+    --neutral-100: oklch(0.1687 0.0065 271.01); /* #0e0f12 */
+    --neutral-200: oklch(0.2047 0.0104 268.17); /* #15171c */
+    --neutral-300: oklch(0.2345 0.0124 264.3); /* #1b1e24 */
+    --neutral-400: oklch(0.2593 0.0144 261.67); /* #20242b */
+    --neutral-500: oklch(0.3 0.018 264); /* #292e37 */
+    --neutral-600: oklch(0.345 0.019 262); /* #343943 */
+    --neutral-700: oklch(0.55 0.026 263); /* #6a7281 */
+    --neutral-800: oklch(0.62 0.026 262); /* #7e8796 */
+    --neutral-900: oklch(0.73 0.022 262); /* #a0a8b6 */
+    --neutral-1000: oklch(0.765 0.021 258); /* #abb3c0 */
+    --neutral-1100: oklch(0.82 0.018 261); /* #bec4d0 */
+    --neutral-1200: oklch(0.9365 0.0087 264.52); /* #e7eaf0 */
+    --neutral-white: oklch(0.9814 0.0045 258.32); /* #f7f9fc */
+    --brand-100: oklch(0.2824 0.0435 212.26); /* #082f36 */
+    --brand-200: oklch(0.3323 0.052 210.79); /* #0b3d45 */
+    --brand-300: oklch(0.4173 0.0676 210.7); /* #0e5661 */
+    --brand-400: oklch(0.5273 0.0883 212.56); /* #117889 */
+    --brand-500: oklch(0.6089 0.1109 221.72); /* #0891b2 */
+    --brand-600: oklch(0.7148 0.1257 215.22); /* #06b6d4 */
+    --brand-700: oklch(0.7971 0.1339 211.53); /* #22d3ee */
+    --brand-800: oklch(0.8651 0.1153 207.08); /* #67e8f9 */
     --brand-900: #a5f3fc;
     --brand-1000: #cffafe;
     --brand-1100: #ecfeff;
     --brand-1200: #f5feff;
     --brand-default: var(--ppm-color-accent);
 
+    /* Upstream maps dark on-color to neutral-1200 (3.96:1 on the pressed danger fill #e7000b); white keeps >= 4.5. */
+    --txt-on-color: var(--neutral-white);
+    --txt-on-accent: oklch(0.2674 0.042 213.14); /* #062b32 */
+  }
+
+  /* ---------------- Semantic bridge (theme-agnostic; resolves per element) ---------------- */
+  :where(html)[data-ppm-brand="enabled"],
+  :where([data-ppm-brand="enabled"]) :is([data-theme*="light"], [data-theme*="dark"]) {
     --bg-canvas: var(--ppm-color-canvas);
     --bg-surface-1: var(--ppm-color-surface-1);
     --bg-surface-2: var(--ppm-color-surface-2);
-    --bg-layer-1: var(--ppm-color-surface-2);
-    --bg-layer-1-hover: var(--ppm-color-layer);
-    --bg-layer-1-active: var(--neutral-500);
-    --bg-layer-1-selected: var(--neutral-500);
-    --bg-layer-2: var(--ppm-color-surface-1);
-    --bg-layer-2-hover: var(--ppm-color-surface-2);
-    --bg-layer-2-active: var(--ppm-color-layer);
-    --bg-layer-2-selected: var(--ppm-color-layer);
-    --bg-layer-3: var(--ppm-color-layer);
-    --bg-layer-3-hover: var(--neutral-500);
-    --bg-layer-3-active: var(--neutral-600);
-    --bg-layer-3-selected: var(--neutral-600);
-    --bg-layer-disabled: var(--neutral-500);
+    --bg-layer-1: var(--ppm-color-layer-1);
+    --bg-layer-1-hover: var(--ppm-color-layer-1-hover);
+    --bg-layer-1-active: var(--ppm-color-layer-1-selected);
+    --bg-layer-1-selected: var(--ppm-color-layer-1-selected);
+    --bg-layer-2: var(--ppm-color-layer-2);
+    --bg-layer-2-hover: var(--ppm-color-layer-2-hover);
+    --bg-layer-2-active: var(--ppm-color-layer-2-selected);
+    --bg-layer-2-selected: var(--ppm-color-layer-2-selected);
+    --bg-layer-3: var(--ppm-color-layer-3);
+    --bg-layer-3-hover: var(--ppm-color-layer-3-hover);
+    --bg-layer-3-active: var(--ppm-color-layer-3-selected);
+    --bg-layer-3-selected: var(--ppm-color-layer-3-selected);
+    --bg-layer-transparent-hover: var(--ppm-color-alpha-hover);
+    --bg-layer-transparent-active: var(--ppm-color-alpha-active);
+    --bg-layer-transparent-selected: var(--ppm-color-alpha-selected);
+    --bg-layer-disabled: var(--ppm-color-layer-disabled);
     --bg-accent-primary: var(--ppm-color-accent);
     --bg-accent-primary-hover: var(--ppm-color-accent-hover);
     --bg-accent-primary-active: var(--ppm-color-accent-active);
     --bg-accent-subtle: var(--brand-100);
     --bg-accent-subtle-hover: var(--brand-200);
     --bg-accent-subtle-active: var(--brand-300);
-    --border-subtle: var(--neutral-500);
-    --border-subtle-1: var(--ppm-color-border);
-    --border-strong: var(--neutral-600);
-    --border-strong-1: var(--ppm-color-border-strong);
-    --border-accent-strong: var(--ppm-color-focus);
-    --border-accent-subtle: var(--brand-400);
     --txt-primary: var(--ppm-color-text);
     --txt-secondary: var(--ppm-color-text-secondary);
     --txt-tertiary: var(--ppm-color-text-muted);
-    --txt-placeholder: var(--neutral-800);
-    --txt-disabled: var(--neutral-700);
-    --txt-accent-primary: var(--ppm-color-accent);
-    --txt-accent-secondary: var(--ppm-color-focus);
-    --txt-on-color: #062b32;
+    --txt-placeholder: var(--ppm-color-text-placeholder);
+    --txt-disabled: var(--ppm-color-text-disabled);
+    --txt-accent-primary: var(--ppm-color-accent-text);
+    --txt-accent-secondary: var(--ppm-color-accent-text-hover);
     --txt-icon-primary: var(--ppm-color-text);
     --txt-icon-secondary: var(--ppm-color-text-secondary);
     --txt-icon-tertiary: var(--ppm-color-text-muted);
-    --txt-icon-placeholder: var(--neutral-800);
-    --txt-icon-disabled: var(--neutral-700);
-    --txt-icon-accent-primary: var(--ppm-color-accent);
-    --txt-icon-accent-subtle: var(--ppm-color-focus);
-    --txt-link-primary: var(--ppm-color-accent);
-    --txt-link-primary-hover: var(--ppm-color-focus);
+    --txt-icon-placeholder: var(--ppm-color-text-placeholder);
+    --txt-icon-disabled: var(--ppm-color-text-disabled);
+    --txt-icon-accent-primary: var(--ppm-color-accent-text);
+    --txt-icon-accent-subtle: var(--ppm-color-icon-accent-subtle);
+    --txt-link-primary: var(--ppm-color-accent-text);
+    --txt-link-primary-hover: var(--ppm-color-accent-text-hover);
+  }
+
+  /* Borders only outside Plane's high-contrast themes (their @variant blocks own --border-*). */
+  :where(html)[data-ppm-brand="enabled"]:not([data-theme$="-contrast"]),
+  :where([data-ppm-brand="enabled"]) :is([data-theme="light"], [data-theme="dark"]) {
+    --border-subtle: var(--ppm-color-border);
+    --border-subtle-1: var(--ppm-color-border-control);
+    --border-strong: var(--ppm-color-border-strong);
+    --border-strong-1: var(--ppm-color-border-emphasis);
+    --border-accent-strong: var(--ppm-color-selection);
+    --border-accent-subtle: var(--brand-300);
+  }
+
+  /* Dark ink on bright fills for upstream call sites that still use text-on-color.
+     Works for `.text-on-color` (compiled as color: var(--txt-on-color)) on the same element or a descendant.
+     It does NOT reach var(--text-color-on-color) consumers (resolved at :root) - those are switched explicitly. */
+  :where([data-ppm-brand="enabled"])
+    :where(
+      .bg-accent-primary,
+      .bg-accent-primary\/80,
+      .bg-accent-primary\/90,
+      .bg-success-primary,
+      .bg-warning-primary
+    ) {
+    --txt-on-color: var(--txt-on-accent);
   }
 
   html[data-ppm-brand="enabled"],
@@ -225,9 +263,68 @@
     font-family: var(--ppm-font-mono);
   }
 
-  html[data-ppm-brand="enabled"] :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  /* Text-entry controls keep the base-layer ring: utilities such as focus:ring-0 may still opt out
+     (borderless search fields in modals, issue title), exactly as before UX0.2. */
+  html[data-ppm-brand="enabled"] :where(input:not([type="hidden"]), select, textarea):focus-visible {
     box-shadow:
-      0 0 0 2px var(--bg-canvas),
+      0 0 0 2px var(--ppm-color-focus-gap),
       0 0 0 4px var(--ppm-color-focus);
   }
+}
+
+@layer utilities {
+  /* Focus ring for everything that is not text entry. Specificity (0,2,1) in the utilities layer beats
+     shadow-raised-*, ring-0 (0,1,0) and focus-visible:outline-none / focus:ring-* (0,2,0); it composes with
+     Tailwind's --tw-* shadow variables, so elevation shadows survive. Unlayered component CSS
+     (ppm-canvas/canvas.css, tldraw.css) still wins where it styles focus itself. */
+  html[data-ppm-brand="enabled"]
+    :where(
+      a[href],
+      button,
+      summary,
+      input:is(
+        [type="checkbox"],
+        [type="radio"],
+        [type="button"],
+        [type="submit"],
+        [type="reset"],
+        [type="file"],
+        [type="range"],
+        [type="color"]
+      ),
+      [tabindex]:not([tabindex="-1"], input, select, textarea, [contenteditable])
+    ):focus-visible {
+    --tw-ring-offset-shadow: 0 0 0 2px var(--ppm-color-focus-gap);
+    --tw-ring-shadow: 0 0 0 4px var(--ppm-color-focus);
+    box-shadow:
+      var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000), var(--tw-ring-offset-shadow),
+      var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+  }
+
+  /* Visually hidden inputs (file upload inside <label>): ring the label. */
+  html[data-ppm-brand="enabled"] :where(label):has(> :where(input.sr-only):focus-visible) {
+    box-shadow:
+      0 0 0 2px var(--ppm-color-focus-gap),
+      0 0 0 4px var(--ppm-color-focus);
+  }
+
+  @media (forced-colors: active) {
+    html[data-ppm-brand="enabled"]
+      :where(a[href], button, summary, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+      outline: 2px solid CanvasText;
+      outline-offset: 2px;
+    }
+  }
+}
+
+/* Editor font override, deliberately OUTSIDE every @layer: the editor's own CSS
+   (apps/web .editor-container styling, ProseMirror) is unlayered and wins over
+   anything declared in @layer base, so this bridge must be unlayered too. */
+html[data-ppm-brand="enabled"] .editor-container,
+html[data-ppm-brand="enabled"] .editor-container.sans-serif {
+  --font-style: var(--ppm-font-sans);
+}
+
+html[data-ppm-brand="enabled"] .ProseMirror pre {
+  font-family: var(--ppm-font-mono);
 }

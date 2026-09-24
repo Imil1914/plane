@@ -11,13 +11,14 @@
     ".": "./dist/index.mjs",
     "./package.json": "./package.json",
     "./tokens.css": "./src/tokens.css",
+    "./i18n-overlay.json": "./src/locales/i18n-overlay.json",
     "./assets/mark.svg": "./assets/mark.svg",
     "./assets/logo.svg": "./assets/logo.svg"
   },
   "scripts": {
     "dev": "tsdown --watch --no-clean",
     "build": "tsdown",
-    "test": "vitest run && node scripts/audit-user-facing-brand.mjs",
+    "test": "vitest run && node scripts/audit-user-facing-brand.mjs && node scripts/audit-tailwind-classes.mjs",
     "check:lint": "oxlint .",
     "check:types": "tsc --noEmit",
     "check:format": "oxfmt --check src scripts tsdown.config.ts package.json tsconfig.json build-manifest.json",

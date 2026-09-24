@@ -12,11 +12,14 @@ import { useTranslation } from "@plane/i18n";
 import type { TWorkItemFilterCondition } from "@plane/shared-state";
 import type { ICycle } from "@plane/types";
 import { LinearProgressIndicator, Loader } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // assets
 import darkProgressAsset from "@/app/assets/empty-state/active-cycle/progress-dark.webp?url";
 import lightProgressAsset from "@/app/assets/empty-state/active-cycle/progress-light.webp?url";
 // components
 import { SimpleEmptyState } from "@/components/empty-state/simple-empty-state-root";
+// hooks
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 export type ActiveCycleProgressProps = {
   cycle: ICycle | null;
@@ -31,6 +34,8 @@ export const ActiveCycleProgress = observer(function ActiveCycleProgress(props: 
   const { resolvedTheme } = useTheme();
   // plane hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // derived values
   const progressIndicatorData = PROGRESS_STATE_GROUPS_DETAILS.map((group, index) => ({
     id: index,
@@ -55,9 +60,15 @@ export const ActiveCycleProgress = observer(function ActiveCycleProgress(props: 
           <h3 className="text-14 font-semibold text-tertiary">{t("project_cycles.active_cycle.progress")}</h3>
           {cycle.total_issues > 0 && (
             <span className="flex gap-1 rounded-xs px-3 py-1 text-13 font-medium whitespace-nowrap text-placeholder">
-              {`${cycle.completed_issues + cycle.cancelled_issues}/${cycle.total_issues - cycle.cancelled_issues} ${
-                cycle.completed_issues + cycle.cancelled_issues > 1 ? "Work items" : "Work item"
-              } closed`}
+              {(() => {
+                const closedCount = cycle.completed_issues + cycle.cancelled_issues;
+                const totalCount = cycle.total_issues - cycle.cancelled_issues;
+                return isPpmShell
+                  ? ppmT("cycle.work_items_closed")
+                      .replace("{done}", String(closedCount))
+                      .replace("{total}", String(totalCount))
+                  : `${closedCount}/${totalCount} ${closedCount > 1 ? "Work items" : "Work item"} closed`;
+              })()}
             </span>
           )}
         </div>
@@ -83,11 +94,19 @@ export const ActiveCycleProgress = observer(function ActiveCycleProgress(props: 
                           backgroundColor: PROGRESS_STATE_GROUPS_DETAILS[index].color,
                         }}
                       />
-                      <span className="w-16 font-medium text-tertiary capitalize">{group}</span>
+                      {/* CSS `capitalize` title-cases every word, which is correct for the raw
+                          English state key (e.g. "unstarted" -> "Unstarted") but wrongly
+                          title-cases the already-correctly-cased multi-word RU translation
+                          (e.g. "В процессе" -> "В Процессе"), so it only applies to the fallback. */}
+                      <span className={`w-16 font-medium text-tertiary ${isPpmShell ? "" : "capitalize"}`}>
+                        {isPpmShell ? t(`workspace_projects.state.${group}`) : group}
+                      </span>
                     </div>
-                    <span className="text-tertiary">{`${groupedIssues[group]} ${
-                      groupedIssues[group] > 1 ? "Work items" : "Work item"
-                    }`}</span>
+                    <span className="text-tertiary">
+                      {isPpmShell
+                        ? ppmT("cycle.work_items_count").replace("{count}", String(groupedIssues[group]))
+                        : `${groupedIssues[group]} ${groupedIssues[group] > 1 ? "Work items" : "Work item"}`}
+                    </span>
                   </div>
                 </div>
               )}
@@ -96,9 +115,11 @@ export const ActiveCycleProgress = observer(function ActiveCycleProgress(props: 
           {cycle.cancelled_issues > 0 && (
             <span className="flex items-center gap-2 text-13 text-tertiary">
               <span>
-                {`${cycle.cancelled_issues} cancelled ${
-                  cycle.cancelled_issues > 1 ? "work items are" : "work item is"
-                } excluded from this report.`}{" "}
+                {isPpmShell
+                  ? ppmT("cycle.work_items_excluded").replace("{count}", String(cycle.cancelled_issues))
+                  : `${cycle.cancelled_issues} cancelled ${
+                      cycle.cancelled_issues > 1 ? "work items are" : "work item is"
+                    } excluded from this report.`}{" "}
               </span>
             </span>
           )}

@@ -20,6 +20,7 @@ import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { PlusIcon } from "@plane/propel/icons";
 import { EUserWorkspaceRoles } from "@plane/types";
+import { isPpmShellEnabled } from "@ppm/brand";
 // assets
 import darkStickiesAsset from "@/app/assets/empty-state/stickies/stickies-dark.webp?url";
 import lightStickiesAsset from "@/app/assets/empty-state/stickies/stickies-light.webp?url";
@@ -69,8 +70,18 @@ export const StickiesList = observer(function StickiesList(props: TProps) {
     [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER, EUserWorkspaceRoles.GUEST],
     EUserPermissionsLevel.WORKSPACE
   );
-  const stickiesResolvedPath = resolvedTheme === "light" ? lightStickiesAsset : darkStickiesAsset;
-  const stickiesSearchResolvedPath = resolvedTheme === "light" ? lightStickiesSearchAsset : darkStickiesSearchAsset;
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  // PPM drops the upstream illustration and its baked-in branding text, so no asset is passed while the shell is on.
+  const stickiesResolvedPath = isPpmShell
+    ? undefined
+    : resolvedTheme === "light"
+      ? lightStickiesAsset
+      : darkStickiesAsset;
+  const stickiesSearchResolvedPath = isPpmShell
+    ? undefined
+    : resolvedTheme === "light"
+      ? lightStickiesSearchAsset
+      : darkStickiesSearchAsset;
   const masonryRef = useRef<any>(null);
 
   const handleLayout = () => {

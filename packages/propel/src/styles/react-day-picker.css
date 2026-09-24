@@ -16,7 +16,7 @@
     /* Background color for the hovered/focused, already selected elements. */
     --rdp-outline: 2px solid var(--rdp-accent-color);
     /* Outline border for focused elements */
-    --rdp-selected-color: var(--text-color-on-color);
+    --rdp-selected-color: var(--txt-on-accent, var(--text-color-on-color));
     /* Color of selected day text */
 
     background: transparent;

@@ -4,13 +4,34 @@
  * See the LICENSE file for details.
  */
 
-import { BarChart2, Briefcase, FileText, Home, Inbox, Layers, PenSquare, Settings } from "lucide-react";
+import {
+  BarChart2,
+  Briefcase,
+  Code2,
+  FileText,
+  Gauge,
+  Home,
+  Inbox,
+  Layers,
+  Network,
+  PenSquare,
+  Settings,
+} from "lucide-react";
 // plane imports
 import { EUserPermissionsLevel } from "@plane/constants";
-import { ArchiveIcon, UserActivityIcon, LayersIcon, ContrastIcon, DiceIcon, Intake } from "@plane/propel/icons";
+import {
+  ArchiveIcon,
+  ContrastIcon,
+  DiceIcon,
+  Intake,
+  LayersIcon,
+  PageIcon,
+  UserActivityIcon,
+} from "@plane/propel/icons";
 import type { ICycle, IModule, IPartialProject, IProjectView, IWorkspace } from "@plane/types";
 import { EUserProjectRoles, EUserWorkspaceRoles } from "@plane/types";
-import { isPpmShellEnabled } from "@ppm/brand";
+import { isPpmShellEnabled, PPM_COMMAND_KEYWORDS } from "@ppm/brand";
+import { isPpmCanvasEnabled } from "@ppm/canvas";
 // components
 import type { TPowerKCommandConfig, TPowerKContext } from "@/components/power-k/core/types";
 import { handlePowerKNavigate } from "@/components/power-k/utils/navigation";
@@ -37,6 +58,8 @@ export type TPowerKNavigationCommandKeys =
   | "nav_workspace_archives"
   | "open_workspace_setting"
   | "nav_workspace_settings"
+  | "nav_project_overview"
+  | "nav_project_canvas"
   | "nav_project_work_items"
   | "open_project_cycle"
   | "nav_project_cycles"
@@ -46,6 +69,8 @@ export type TPowerKNavigationCommandKeys =
   | "nav_project_views"
   | "nav_project_pages"
   | "nav_project_intake"
+  | "nav_project_knowledge"
+  | "nav_project_code"
   | "nav_project_archives"
   | "open_project_setting"
   | "nav_project_settings";
@@ -66,6 +91,7 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
   const { getPartialProjectById } = useProject();
   const { isGlobalAdmin } = usePpmAdminAccess();
   const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const isPpmCanvas = isPpmCanvasEnabled(process.env.PPM_CANVAS_ENABLED, isPpmShell);
   // derived values
   const hasWorkspaceMemberLevelPermissions = (ctx: TPowerKContext) =>
     allowPermissions(
@@ -120,6 +146,7 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
       i18n_title: "power_k.navigation_actions.nav_inbox",
       icon: Inbox,
       keySequence: "gx",
+      keywords: isPpmShell ? PPM_COMMAND_KEYWORDS.inbox : undefined,
       action: (ctx) => handlePowerKNavigate(ctx, [ctx.params.workspaceSlug?.toString(), "notifications"]),
       isEnabled: (ctx) => baseWorkspaceConditions(ctx),
       isVisible: (ctx) => baseWorkspaceConditions(ctx),
@@ -304,6 +331,44 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
         baseWorkspaceConditions(ctx) && !baseProjectConditions(ctx) && canAccessWorkspaceAdministration(ctx),
       closeOnSelect: true,
     },
+    nav_project_overview: {
+      id: "nav_project_overview",
+      type: "action",
+      group: "navigation",
+      i18n_title: "power_k.navigation_actions.nav_project_overview",
+      icon: Gauge,
+      keySequence: "go",
+      keywords: isPpmShell ? PPM_COMMAND_KEYWORDS.overview : undefined,
+      action: (ctx) =>
+        handlePowerKNavigate(ctx, [
+          ctx.params.workspaceSlug?.toString(),
+          "projects",
+          ctx.params.projectId?.toString(),
+          "overview",
+        ]),
+      isEnabled: (ctx) => isPpmShell && baseProjectConditions(ctx),
+      isVisible: (ctx) => isPpmShell && baseProjectConditions(ctx),
+      closeOnSelect: true,
+    },
+    nav_project_canvas: {
+      id: "nav_project_canvas",
+      type: "action",
+      group: "navigation",
+      i18n_title: "power_k.navigation_actions.nav_project_canvas",
+      icon: Network,
+      keySequence: "gb",
+      keywords: isPpmShell ? PPM_COMMAND_KEYWORDS.canvas : undefined,
+      action: (ctx) =>
+        handlePowerKNavigate(ctx, [
+          ctx.params.workspaceSlug?.toString(),
+          "projects",
+          ctx.params.projectId?.toString(),
+          "brain",
+        ]),
+      isEnabled: (ctx) => isPpmShell && isPpmCanvas && baseProjectConditions(ctx),
+      isVisible: (ctx) => isPpmShell && isPpmCanvas && baseProjectConditions(ctx),
+      closeOnSelect: true,
+    },
     nav_project_work_items: {
       id: "nav_project_work_items",
       type: "action",
@@ -311,6 +376,7 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
       i18n_title: "power_k.navigation_actions.nav_project_work_items",
       icon: LayersIcon,
       keySequence: "gi",
+      keywords: isPpmShell ? PPM_COMMAND_KEYWORDS.work_items : undefined,
       action: (ctx) =>
         handlePowerKNavigate(ctx, [
           ctx.params.workspaceSlug?.toString(),
@@ -353,6 +419,7 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
       i18n_title: "power_k.navigation_actions.nav_project_cycles",
       icon: ContrastIcon,
       keySequence: "gc",
+      keywords: isPpmShell ? PPM_COMMAND_KEYWORDS.cycles : undefined,
       action: (ctx) =>
         handlePowerKNavigate(ctx, [
           ctx.params.workspaceSlug?.toString(),
@@ -397,6 +464,7 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
       i18n_title: "power_k.navigation_actions.nav_project_modules",
       icon: DiceIcon,
       keySequence: "gm",
+      keywords: isPpmShell ? PPM_COMMAND_KEYWORDS.modules : undefined,
       action: (ctx) =>
         handlePowerKNavigate(ctx, [
           ctx.params.workspaceSlug?.toString(),
@@ -439,6 +507,7 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
       i18n_title: "power_k.navigation_actions.nav_project_views",
       icon: Layers,
       keySequence: "gv",
+      keywords: isPpmShell ? PPM_COMMAND_KEYWORDS.views : undefined,
       action: (ctx) =>
         handlePowerKNavigate(ctx, [
           ctx.params.workspaceSlug?.toString(),
@@ -457,6 +526,7 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
       i18n_title: "power_k.navigation_actions.nav_project_pages",
       icon: FileText,
       keySequence: "gd",
+      keywords: isPpmShell ? PPM_COMMAND_KEYWORDS.pages : undefined,
       action: (ctx) =>
         handlePowerKNavigate(ctx, [
           ctx.params.workspaceSlug?.toString(),
@@ -475,6 +545,7 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
       i18n_title: "power_k.navigation_actions.nav_project_intake",
       icon: Intake,
       keySequence: "gk",
+      keywords: isPpmShell ? PPM_COMMAND_KEYWORDS.intake : undefined,
       action: (ctx) =>
         handlePowerKNavigate(ctx, [
           ctx.params.workspaceSlug?.toString(),
@@ -484,6 +555,44 @@ export const usePowerKNavigationCommandsRecord = (): Record<TPowerKNavigationCom
         ]),
       isEnabled: (ctx) => baseProjectConditions(ctx) && !!getContextProject(ctx)?.inbox_view,
       isVisible: (ctx) => baseProjectConditions(ctx) && !!getContextProject(ctx)?.inbox_view,
+      closeOnSelect: true,
+    },
+    nav_project_knowledge: {
+      id: "nav_project_knowledge",
+      type: "action",
+      group: "navigation",
+      i18n_title: "power_k.navigation_actions.nav_project_knowledge",
+      icon: PageIcon,
+      keySequence: "gf",
+      keywords: isPpmShell ? PPM_COMMAND_KEYWORDS.knowledge : undefined,
+      action: (ctx) =>
+        handlePowerKNavigate(ctx, [
+          ctx.params.workspaceSlug?.toString(),
+          "projects",
+          ctx.params.projectId?.toString(),
+          "knowledge",
+        ]),
+      isEnabled: (ctx) => isPpmShell && baseProjectConditions(ctx),
+      isVisible: (ctx) => isPpmShell && baseProjectConditions(ctx),
+      closeOnSelect: true,
+    },
+    nav_project_code: {
+      id: "nav_project_code",
+      type: "action",
+      group: "navigation",
+      i18n_title: "power_k.navigation_actions.nav_project_code",
+      icon: Code2,
+      keySequence: "gg",
+      keywords: isPpmShell ? PPM_COMMAND_KEYWORDS.code : undefined,
+      action: (ctx) =>
+        handlePowerKNavigate(ctx, [
+          ctx.params.workspaceSlug?.toString(),
+          "projects",
+          ctx.params.projectId?.toString(),
+          "code",
+        ]),
+      isEnabled: (ctx) => isPpmShell && baseProjectConditions(ctx),
+      isVisible: (ctx) => isPpmShell && baseProjectConditions(ctx),
       closeOnSelect: true,
     },
     nav_project_archives: {

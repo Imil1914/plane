@@ -38,7 +38,7 @@ export const HelpMenuRoot = observer(function HelpMenuRoot() {
         customButton={
           <>
             <HelpCircle className={isPpmShell ? "size-4" : "size-5"} aria-hidden="true" />
-            {isPpmShell && <span>{ppmT("help.title")}</span>}
+            {isPpmShell && <span className="hidden sm:inline">{ppmT("help.title")}</span>}
           </>
         }
         customButtonClassName={

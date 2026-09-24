@@ -21,9 +21,9 @@ import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifi
 
 export type TPowerKSearchResultGroupDetails = {
   icon?: React.ComponentType<{ className?: string }>;
+  i18n_title: string;
   itemName: (item: any) => React.ReactNode;
   path: (item: any, projectId: string | undefined) => string;
-  title: string;
 };
 
 export const POWER_K_SEARCH_RESULTS_GROUPS_MAP: Record<TPowerKSearchResultsKeys, TPowerKSearchResultGroupDetails> = {
@@ -36,7 +36,7 @@ export const POWER_K_SEARCH_RESULTS_GROUPS_MAP: Record<TPowerKSearchResultsKeys,
     ),
     path: (cycle: IWorkspaceDefaultSearchResult) =>
       `/${cycle?.workspace__slug}/projects/${cycle?.project_id}/cycles/${cycle?.id}`,
-    title: "Cycles",
+    i18n_title: "cycles",
   },
   issue: {
     itemName: (workItem: IWorkspaceIssueSearchResult) => (
@@ -59,7 +59,7 @@ export const POWER_K_SEARCH_RESULTS_GROUPS_MAP: Record<TPowerKSearchResultsKeys,
         projectIdentifier: workItem.project__identifier,
         sequenceId: workItem?.sequence_id,
       }),
-    title: "Work items",
+    i18n_title: "work_items",
   },
   issue_view: {
     icon: Layers,
@@ -70,7 +70,7 @@ export const POWER_K_SEARCH_RESULTS_GROUPS_MAP: Record<TPowerKSearchResultsKeys,
     ),
     path: (view: IWorkspaceDefaultSearchResult) =>
       `/${view?.workspace__slug}/projects/${view?.project_id}/views/${view?.id}`,
-    title: "Views",
+    i18n_title: "views",
   },
   module: {
     icon: DiceIcon,
@@ -81,7 +81,7 @@ export const POWER_K_SEARCH_RESULTS_GROUPS_MAP: Record<TPowerKSearchResultsKeys,
     ),
     path: (module: IWorkspaceDefaultSearchResult) =>
       `/${module?.workspace__slug}/projects/${module?.project_id}/modules/${module?.id}`,
-    title: "Modules",
+    i18n_title: "modules",
   },
   page: {
     icon: FileText,
@@ -97,18 +97,18 @@ export const POWER_K_SEARCH_RESULTS_GROUPS_MAP: Record<TPowerKSearchResultsKeys,
         ? `/${page?.workspace__slug}/projects/${redirectProjectId}/pages/${page?.id}`
         : `/${page?.workspace__slug}/wiki/${page?.id}`;
     },
-    title: "Pages",
+    i18n_title: "pages",
   },
   project: {
     icon: Briefcase,
     itemName: (project: IWorkspaceProjectSearchResult) => project?.name,
     path: (project: IWorkspaceProjectSearchResult) => `/${project?.workspace__slug}/projects/${project?.id}/issues/`,
-    title: "Projects",
+    i18n_title: "projects",
   },
   workspace: {
     icon: LayoutGrid,
     itemName: (workspace: IWorkspaceSearchResult) => workspace?.name,
     path: (workspace: IWorkspaceSearchResult) => `/${workspace?.slug}/`,
-    title: "Workspaces",
+    i18n_title: "workspaces",
   },
 };

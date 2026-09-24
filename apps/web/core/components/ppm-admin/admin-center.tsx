@@ -64,7 +64,7 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="flex min-h-72 flex-col items-center justify-center rounded-xl border border-subtle bg-surface-2 p-8 text-center">
       <Activity className="size-8 text-danger-primary" aria-hidden="true" />
-      <p className="text-15 mt-3 font-semibold text-primary">{ppmT("admin.error")}</p>
+      <p className="mt-3 text-16 font-semibold text-primary">{ppmT("admin.error")}</p>
       <Button className="mt-4" variant="secondary" onClick={onRetry}>
         {ppmT("admin.retry")}
       </Button>
@@ -109,7 +109,7 @@ function IntegrationBadge({
       <Icon className={`size-4 ${isReady ? "text-success-primary" : "text-tertiary"}`} aria-hidden="true" />
       <div className="min-w-0">
         <p className="truncate text-11 font-medium text-primary">{label}</p>
-        <p className="truncate text-10 text-secondary">
+        <p className="truncate text-11 text-secondary">
           {STATUS_KEYS[status] ? ppmT(STATUS_KEYS[status]) : status}
           {detail ? ` · ${detail}` : ""}
         </p>
@@ -142,8 +142,8 @@ function ProjectRow({ project }: { project: TPpmAdminProject }) {
       <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-start">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-mono rounded bg-layer-1 px-2 py-1 text-10 text-secondary">{project.identifier}</span>
-            <span className="text-10 font-semibold tracking-wide text-tertiary uppercase">
+            <span className="rounded bg-layer-1 px-2 py-1 font-code text-11 text-secondary">{project.identifier}</span>
+            <span className="text-11 font-semibold tracking-wide text-tertiary uppercase">
               {STATUS_KEYS[project.status] ? ppmT(STATUS_KEYS[project.status]) : project.status}
             </span>
           </div>
@@ -160,7 +160,7 @@ function ProjectRow({ project }: { project: TPpmAdminProject }) {
           {ppmT("admin.open_project")}
         </Button>
       </div>
-      {openError && <p className="mt-2 text-11 text-danger-primary">{openError}</p>}
+      {openError && <p className="mt-2 text-12 text-danger-primary">{openError}</p>}
       <div className="mt-4">
         <p className="mb-2 text-11 font-semibold tracking-wide text-tertiary uppercase">{ppmT("admin.integrations")}</p>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -234,11 +234,11 @@ function UserRow({ user }: { user: TPpmAdminUser }) {
         <div className="flex flex-wrap items-center gap-2">
           <p className="truncate text-14 font-semibold text-primary">{user.display_name || user.email}</p>
           {user.is_global_admin && (
-            <span className="rounded-full bg-accent-primary/15 px-2 py-0.5 text-10 font-semibold text-accent-primary">
+            <span className="rounded-full bg-accent-primary/15 px-2 py-0.5 text-11 font-semibold text-accent-primary">
               {ppmT("admin.global_admin")}
             </span>
           )}
-          <span className={`text-10 font-semibold ${user.is_active ? "text-success-primary" : "text-danger-primary"}`}>
+          <span className={`text-11 font-semibold ${user.is_active ? "text-success-primary" : "text-danger-primary"}`}>
             {user.is_active ? ppmT("admin.active_user") : ppmT("admin.inactive_user")}
           </span>
         </div>
@@ -302,7 +302,7 @@ function AuditRow({ event }: { event: TPpmAdminAudit }) {
   return (
     <div className="grid gap-2 rounded-xl border border-subtle bg-surface-2 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
       <div className="min-w-0">
-        <p className="font-mono text-12 font-semibold text-primary">{event.action}</p>
+        <p className="font-code text-12 font-semibold text-primary">{event.action}</p>
         <p className="mt-1 truncate text-12 text-secondary">
           {event.actor.display_name || event.actor.email} · {event.method} {event.path}
         </p>
@@ -390,9 +390,9 @@ function ReauthenticationCard({
         </div>
         <div>
           <h2 className="text-13 font-semibold text-primary">{ppmT("admin.reauth_title")}</h2>
-          <p className="mt-1 text-11 leading-5 text-secondary">{ppmT("admin.reauth_description")}</p>
+          <p className="mt-1 text-12 leading-5 text-secondary">{ppmT("admin.reauth_description")}</p>
           {reauthenticatedUntil && (
-            <p className="mt-1 text-11 font-medium text-success-primary">
+            <p className="mt-1 text-12 font-medium text-success-primary">
               {ppmT("admin.confirmed_until")}: {formatDate(reauthenticatedUntil)}
             </p>
           )}
@@ -412,7 +412,7 @@ function ReauthenticationCard({
         </Button>
       </div>
       {message && (
-        <p className={`mt-2 text-11 ${isError ? "text-danger-primary" : "text-success-primary"}`}>{message}</p>
+        <p className={`mt-2 text-12 ${isError ? "text-danger-primary" : "text-success-primary"}`}>{message}</p>
       )}
     </form>
   );
@@ -439,7 +439,7 @@ export function PpmAdminCenter() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-canvas p-6">
         <PageHead title={ppmT("admin.access_denied")} />
-        <div className="shadow-sm max-w-lg rounded-2xl border border-subtle bg-surface-2 p-8 text-center">
+        <div className="max-w-lg rounded-2xl border border-subtle bg-surface-2 p-8 text-center shadow-raised-100">
           <ShieldCheck className="mx-auto size-10 text-tertiary" aria-hidden="true" />
           <h1 className="mt-4 text-20 font-semibold text-primary">{ppmT("admin.access_denied")}</h1>
           <p className="mt-2 text-13 leading-6 text-secondary">{ppmT("admin.access_denied_description")}</p>
@@ -491,8 +491,8 @@ export function PpmAdminCenter() {
                 onClick={() => setTab(item.id)}
                 className={`flex min-w-max items-center gap-2 rounded-lg px-4 py-2.5 text-13 font-medium transition-colors ${
                   isActive
-                    ? "shadow-sm bg-layer-1 text-primary"
-                    : "text-secondary hover:bg-layer-1/60 hover:text-primary"
+                    ? "bg-layer-1-selected text-primary"
+                    : "text-secondary hover:bg-layer-1-hover hover:text-primary"
                 }`}
               >
                 <Icon className="size-4" aria-hidden="true" />

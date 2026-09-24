@@ -12,6 +12,7 @@ import { useTheme } from "next-themes";
 import { useTranslation } from "@plane/i18n";
 import type { ICycle, TCycleEstimateType } from "@plane/types";
 import { Loader } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // assets
 import darkChartAsset from "@/app/assets/empty-state/active-cycle/chart-dark.webp?url";
 import lightChartAsset from "@/app/assets/empty-state/active-cycle/chart-light.webp?url";
@@ -20,6 +21,7 @@ import ProgressChart from "@/components/core/sidebar/progress-chart";
 import { SimpleEmptyState } from "@/components/empty-state/simple-empty-state-root";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { EstimateTypeDropdown } from "../dropdowns/estimate-type-dropdown";
 
 export type ActiveCycleProductivityProps = {
@@ -34,6 +36,8 @@ export const ActiveCycleProductivity = observer(function ActiveCycleProductivity
   const { resolvedTheme } = useTheme();
   // plane hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // hooks
   const { getEstimateTypeByCycleId, setEstimateType } = useCycle();
   // derived values
@@ -64,9 +68,24 @@ export const ActiveCycleProductivity = observer(function ActiveCycleProductivity
             <div className="h-full w-full px-2">
               <div className="flex items-center justify-end gap-4 py-1 text-11 text-tertiary">
                 {estimateType === "points" ? (
-                  <span>{`Pending points - ${cycle.backlog_estimate_points + cycle.unstarted_estimate_points + cycle.started_estimate_points}`}</span>
+                  <span>
+                    {(() => {
+                      const pendingPoints =
+                        cycle.backlog_estimate_points + cycle.unstarted_estimate_points + cycle.started_estimate_points;
+                      return isPpmShell
+                        ? ppmT("cycle.pending_points").replace("{count}", String(pendingPoints))
+                        : `Pending points - ${pendingPoints}`;
+                    })()}
+                  </span>
                 ) : (
-                  <span>{`Pending work items - ${cycle.backlog_issues + cycle.unstarted_issues + cycle.started_issues}`}</span>
+                  <span>
+                    {(() => {
+                      const pendingWorkItems = cycle.backlog_issues + cycle.unstarted_issues + cycle.started_issues;
+                      return isPpmShell
+                        ? ppmT("cycle.pending_work_items").replace("{count}", String(pendingWorkItems))
+                        : `Pending work items - ${pendingWorkItems}`;
+                    })()}
+                  </span>
                 )}
               </div>
 
@@ -78,12 +97,20 @@ export const ActiveCycleProductivity = observer(function ActiveCycleProductivity
                         distribution={completionChartDistributionData}
                         totalIssues={cycle.total_estimate_points || 0}
                         plotTitle={"points"}
+                        currentLabel={isPpmShell ? ppmT("cycle.chart_current_points") : undefined}
+                        idealLabel={isPpmShell ? ppmT("cycle.chart_ideal_points") : undefined}
+                        dateAxisLabel={isPpmShell ? ppmT("cycle.chart_axis_date") : undefined}
+                        completionAxisLabel={isPpmShell ? ppmT("cycle.chart_axis_completion") : undefined}
                       />
                     ) : (
                       <ProgressChart
                         distribution={completionChartDistributionData}
                         totalIssues={cycle.total_issues || 0}
                         plotTitle={"work items"}
+                        currentLabel={isPpmShell ? ppmT("cycle.chart_current_work_items") : undefined}
+                        idealLabel={isPpmShell ? ppmT("cycle.chart_ideal_work_items") : undefined}
+                        dateAxisLabel={isPpmShell ? ppmT("cycle.chart_axis_date") : undefined}
+                        completionAxisLabel={isPpmShell ? ppmT("cycle.chart_axis_completion") : undefined}
                       />
                     )}
                   </Fragment>

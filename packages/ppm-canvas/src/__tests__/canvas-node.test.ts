@@ -18,6 +18,7 @@ import {
   isPpmAntyFlowShellEnabled,
   isPpmCanvasEnabled,
   isPpmMermaidSourceSafe,
+  isPpmProjectAskEnabled,
   isSamePpmOrchestratorProjection,
   mergePpmOrchestratorNode,
   mergePpmOrchestratorTrace,
@@ -1125,6 +1126,12 @@ describe("PPM Canvas project boundary", () => {
     expect(isPpmAntyFlowShellEnabled(undefined)).toBe(true);
     expect(isPpmAntyFlowShellEnabled("off")).toBe(false);
     expect(isPpmAntyFlowShellEnabled("1")).toBe(true);
+  });
+
+  it("keeps Ask Project agents hidden unless explicitly enabled", () => {
+    for (const value of [undefined, "", "0", "off", "false", "maybe"])
+      expect(isPpmProjectAskEnabled(value)).toBe(false);
+    for (const value of ["1", " TRUE ", "on", "yes", "enabled"]) expect(isPpmProjectAskEnabled(value)).toBe(true);
   });
 });
 

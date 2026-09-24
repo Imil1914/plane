@@ -11,6 +11,7 @@ import { useParams } from "next/navigation";
 // hooks
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // power-k
 import type { TPowerKCommandConfig, TPowerKContext } from "@/components/power-k/core/types";
 import { ProjectsAppPowerKCommandsList } from "@/components/power-k/ui/modal/commands-list";
@@ -23,6 +24,7 @@ import { useExpandableSearch } from "@/hooks/use-expandable-search";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 const COMMAND_LIST_ID = "top-nav-command-list";
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 export const TopNavPowerK = observer(() => {
   // router
@@ -142,8 +144,8 @@ export const TopNavPowerK = observer(() => {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // Cmd/Ctrl+K closes the search dropdown
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      // Cmd/Ctrl+K closes the search dropdown (matched by physical key, any keyboard layout)
+      if ((e.metaKey || e.ctrlKey) && e.code === "KeyK") {
         e.preventDefault();
         closePanel();
         return;
@@ -213,9 +215,12 @@ export const TopNavPowerK = observer(() => {
   return (
     <div ref={containerRef} className="relative">
       <div
-        className={cn("relative z-30 flex w-[364px] items-center transition-all duration-300 ease-in-out", {
-          "w-[554px]": isOpen,
-        })}
+        className={cn(
+          "relative z-30 flex w-[364px] max-w-[calc(100vw-2rem)] items-center transition-all duration-300 ease-in-out",
+          {
+            "w-[554px]": isOpen,
+          }
+        )}
       >
         <label
           htmlFor="top-nav-command-input"
@@ -245,14 +250,14 @@ export const TopNavPowerK = observer(() => {
             aria-expanded={isOpen}
             aria-label={ppmT("navigation.search_commands")}
             placeholder={ppmT("navigation.search_commands")}
-            className="placeholder-text-placeholder min-w-0 flex-1 bg-transparent text-13 text-primary outline-none"
+            className="min-w-0 flex-1 bg-transparent text-13 text-primary outline-none placeholder:text-placeholder"
           />
           {searchTerm && (
             <button
               type="button"
               aria-label={ppmT("actions.clear_search")}
               onClick={handleClear}
-              className="focus-visible:outline-accent-primary ml-2 shrink-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="ml-2 shrink-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
             >
               <CloseIcon aria-hidden="true" className="size-3.5 text-placeholder hover:text-primary" />
             </button>
@@ -261,7 +266,7 @@ export const TopNavPowerK = observer(() => {
       </div>
       <div
         className={cn(
-          "shadow-lg absolute -top-[6px] left-1/2 z-20 flex -translate-x-1/2 flex-col overflow-hidden rounded-md border border-subtle bg-surface-1 px-0 pt-10 transition-all duration-300 ease-in-out",
+          "absolute -top-[6px] left-1/2 z-20 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col overflow-hidden rounded-md border border-subtle bg-surface-1 px-0 pt-10 shadow-overlay-100 transition-all duration-300 ease-in-out",
           {
             "max-h-[80vh] w-[574px] opacity-100": isOpen,
             "h-0 w-0 opacity-0": !isOpen,
@@ -271,10 +276,10 @@ export const TopNavPowerK = observer(() => {
       >
         {isOpen && (
           <Command
-            filter={(i18nValue: string, search: string) => {
+            filter={(i18nValue: string, search: string, keywords?: string[]) => {
               if (i18nValue === "no-results") return 1;
-              if (i18nValue.toLowerCase().includes(search.toLowerCase())) return 1;
-              return 0;
+              const haystack = [i18nValue, ...(keywords ?? [])].join(" ").toLowerCase();
+              return haystack.includes(search.toLowerCase()) ? 1 : 0;
             }}
             shouldFilter={searchTerm.length > 0}
             className="flex h-full w-full flex-col"
@@ -287,6 +292,7 @@ export const TopNavPowerK = observer(() => {
             <Command.List
               id={COMMAND_LIST_ID}
               className="vertical-scrollbar scrollbar-sm max-h-[60vh] overflow-y-auto px-2 pb-4 outline-none"
+              label={IS_PPM_SHELL_ENABLED ? ppmT("navigation.command_results") : undefined}
             >
               <ProjectsAppPowerKCommandsList
                 activePage={activePage}

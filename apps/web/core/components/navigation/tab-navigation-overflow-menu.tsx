@@ -38,7 +38,7 @@ export function TabNavigationOverflowMenu({ overflowItems, isActive, tabPreferen
     <Menu
       ellipsis
       ariaLabel={getPpmTranslation(currentLocale, "navigation.more_project_sections")}
-      customButtonClassName="rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-primary"
+      customButtonClassName="rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
       optionsClassName="min-w-[200px] space-y-1"
       customButton={
         <div className="flex items-center justify-center rounded-md p-1 transition-colors hover:bg-layer-1">
@@ -64,7 +64,7 @@ export function TabNavigationOverflowMenu({ overflowItems, isActive, tabPreferen
               <Link
                 to={item.href}
                 aria-current={itemIsActive ? "page" : undefined}
-                className="focus-visible:outline-accent-primary w-full min-w-0 flex-1 rounded-sm p-1 focus-visible:outline-2 focus-visible:outline-offset-1"
+                className="w-full min-w-0 flex-1 rounded-sm p-1 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent-strong"
               >
                 <span className="text-11">{label}</span>
               </Link>
@@ -78,7 +78,7 @@ export function TabNavigationOverflowMenu({ overflowItems, isActive, tabPreferen
                       e.preventDefault();
                       onShow(item.key);
                     }}
-                    className="focus-visible:outline-accent-primary invisible rounded-sm p-1 text-tertiary transition-colors group-focus-within/menu-item:visible group-hover/menu-item:visible hover:text-primary focus-visible:visible focus-visible:outline-2"
+                    className="invisible rounded-sm p-1 text-tertiary transition-colors group-focus-within/menu-item:visible group-hover/menu-item:visible hover:text-primary focus-visible:visible focus-visible:outline-2 focus-visible:outline-accent-strong"
                     title={showLabel}
                     aria-label={showLabel}
                   >
@@ -99,7 +99,7 @@ export function TabNavigationOverflowMenu({ overflowItems, isActive, tabPreferen
                       onToggleDefault(item.key);
                     }}
                     className={cn(
-                      "focus-visible:outline-accent-primary invisible rounded-sm p-1 text-tertiary transition-colors group-focus-within/menu-item:visible group-hover/menu-item:visible hover:text-primary focus-visible:visible focus-visible:outline-2",
+                      "invisible rounded-sm p-1 text-tertiary transition-colors group-focus-within/menu-item:visible group-hover/menu-item:visible hover:text-primary focus-visible:visible focus-visible:outline-2 focus-visible:outline-accent-strong",
                       {
                         visible: isDefault,
                       }

@@ -11,11 +11,13 @@ import { ROLE_DETAILS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { IconButton } from "@plane/propel/icon-button";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useProject } from "@/hooks/store/use-project";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type Props = {
   projectId: string;
@@ -36,6 +38,9 @@ export const ProjectSettingsSidebarHeader = observer(function ProjectSettingsSid
     : undefined;
   // translation
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const projectSettingsLabel = isPpmShell ? ppmT("project.settings") : "Project settings";
 
   if (!currentProjectRole) return null;
 
@@ -48,7 +53,7 @@ export const ProjectSettingsSidebarHeader = observer(function ProjectSettingsSid
           icon={ArrowLeft}
           onClick={() => router.push(`/${currentWorkspace?.slug}/projects/${projectId}/issues/`)}
         />
-        <p>Project settings</p>
+        <p>{projectSettingsLabel}</p>
       </div>
       <div className="mt-1.5 flex items-center gap-2 truncate px-5 py-0.5">
         <div className="grid size-8 shrink-0 place-items-center rounded bg-layer-2">

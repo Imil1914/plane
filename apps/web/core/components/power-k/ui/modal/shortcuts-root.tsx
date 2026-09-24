@@ -7,13 +7,18 @@
 import { useState, Fragment } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 // plane imports
+import { useTranslation } from "@plane/i18n";
 import { CloseIcon, SearchIcon } from "@plane/propel/icons";
 import { ScrollArea } from "@plane/propel/scrollarea";
 import { Input } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { usePowerK } from "@/hooks/store/use-power-k";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // local imports
 import { ShortcutRenderer } from "../renderer/shortcut";
+
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 type Props = {
   isOpen: boolean;
@@ -26,6 +31,9 @@ export function ShortcutsModal(props: Props) {
   const [query, setQuery] = useState("");
   // store hooks
   const { commandRegistry } = usePowerK();
+  // translation
+  const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
 
   // Get all commands from registry
   const allCommandsWithShortcuts = commandRegistry.getAllCommandsWithShortcuts();
@@ -64,7 +72,7 @@ export function ShortcutsModal(props: Props) {
               <Dialog.Panel className="relative flex h-full items-center justify-center">
                 <div className="flex h-[61vh] w-full flex-col space-y-4 overflow-hidden rounded-lg bg-surface-1 py-5 shadow-raised-200 transition-all sm:w-[28rem]">
                   <Dialog.Title as="h3" className="flex justify-between px-5">
-                    <span className="text-16 font-medium">Keyboard shortcuts</span>
+                    <span className="text-16 font-medium">{t("keyboard_shortcuts")}</span>
                     <button type="button" onClick={handleClose}>
                       <CloseIcon className="h-4 w-4 text-secondary hover:text-primary" aria-hidden="true" />
                     </button>
@@ -78,7 +86,7 @@ export function ShortcutsModal(props: Props) {
                         type="text"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Search for shortcuts"
+                        placeholder={IS_PPM_SHELL_ENABLED ? ppmT("power_k.search_shortcuts") : "Search for shortcuts"}
                         className="w-full border-none bg-transparent py-1 text-11 text-secondary outline-none"
                         autoFocus
                         tabIndex={1}

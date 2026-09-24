@@ -49,8 +49,8 @@ export default function PpmGuidePage() {
         </header>
 
         <section className="rounded-xl border border-subtle-1 bg-surface-1 p-6 shadow-raised-100 sm:p-8">
-          <p className="tracking-widest text-caption-md-semibold text-accent-primary uppercase">Помощь</p>
-          <h1 className="text-3xl mt-3 font-semibold tracking-tight">Руководство PPM</h1>
+          <p className="text-caption-md-semibold tracking-[0.12em] text-accent-primary uppercase">Помощь</p>
+          <h1 className="mt-3 text-28 font-semibold tracking-tight">Руководство PPM</h1>
           <p className="mt-3 text-body-md-regular text-tertiary">
             Краткая карта основных возможностей системы управления проектами.
           </p>
@@ -66,7 +66,7 @@ export default function PpmGuidePage() {
 
           <div className="mt-8 flex flex-wrap items-center gap-4 border-t border-subtle pt-6">
             <Link
-              className="inline-flex h-9 items-center rounded-md bg-accent-primary px-4 text-body-sm-semibold text-on-color hover:bg-accent-primary-hover"
+              className="inline-flex h-9 items-center rounded-md bg-accent-primary px-4 text-body-sm-semibold text-on-accent hover:bg-accent-primary-hover"
               href="/"
             >
               Открыть PPM

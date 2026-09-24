@@ -12,6 +12,7 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { CycleIcon } from "@plane/propel/icons";
 import { Breadcrumbs, Header } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { CyclesViewHeader } from "@/components/cycles/cycles-view-header";
@@ -20,6 +21,7 @@ import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 
@@ -33,6 +35,9 @@ export const CyclesListHeader = observer(function CyclesListHeader() {
   const { allowPermissions } = useUserPermissions();
   const { currentProjectDetails, loader } = useProject();
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const cyclesLabel = isPpmShell ? ppmT("project.stages") : "Cycles";
 
   const canUserCreateCycle = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
@@ -47,7 +52,7 @@ export const CyclesListHeader = observer(function CyclesListHeader() {
           <Breadcrumbs.Item
             component={
               <BreadcrumbLink
-                label="Cycles"
+                label={cyclesLabel}
                 href={`/${workspaceSlug}/projects/${currentProjectDetails?.id}/cycles/`}
                 icon={<CycleIcon className="h-4 w-4 text-tertiary" />}
                 isLast

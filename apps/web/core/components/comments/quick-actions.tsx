@@ -10,7 +10,7 @@ import { MoreHorizontal } from "lucide-react";
 // plane imports
 import { EIssueCommentAccessSpecifier } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
-import { IconButton } from "@plane/propel/icon-button";
+import { getIconButtonStyling } from "@plane/propel/icon-button";
 import { LinkIcon, GlobeIcon, LockIcon, EditIcon, TrashIcon } from "@plane/propel/icons";
 import type { TIssueComment, TCommentsOperations } from "@plane/types";
 import type { TContextMenuItem } from "@plane/ui";
@@ -18,6 +18,7 @@ import { CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
 // hooks
 import { useUser } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type TCommentCard = {
   activityOperations: TCommentsOperations;
@@ -37,6 +38,7 @@ export const CommentQuickActions = observer(function CommentQuickActions(props: 
   const canDelete = isAuthor;
   // translation
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
 
   const MENU_ITEMS = useMemo(
     function MENU_ITEMS(): TContextMenuItem[] {
@@ -86,7 +88,12 @@ export const CommentQuickActions = observer(function CommentQuickActions(props: 
   if (MENU_ITEMS.length === 0) return null;
 
   return (
-    <CustomMenu customButton={<IconButton icon={MoreHorizontal} variant="ghost" size="sm" />} closeOnSelect>
+    <CustomMenu
+      customButton={<MoreHorizontal className="size-4" aria-hidden="true" />}
+      customButtonClassName={getIconButtonStyling("ghost", "sm")}
+      ariaLabel={ppmT("a11y.comment_actions")}
+      closeOnSelect
+    >
       {MENU_ITEMS.map((item) => (
         <CustomMenu.MenuItem
           key={item.key}

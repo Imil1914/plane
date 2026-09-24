@@ -7,6 +7,40 @@
 import type { IPowerKCommandRegistry } from "./registry";
 import type { TPowerKCommandConfig, TPowerKContext } from "./types";
 
+// Physical-key codes that carry a fixed punctuation meaning regardless of keyboard layout.
+const CODE_TO_KEY: Record<string, string> = {
+  Comma: ",",
+  Period: ".",
+  Slash: "/",
+  Quote: "'",
+  Semicolon: ";",
+  BracketLeft: "[",
+  BracketRight: "]",
+  Backslash: "\\",
+  Minus: "-",
+  Equal: "=",
+  Backquote: "`",
+  Space: "space",
+};
+
+/**
+ * Resolves the shortcut-matching key for a keyboard event from `e.code` (the physical key),
+ * so hotkeys keep working regardless of keyboard layout (e.g. the Russian ЙЦУКЕН layout, where
+ * `e.key` for the physical "G" key is "п", not "g"). Project rule: hotkeys are matched by
+ * physical key, never by the layout-dependent `e.key`, except for keys that carry no fixed
+ * physical letter/digit/punctuation meaning (Escape, Backspace, arrows, Enter, …), which have
+ * no layout ambiguity and fall back to `e.key` as before. When `e.code` is empty (e.g. a
+ * synthetic event from a virtual keyboard), this also falls back to `e.key`.
+ */
+export function getShortcutKey(e: Pick<KeyboardEvent, "code" | "key">): string {
+  if (/^Key[A-Z]$/.test(e.code)) return e.code.slice(3).toLowerCase();
+  if (/^Digit[0-9]$/.test(e.code)) return e.code.slice(5);
+  if (e.code in CODE_TO_KEY) return CODE_TO_KEY[e.code];
+
+  const key = e.key.toLowerCase();
+  return key === " " ? "space" : key;
+}
+
 /**
  * Formats a keyboard event into a modifier shortcut string
  * e.g., "cmd+k", "cmd+shift+,", "cmd+delete"
@@ -18,8 +52,7 @@ export function formatModifierShortcut(e: KeyboardEvent): string {
   if (e.altKey) parts.push("alt");
   if (e.shiftKey) parts.push("shift");
 
-  const key = e.key.toLowerCase();
-  parts.push(key === " " ? "space" : key);
+  parts.push(getShortcutKey(e));
 
   return parts.join("+");
 }
@@ -71,7 +104,7 @@ export class ShortcutHandler {
   handleKeyDown = (e: KeyboardEvent): void => {
     if (!this.isEnabled) return;
 
-    const key = e.key.toLowerCase();
+    const key = getShortcutKey(e);
     const hasModifier = e.metaKey || e.ctrlKey || e.altKey || e.shiftKey;
 
     // Special: Cmd+K always opens command palette

@@ -10,6 +10,7 @@ import useSWR from "swr";
 // ui
 import { ArchiveIcon, WorkItemsIcon } from "@plane/propel/icons";
 import { Breadcrumbs, Header } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { IssueDetailQuickActions } from "@/components/issues/issue-detail/issue-detail-quick-actions";
@@ -17,6 +18,7 @@ import { IssueDetailQuickActions } from "@/components/issues/issue-detail/issue-
 import { ISSUE_DETAILS } from "@plane/constants";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web
 import { ProjectBreadcrumb } from "@/components/breadcrumbs/project";
 // services
@@ -29,6 +31,9 @@ export const ProjectArchivedIssueDetailsHeader = observer(function ProjectArchiv
   const { workspaceSlug, projectId, archivedIssueId } = useParams();
   // store hooks
   const { currentProjectDetails, loader } = useProject();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const workItemsLabel = isPpmShell ? ppmT("work_item.breadcrumb") : "Work items";
 
   const { data: issueDetails } = useSWR(
     workspaceSlug && projectId && archivedIssueId ? ISSUE_DETAILS(archivedIssueId.toString()) : null,
@@ -55,7 +60,7 @@ export const ProjectArchivedIssueDetailsHeader = observer(function ProjectArchiv
             component={
               <BreadcrumbLink
                 href={`/${workspaceSlug}/projects/${projectId}/archives/issues`}
-                label="Work items"
+                label={workItemsLabel}
                 icon={<WorkItemsIcon className="h-4 w-4 text-tertiary" />}
               />
             }

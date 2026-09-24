@@ -53,26 +53,42 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
+import { isPpmProjectAskEnabled } from "@ppm/canvas";
 import type { TPpmCanvasBoard, TPpmCanvasCapabilities, TPpmCanvasSyncStatus } from "@ppm/canvas";
+import { PPM_BRAND } from "@ppm/brand";
+import { useTranslation } from "@plane/i18n";
+import { formatPpmTimeAgo } from "@/helpers/ppm-time-ago.helper";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { PpmCanvasService, PpmCanvasServiceError } from "@/services/ppm-canvas.service";
 import type { TPpmBrainAnswerRun } from "@/services/ppm-brain.service";
 import {
+  CANVAS_RAIL_COLLAPSE_QUERY,
   canvasBoardTabsKey,
   closeBoardTab,
   filterCanvasCommands,
+  footerRoleLabelKey,
+  formatCanvasCommandShortcut,
   MAX_OPEN_CANVAS_BOARDS,
   moveBoard,
   openBoardTab,
   readCanvasBoardTabs,
+  shouldCanvasOwnCommandShortcut,
+  shouldShowTabSyncDot,
   writeCanvasBoardTabs,
   type TPpmCanvasCommandItem,
 } from "./board-workspace-state";
 import { PpmBoardPresence, usePpmBoardPresence } from "./board-presence";
 import { dispatchPpmCanvasCommand, type TPpmCanvasCommand, type TPpmCanvasCommandDetail } from "./commands";
-import { PpmBrainPanel } from "./brain-panel";
+import { PpmBrainPanel, type TPpmBrainPanelMode } from "./brain-panel";
 
 const PpmCanvasEditor = lazy(() => import("./editor"));
+
+const CANVAS_COMMAND_SHORTCUT = formatCanvasCommandShortcut(getCanvasPlatform());
+
+// Build-time flag: PPM 1.0 keeps only the non-AI project search; agents and answers need PPM_PROJECT_ASK_ENABLED=1.
+const PROJECT_ASK_MODE: TPpmBrainPanelMode = isPpmProjectAskEnabled(process.env.PPM_PROJECT_ASK_ENABLED)
+  ? "full"
+  : "search";
 
 type TPpmCanvasWorkspaceProps = {
   authorId: string;
@@ -127,14 +143,20 @@ export default function PpmCanvasWorkspace({
   const [actionError, setActionError] = useState<string>();
   const [boardMenuOpen, setBoardMenuOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [railExpanded, setRailExpanded] = useState(true);
+  const [railExpanded, setRailExpanded] = useState(
+    () => typeof window === "undefined" || !window.matchMedia(CANVAS_RAIL_COLLAPSE_QUERY).matches
+  );
   const [showArchived, setShowArchived] = useState(false);
   const [brainPanelOpen, setBrainPanelOpen] = useState(false);
+  const brainPanelDraftRef = useRef(false);
+  const brainTriggerRef = useRef<HTMLButtonElement>(null);
   const boardSwitcherButtonRef = useRef<HTMLButtonElement>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const boardTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const dialogReturnFocusRef = useRef<HTMLElement | null>(null);
   const commandReturnFocusRef = useRef<HTMLElement | null>(null);
   const [selectionByBoardId, setSelectionByBoardId] = useState<Record<string, string[]>>({});
+  const [toolByBoardId, setToolByBoardId] = useState<Record<string, string>>({});
   const [orchestratorRunVersionsByBoardId, setOrchestratorRunVersionsByBoardId] = useState<
     Record<string, Record<string, string>>
   >({});
@@ -142,11 +164,10 @@ export default function PpmCanvasWorkspace({
   const presence = usePpmBoardPresence({ boardId: activeBoardId, projectId, workspaceId });
 
   useEffect(() => {
-    const narrowViewport = window.matchMedia("(max-width: 980px)");
+    const narrowViewport = window.matchMedia(CANVAS_RAIL_COLLAPSE_QUERY);
     const collapseRailOnNarrowViewport = () => {
       if (narrowViewport.matches) setRailExpanded(false);
     };
-    collapseRailOnNarrowViewport();
     narrowViewport.addEventListener("change", collapseRailOnNarrowViewport);
     return () => narrowViewport.removeEventListener("change", collapseRailOnNarrowViewport);
   }, []);
@@ -167,6 +188,16 @@ export default function PpmCanvasWorkspace({
     setCommandPaletteOpen(false);
     returnFocus(commandReturnFocusRef.current);
   };
+  const brainTriggerLabel = ppmT(PROJECT_ASK_MODE === "search" ? "project_search.title" : "ask_project.title");
+  const closeBrainPanel = () => {
+    const focusInPanel =
+      document.activeElement instanceof HTMLElement && Boolean(document.activeElement.closest(".ppm-brain-panel"));
+    setBrainPanelOpen(false);
+    if (focusInPanel) returnFocus(brainTriggerRef.current);
+  };
+  const onBrainPanelDraftChange = useCallback((hasDraft: boolean) => {
+    brainPanelDraftRef.current = hasDraft;
+  }, []);
 
   const loadBoards = useCallback(
     async (includeArchived: boolean) => {
@@ -230,6 +261,8 @@ export default function PpmCanvasWorkspace({
       const typing =
         target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || Boolean(target?.isContentEditable);
       if ((event.metaKey || event.ctrlKey) && event.code === "KeyK") {
+        // Focus in Plane's shell (top bar, Power-K, modals): let the event through to Plane's palette.
+        if (!shouldCanvasOwnCommandShortcut(document.activeElement, workspaceRef.current)) return;
         event.preventDefault();
         event.stopImmediatePropagation();
         if (commandPaletteOpen) closeCommandPalette();
@@ -244,7 +277,9 @@ export default function PpmCanvasWorkspace({
         setBoardMenuOpen(false);
         if (commandPaletteOpen) closeCommandPalette();
         if (dialog) closeBoardDialog();
-        setBrainPanelOpen(false);
+        // Esc elsewhere (e.g. deselecting on the canvas) must not discard a typed search query.
+        if (brainPanelOpen && (Boolean(target?.closest(".ppm-brain-panel")) || !brainPanelDraftRef.current))
+          closeBrainPanel();
         return;
       }
       if (typing || !activeBoardId || !editableBoardIds.has(activeBoardId)) return;
@@ -279,6 +314,7 @@ export default function PpmCanvasWorkspace({
   const activeBoardEditReady = Boolean(
     activeBoardId && canEdit && capabilities.edit && editableBoardIds.has(activeBoardId)
   );
+  const activeTool = activeBoardId ? toolByBoardId[activeBoardId] : undefined;
 
   const runCanvasCommand = (command: TPpmCanvasCommand) => {
     if (!activeBoardId) return;
@@ -304,6 +340,10 @@ export default function PpmCanvasWorkspace({
       }
       return { ...current, [boardId]: shapeIds };
     });
+  }, []);
+
+  const handleToolChange = useCallback((boardId: string, toolId: string) => {
+    setToolByBoardId((current) => (current[boardId] === toolId ? current : { ...current, [boardId]: toolId }));
   }, []);
 
   const handleOrchestratorRunVersionsChange = useCallback((boardId: string, versions: Record<string, string>) => {
@@ -658,9 +698,12 @@ export default function PpmCanvasWorkspace({
         text={ppmT("canvas.permission_denied_description")}
       />
     );
+  // The footer is the only visible save status; the role is not repeated when the status already says read-only.
+  const activeStatusKey = syncStatusLabel(syncByBoardId[activeBoardId], capabilities.edit);
+  const activeRoleKey = footerRoleLabelKey(capabilities.edit, activeStatusKey);
 
   return (
-    <div className="ppm-canvas-workspace" data-rail-expanded={railExpanded || undefined}>
+    <div ref={workspaceRef} className="ppm-canvas-workspace" data-rail-expanded={railExpanded || undefined}>
       <header className="ppm-canvas-workspace__header">
         <button
           ref={boardSwitcherButtonRef}
@@ -701,7 +744,9 @@ export default function PpmCanvasWorkspace({
                 onClick={() => openBoard(board.board_id)}
                 onKeyDown={(event) => onBoardTabKeyDown(event, index)}
               >
-                <SyncDot status={syncByBoardId[board.board_id]} />
+                {shouldShowTabSyncDot(syncByBoardId[board.board_id]) && (
+                  <SyncDot status={syncByBoardId[board.board_id]} />
+                )}
                 <span>{board.name}</span>
               </button>
               {openBoards.length > 1 && (
@@ -739,17 +784,18 @@ export default function PpmCanvasWorkspace({
         >
           <Search aria-hidden="true" />
           <span>{ppmT("canvas.command_search")}</span>
-          <kbd>⌘K</kbd>
+          <kbd>{CANVAS_COMMAND_SHORTCUT}</kbd>
         </button>
         <PpmBoardPresence presence={presence} />
         <button
+          ref={brainTriggerRef}
           type="button"
           className="ppm-canvas-brain-trigger"
-          aria-label={ppmT("ask_project.title")}
+          aria-label={brainTriggerLabel}
           onClick={() => setBrainPanelOpen(true)}
         >
-          <BrainCircuit aria-hidden="true" />
-          <span>{ppmT("ask_project.title")}</span>
+          {PROJECT_ASK_MODE === "search" ? <Search aria-hidden="true" /> : <BrainCircuit aria-hidden="true" />}
+          <span>{brainTriggerLabel}</span>
         </button>
       </header>
 
@@ -761,13 +807,13 @@ export default function PpmCanvasWorkspace({
           aria-label={ppmT(railExpanded ? "canvas.collapse_panel" : "canvas.expand_panel")}
           onClick={() => setRailExpanded((current) => !current)}
         >
-          <span>AF</span>
-          {railExpanded && <strong>AntyFlow</strong>}
+          <img src={PPM_BRAND.assets.mark} alt="" aria-hidden="true" />
+          {railExpanded && <strong>PPM</strong>}
           {railExpanded ? <ChevronLeft aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
         </button>
         <RailSectionLabel expanded={railExpanded} label={ppmT("canvas.navigation")} />
         <RailButton
-          active
+          pressed={activeTool === "select"}
           expanded={railExpanded}
           icon={LayoutGrid}
           label={ppmT("canvas.canvas")}
@@ -874,6 +920,7 @@ export default function PpmCanvasWorkspace({
               expanded={railExpanded}
               icon={GitFork}
               label={ppmT("canvas.draw_connection")}
+              pressed={activeTool === "arrow"}
               onClick={() => runCanvasCommand("draw-connection")}
             />
             <RailButton
@@ -995,11 +1042,13 @@ export default function PpmCanvasWorkspace({
                 onOpenBoard={openBoard}
                 onOrchestratorRunVersionsChange={handleOrchestratorRunVersionsChange}
                 onSelectionChange={handleSelectionChange}
+                onToolChange={handleToolChange}
                 onSyncStatusChange={(id, status) =>
                   setSyncByBoardId((current) => (current[id] === status ? current : { ...current, [id]: status }))
                 }
                 presence={boardId === activeBoardId ? presence : undefined}
                 projectId={projectId}
+                statusPlacement="footer"
                 workspaceId={workspaceId}
                 workspaceSlug={workspaceSlug}
               />
@@ -1011,9 +1060,9 @@ export default function PpmCanvasWorkspace({
       <footer className="ppm-canvas-workspace__status">
         <span>
           <SyncDot status={syncByBoardId[activeBoardId]} />
-          {ppmT(syncStatusLabel(syncByBoardId[activeBoardId], capabilities.edit))}
+          {ppmT(activeStatusKey)}
         </span>
-        <span>{capabilities.edit ? ppmT("canvas.shared_badge") : ppmT("canvas.read_only_title")}</span>
+        {activeRoleKey && <span>{ppmT(activeRoleKey)}</span>}
       </footer>
 
       {boardMenuOpen && (
@@ -1043,7 +1092,9 @@ export default function PpmCanvasWorkspace({
           boardId={activeBoardId}
           canEdit={canEdit && capabilities.edit}
           canvasAgentRunVersions={orchestratorRunVersionsByBoardId[activeBoardId] ?? EMPTY_ORCHESTRATOR_RUN_VERSIONS}
-          onClose={() => setBrainPanelOpen(false)}
+          mode={PROJECT_ASK_MODE}
+          onClose={closeBrainPanel}
+          onDraftChange={onBrainPanelDraftChange}
           onSaveAnswer={saveAnswerToCanvas}
           onSaveAgentRun={saveOrchestratorRunToCanvas}
           onSaveSearch={saveSearchToCanvas}
@@ -1131,6 +1182,7 @@ function BoardSwitcher({
   showArchived: boolean;
 }) {
   const ppmT = usePpmTranslation();
+  const { currentLocale } = useTranslation();
   const [query, setQuery] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => searchRef.current?.focus(), []);
@@ -1180,7 +1232,7 @@ function BoardSwitcher({
                 <span>
                   <strong>{board.name}</strong>
                   <small>
-                    {ppmT("canvas.board_version")} {board.version}
+                    {ppmT("canvas.board_updated")} {formatPpmTimeAgo(board.updated_at, currentLocale)}
                   </small>
                 </span>
               </button>
@@ -1432,27 +1484,31 @@ function ConfirmArchiveDialog({
 }
 
 function RailButton({
-  active = false,
   disabled = false,
   expanded,
   icon: Icon,
   label,
   onClick,
+  // Only actual toggle buttons ("Холст" / "Нарисовать визуальную связь") pass this. Leaving it
+  // undefined for plain action buttons (add-note, undo, ...) keeps aria-pressed off them entirely
+  // instead of falsely announcing every rail button as a toggle.
+  pressed,
   shortcut,
 }: {
-  active?: boolean;
   disabled?: boolean;
   expanded: boolean;
   icon: typeof BrainCircuit;
   label: string;
   onClick: () => void;
+  pressed?: boolean;
   shortcut?: string;
 }) {
   return (
     <button
       type="button"
       className="ppm-canvas-rail-button"
-      data-active={active || undefined}
+      aria-pressed={pressed}
+      data-active={pressed || undefined}
       disabled={disabled}
       title={label}
       onClick={onClick}
@@ -1530,6 +1586,13 @@ function getBoardTabStorage(): Storage | undefined {
   } catch {
     return undefined;
   }
+}
+
+function getCanvasPlatform(): string {
+  if (typeof navigator === "undefined") return "";
+  // userAgentData is not in the DOM typings yet; navigator.platform covers Safari and Firefox.
+  const { userAgentData } = navigator as Navigator & { userAgentData?: { platform?: string } };
+  return userAgentData?.platform || navigator.platform;
 }
 
 function trapDialogTab(event: ReactKeyboardEvent<HTMLElement>) {
