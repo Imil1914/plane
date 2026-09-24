@@ -13,13 +13,16 @@ import { WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS, EUserPermissionsLevel
 import { useTranslation } from "@plane/i18n";
 import { Checkbox, EModalPosition, EModalWidth, ModalCore, Sortable } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
+import { usePpmAdminAccess } from "@/hooks/use-ppm-admin-access";
 import {
   usePersonalNavigationPreferences,
   useProjectNavigationPreferences,
   useWorkspaceNavigationPreferences,
 } from "@/hooks/use-navigation-preferences";
+import { canAccessPpmWorkspaceAdministration } from "@/helpers/ppm-workspace-access.helper";
 // helpers
 import { getSidebarNavigationItemIcon } from "@/components/workspace/sidebar/helper";
 // types
@@ -54,6 +57,7 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
 
   // store hooks
   const { allowPermissions } = useUserPermissions();
+  const { isGlobalAdmin } = usePpmAdminAccess();
   const {
     preferences: personalPreferences,
     togglePersonalItem,
@@ -73,6 +77,11 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
 
   // local state for limited projects count input
   const [projectCountInput, setProjectCountInput] = useState(projectPreferences.limitedProjectsCount.toString());
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const canAccessWorkspaceAdministration = canAccessPpmWorkspaceAdministration({
+    isGlobalAdmin,
+    isPpmShell,
+  });
 
   // Filter personal items by feature flags
   const filteredPersonalItems = PERSONAL_ITEMS;
@@ -232,34 +241,36 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
           </div>
 
           {/* Workspace Section */}
-          <div className="flex flex-col gap-2">
-            <h3 className="text-13 font-semibold text-placeholder">{t("common.workspace")}</h3>
-            <div className="rounded-md border border-subtle bg-surface-2 py-2">
-              {/* Pinned Items - Draggable */}
-              <Sortable
-                data={workspaceItems}
-                onChange={handleReorder}
-                keyExtractor={(item) => item.key}
-                id="workspace-pinned-items"
-                render={(item) => {
-                  const icon = getSidebarNavigationItemIcon(item.key);
-                  return (
-                    <div className="group flex items-center gap-2 rounded-md px-2 py-1.5 transition-all duration-200 hover:bg-surface-2">
-                      <GripVertical className="size-4 cursor-grab text-placeholder transition-colors active:cursor-grabbing" />
-                      <Checkbox
-                        checked={!!workspacePreferences.items[item.key]?.is_pinned}
-                        onChange={(e) => handleWorkspaceItemToggle(item.key, e.target.checked)}
-                      />
-                      <div className="flex flex-1 items-center gap-2">
-                        {icon}
-                        <span className="text-13 text-primary">{t(item.labelTranslationKey)}</span>
+          {canAccessWorkspaceAdministration && (
+            <div className="flex flex-col gap-2">
+              <h3 className="text-13 font-semibold text-placeholder">{t("common.workspace")}</h3>
+              <div className="rounded-md border border-subtle bg-surface-2 py-2">
+                {/* Pinned Items - Draggable */}
+                <Sortable
+                  data={workspaceItems}
+                  onChange={handleReorder}
+                  keyExtractor={(item) => item.key}
+                  id="workspace-pinned-items"
+                  render={(item) => {
+                    const icon = getSidebarNavigationItemIcon(item.key);
+                    return (
+                      <div className="group flex items-center gap-2 rounded-md px-2 py-1.5 transition-all duration-200 hover:bg-surface-2">
+                        <GripVertical className="size-4 cursor-grab text-placeholder transition-colors active:cursor-grabbing" />
+                        <Checkbox
+                          checked={!!workspacePreferences.items[item.key]?.is_pinned}
+                          onChange={(e) => handleWorkspaceItemToggle(item.key, e.target.checked)}
+                        />
+                        <div className="flex flex-1 items-center gap-2">
+                          {icon}
+                          <span className="text-13 text-primary">{t(item.labelTranslationKey)}</span>
+                        </div>
                       </div>
-                    </div>
-                  );
-                }}
-              />
+                    );
+                  }}
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Projects Section */}
           <div className="flex flex-col gap-2">

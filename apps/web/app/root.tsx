@@ -24,7 +24,7 @@ import ogImage from "@/app/assets/og-image.png?url";
 import globalStyles from "@/styles/globals.css?url";
 import type { Route } from "./+types/root";
 // components
-import { PpmLocaleBootstrap } from "@/components/ppm-shell/locale-bootstrap";
+import { PpmLocaleBootstrap, PpmLocaleFallback } from "@/components/ppm-shell/locale-bootstrap";
 // lib
 import { isStaleAssetError, recoverFromStaleAsset } from "@/lib/stale-asset-error";
 // local
@@ -184,11 +184,10 @@ export default function Root() {
 }
 
 export function HydrateFallback() {
-  // React Router's SPA shell hydrates without route content. Rendering a
-  // fallback here adds an unexpected element below <html> and forces React to
-  // discard the prerendered document. PpmLocaleBootstrap owns the visible
-  // loading state once the client route has mounted.
-  return null;
+  // React Router prerenders this root fallback in SPA mode. Reuse the same
+  // element that PpmLocaleBootstrap renders on its first client pass so the
+  // document can hydrate without replacing the root.
+  return <PpmLocaleFallback />;
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

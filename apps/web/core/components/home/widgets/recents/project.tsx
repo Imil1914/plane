@@ -8,10 +8,12 @@ import { useRouter } from "next/navigation";
 // plane types
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import type { TActivityEntityData, TProjectEntityData } from "@plane/types";
-import { calculateTimeAgo } from "@plane/utils";
+import { useTranslation } from "@plane/i18n";
 // components
 import { ListItem } from "@/components/core/list";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { formatPpmTimeAgo } from "@/helpers/ppm-time-ago.helper";
 // helpers
 
 type BlockProps = {
@@ -23,6 +25,8 @@ export function RecentProject(props: BlockProps) {
   const { activity, ref, workspaceSlug } = props;
   // router
   const router = useRouter();
+  const { currentLocale } = useTranslation();
+  const ppmT = usePpmTranslation();
   // derived values
   const projectDetails: TProjectEntityData = activity.entity_data as TProjectEntityData;
 
@@ -45,7 +49,7 @@ export function RecentProject(props: BlockProps) {
       }
       appendTitleElement={
         <div className="flex-shrink-0 text-11 font-medium text-placeholder">
-          {calculateTimeAgo(activity.visited_at)}
+          {formatPpmTimeAgo(activity.visited_at, currentLocale)}
         </div>
       }
       quickActionElement={
@@ -63,7 +67,7 @@ export function RecentProject(props: BlockProps) {
                 }
                 buttonClassName={projectDetails?.project_members?.length > 0 ? "hover:bg-transparent px-0" : ""}
                 showTooltip={projectDetails?.project_members?.length === 0}
-                placeholder="Assignees"
+                placeholder={ppmT("canvas.work_item_assignees")}
                 optionsClassName="z-10"
                 tooltipContent=""
               />

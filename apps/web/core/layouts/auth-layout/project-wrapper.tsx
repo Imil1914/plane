@@ -7,6 +7,9 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
+import { ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { useSearchParams } from "react-router";
 import useSWR from "swr";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
@@ -36,7 +39,10 @@ import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useProjectView } from "@/hooks/store/use-project-view";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { usePpmAdminAccess } from "@/hooks/use-ppm-admin-access";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { useTimeLineChart } from "@/hooks/use-timeline-chart";
+import { isPpmAdminMode } from "@/helpers/ppm-admin-mode.helper";
 
 interface IProjectAuthWrapper {
   workspaceSlug: string;
@@ -64,6 +70,9 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
   const { data: currentUserData } = useUser();
   const { fetchProjectLabels } = useLabel();
   const { getProjectEstimates } = useProjectEstimates();
+  const { isGlobalAdmin } = usePpmAdminAccess();
+  const ppmT = usePpmTranslation();
+  const [searchParams] = useSearchParams();
   // derived values
   const hasPermissionToCurrentProject = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
@@ -72,7 +81,7 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
     projectId
   );
   const currentProjectRole = getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId);
-  const isWorkspaceAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE, workspaceSlug);
+  const showAdminMode = isPpmAdminMode(isGlobalAdmin, searchParams.get("ppm_admin_mode"));
   // Initialize module timeline chart
   useEffect(() => {
     initGantt();
@@ -146,16 +155,31 @@ export const ProjectAuthWrapper = observer(function ProjectAuthWrapper(props: IP
 
   if (isProjectLoading) return null;
 
-  if (!isProjectLoading && hasPermissionToCurrentProject === false) {
+  if (!isProjectLoading && hasPermissionToCurrentProject === false && !isGlobalAdmin) {
     return (
       <ProjectAccessRestriction
         errorStatusCode={projectDetailsError?.status}
-        isWorkspaceAdmin={isWorkspaceAdmin}
+        isWorkspaceAdmin={false}
         handleJoinProject={handleJoinProject}
         isJoinButtonDisabled={isJoiningProject}
       />
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {showAdminMode && (
+        <div className="border-accent-primary/30 flex flex-wrap items-center justify-between gap-2 border-b bg-accent-primary/10 px-4 py-2 text-12 text-primary">
+          <span className="flex items-center gap-2 font-medium">
+            <ShieldCheck className="size-4 text-accent-primary" aria-hidden="true" />
+            {ppmT("admin.mode_banner")}
+          </span>
+          <Link href="/ppm-admin" className="font-semibold text-accent-primary hover:underline">
+            {ppmT("admin.back_to_center")}
+          </Link>
+        </div>
+      )}
+      {children}
+    </>
+  );
 });

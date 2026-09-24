@@ -8,7 +8,6 @@ import { useState, useEffect } from "react";
 import { observer } from "mobx-react";
 import { useRouter } from "next/navigation";
 // plane package imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { Tabs } from "@plane/propel/tabs";
@@ -18,9 +17,9 @@ import AnalyticsFilterActions from "@/components/analytics/analytics-filter-acti
 import { PageHead } from "@/components/core/page-title";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
+import { useCanCreateProject } from "@/hooks/use-can-create-project";
 import { useProject } from "@/hooks/store/use-project";
 import { useWorkspace } from "@/hooks/store/use-workspace";
-import { useUserPermissions } from "@/hooks/store/user";
 import { useAnalyticsTabs } from "@/components/analytics/use-analytics-tabs";
 import type { Route } from "./+types/page";
 
@@ -37,17 +36,11 @@ function AnalyticsPage({ params }: Route.ComponentProps) {
   const { toggleCreateProjectModal } = useCommandPalette();
   const { workspaceProjectIds, loader } = useProject();
   const { currentWorkspace } = useWorkspace();
-  const { allowPermissions } = useUserPermissions();
+  const canCreateProject = useCanCreateProject();
 
   const pageTitle = currentWorkspace?.name
     ? t(`workspace_analytics.page_label`, { workspace: currentWorkspace?.name })
     : undefined;
-
-  // permissions
-  const canPerformEmptyStateActions = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
 
   const workspaceSlug = params.workspaceSlug;
   const ANALYTICS_TABS = useAnalyticsTabs(workspaceSlug.toString());
@@ -120,15 +113,18 @@ function AnalyticsPage({ params }: Route.ComponentProps) {
               assetKey="project"
               title={t("workspace_projects.empty_state.no_projects.title")}
               description={t("workspace_projects.empty_state.no_projects.description")}
-              actions={[
-                {
-                  label: "Create a project",
-                  onClick: () => {
-                    toggleCreateProjectModal(true);
-                  },
-                  disabled: !canPerformEmptyStateActions,
-                },
-              ]}
+              actions={
+                canCreateProject
+                  ? [
+                      {
+                        label: "Create a project",
+                        onClick: () => {
+                          toggleCreateProjectModal(true);
+                        },
+                      },
+                    ]
+                  : []
+              }
             />
           )}
         </>

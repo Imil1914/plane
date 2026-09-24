@@ -9,8 +9,7 @@ import { observer } from "mobx-react";
 // ui
 import { useTranslation } from "@plane/i18n";
 import { Tooltip } from "@plane/propel/tooltip";
-import Link from "next/link";
-import { getPpmTranslation, isPpmShellEnabled } from "@ppm/brand";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import packageJson from "package.json";
@@ -22,23 +21,12 @@ export const WorkspaceEditionBadge = observer(function WorkspaceEditionBadge() {
   // states
   const [isPaidPlanPurchaseModalOpen, setIsPaidPlanPurchaseModalOpen] = useState(false);
   // translation
-  const { currentLocale, t } = useTranslation();
+  const { t } = useTranslation();
   // platform
   const { isMobile } = usePlatformOS();
   const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
-  if (isPpmShell) {
-    return (
-      <Tooltip tooltipContent={`PPM · Plane Community v${packageJson.version}`} isMobile={isMobile}>
-        <Link
-          href="/about/open-source"
-          className="focus-visible:outline-accent-primary rounded-md px-2 py-1 text-11 font-medium text-tertiary hover:bg-layer-1 hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2"
-        >
-          {getPpmTranslation(currentLocale, "brand.open_source")}
-        </Link>
-      </Tooltip>
-    );
-  }
+  if (isPpmShell) return null;
 
   return (
     <>

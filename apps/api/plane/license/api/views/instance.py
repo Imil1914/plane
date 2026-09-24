@@ -12,6 +12,7 @@ from django.conf import settings
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 
 # Module imports
 from plane.app.views import BaseAPIView
@@ -26,6 +27,11 @@ from django.views.decorators.cache import cache_control
 
 
 class InstanceEndpoint(BaseAPIView):
+    # This small, cached bootstrap response is requested before sign-in. The
+    # default anonymous limit is shared by everyone behind the same proxy IP.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "ppm_instance_bootstrap"
+
     def get_permissions(self):
         if self.request.method == "PATCH":
             return [InstanceAdminPermission()]

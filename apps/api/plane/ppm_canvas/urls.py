@@ -1,6 +1,27 @@
 from django.urls import path
 
-from .views import PpmCanvasView
+from .views import (
+    PpmCanvasBindingDetailView,
+    PpmCanvasBindingListCreateView,
+    PpmCanvasBoardArchiveView,
+    PpmCanvasBoardDetailView,
+    PpmCanvasBoardDuplicateView,
+    PpmCanvasBoardListCreateView,
+    PpmCanvasBoardReorderView,
+    PpmCanvasBoardRestoreView,
+    PpmCanvasBoardSnapshotView,
+    PpmCanvasBoardVersionDetailView,
+    PpmCanvasBoardVersionListView,
+    PpmCanvasSemanticEdgeDetailView,
+    PpmCanvasSemanticEdgeListCreateView,
+    PpmCanvasWorkItemsView,
+    PpmCanvasWorkItemsViewExport,
+    PpmCanvasView,
+    PpmProjectionDetailView,
+    PpmProjectionSearchView,
+    PpmWorkItemDetailView,
+    PpmWorkItemListCreateView,
+)
 
 
 urlpatterns = [
@@ -8,5 +29,115 @@ urlpatterns = [
         "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/",
         PpmCanvasView.as_view(),
         name="ppm-project-canvas",
-    )
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/",
+        PpmCanvasBoardListCreateView.as_view(),
+        name="ppm-canvas-boards",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/reorder/",
+        PpmCanvasBoardReorderView.as_view(),
+        name="ppm-canvas-boards-reorder",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/",
+        PpmCanvasBoardDetailView.as_view(),
+        name="ppm-canvas-board-detail",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/snapshot/",
+        PpmCanvasBoardSnapshotView.as_view(),
+        name="ppm-canvas-board-snapshot",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/duplicate/",
+        PpmCanvasBoardDuplicateView.as_view(),
+        name="ppm-canvas-board-duplicate",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/archive/",
+        PpmCanvasBoardArchiveView.as_view(),
+        name="ppm-canvas-board-archive",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/restore/",
+        PpmCanvasBoardRestoreView.as_view(),
+        name="ppm-canvas-board-restore",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/versions/",
+        PpmCanvasBoardVersionListView.as_view(),
+        name="ppm-canvas-board-versions",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/versions/<int:version>/",
+        PpmCanvasBoardVersionDetailView.as_view(),
+        name="ppm-canvas-board-version-detail",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/bindings/",
+        PpmCanvasBindingListCreateView.as_view(),
+        name="ppm-canvas-board-bindings",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/bindings/<uuid:binding_id>/",
+        PpmCanvasBindingDetailView.as_view(),
+        name="ppm-canvas-board-binding-detail",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/work-items/",
+        PpmWorkItemListCreateView.as_view(),
+        name="ppm-canvas-board-work-item-create",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/work-items-view/",
+        PpmCanvasWorkItemsView.as_view(),
+        name="ppm-canvas-board-work-items-view",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/work-items-view/export/<str:export_format>/",
+        PpmCanvasWorkItemsViewExport.as_view(),
+        name="ppm-canvas-board-work-items-view-export",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/semantic-edges/",
+        PpmCanvasSemanticEdgeListCreateView.as_view(),
+        name="ppm-canvas-board-semantic-edges",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/semantic-edges/<uuid:edge_id>/",
+        PpmCanvasSemanticEdgeDetailView.as_view(),
+        name="ppm-canvas-board-semantic-edge-detail",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/bindings/",
+        PpmCanvasBindingListCreateView.as_view(),
+        name="ppm-canvas-bindings",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/bindings/<uuid:binding_id>/",
+        PpmCanvasBindingDetailView.as_view(),
+        name="ppm-canvas-binding-detail",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/projections/search/",
+        PpmProjectionSearchView.as_view(),
+        name="ppm-projection-search",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/projections/<str:entity_type>/<uuid:entity_id>/",
+        PpmProjectionDetailView.as_view(),
+        name="ppm-projection-detail",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/work-items/",
+        PpmWorkItemListCreateView.as_view(),
+        name="ppm-work-item-create",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/work-items/<uuid:entity_id>/",
+        PpmWorkItemDetailView.as_view(),
+        name="ppm-work-item-detail",
+    ),
 ]

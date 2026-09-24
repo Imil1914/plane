@@ -12,6 +12,7 @@ import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import { EIssuesStoreType, EUserWorkspaceRoles } from "@plane/types";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
+import { useCanCreateProject } from "@/hooks/use-can-create-project";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 
@@ -22,6 +23,7 @@ export const GlobalViewEmptyState = observer(function GlobalViewEmptyState() {
   const { workspaceProjectIds } = useProject();
   const { toggleCreateIssueModal, toggleCreateProjectModal } = useCommandPalette();
   const { allowPermissions } = useUserPermissions();
+  const canCreateProject = useCanCreateProject();
   // derived values
   const hasMemberLevelPermission = allowPermissions(
     [EUserWorkspaceRoles.ADMIN, EUserWorkspaceRoles.MEMBER],
@@ -35,16 +37,19 @@ export const GlobalViewEmptyState = observer(function GlobalViewEmptyState() {
         description={t("workspace_projects.empty_state.no_projects.description")}
         assetKey="project"
         assetClassName="size-40"
-        actions={[
-          {
-            label: t("workspace_projects.empty_state.no_projects.primary_button.text"),
-            onClick: () => {
-              toggleCreateProjectModal(true);
-            },
-            disabled: !hasMemberLevelPermission,
-            variant: "primary",
-          },
-        ]}
+        actions={
+          canCreateProject
+            ? [
+                {
+                  label: t("workspace_projects.empty_state.no_projects.primary_button.text"),
+                  onClick: () => {
+                    toggleCreateProjectModal(true);
+                  },
+                  variant: "primary" as const,
+                },
+              ]
+            : []
+        }
       />
     );
   }

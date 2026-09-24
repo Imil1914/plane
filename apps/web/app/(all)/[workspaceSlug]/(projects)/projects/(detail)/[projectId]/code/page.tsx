@@ -4,9 +4,9 @@
  * See the LICENSE file for details.
  */
 
-import { PpmProjectFeaturePage } from "@/components/ppm-shell/project-feature-page";
+import { PpmGitRoute } from "@/components/ppm-git/route";
 import type { Route } from "./+types/page";
 
 export default function ProjectCodePage({ params }: Route.ComponentProps) {
-  return <PpmProjectFeaturePage feature="code" {...params} />;
+  return <PpmGitRoute {...params} />;
 }

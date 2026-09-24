@@ -1,0 +1,38 @@
+name: PPM Canvas browser gate
+
+on:
+  workflow_dispatch:
+
+jobs:
+  isolated-browser-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Check out PPM web source
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install workspace dependencies
+        run: |
+          corepack enable pnpm
+          pnpm install --frozen-lockfile
+          pnpm exec turbo run build --filter='web^...'
+
+      - name: Prepare disposable local settings
+        run: |
+          cp .env.example .env
+          cp apps/api/.env.example apps/api/.env
+          cp apps/web/.env.example apps/web/.env
+          printf '\nSECRET_KEY=%s\n' "$(openssl rand -hex 32)" >> apps/api/.env
+
+      - name: Install browser engines
+        run: pnpm --dir apps/web exec playwright install --with-deps chromium firefox webkit
+
+      - name: Verify Canvas in isolated browsers
+        run: bash scripts/ppm-canvas-browser-gate.sh chromium firefox webkit

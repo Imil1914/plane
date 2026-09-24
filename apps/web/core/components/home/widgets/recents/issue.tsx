@@ -6,20 +6,23 @@
 
 import { observer } from "mobx-react";
 // plane types
+import { useTranslation } from "@plane/i18n";
 import { PriorityIcon, StateGroupIcon, WorkItemsIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TActivityEntityData, TIssueEntityData } from "@plane/types";
 import { EIssueServiceType } from "@plane/types";
 // plane ui
-import { calculateTimeAgo, generateWorkItemLink } from "@plane/utils";
+import { generateWorkItemLink } from "@plane/utils";
 // components
 import { ListItem } from "@/components/core/list";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
+import { formatPpmTimeAgo } from "@/helpers/ppm-time-ago.helper";
 
 type BlockProps = {
   activity: TActivityEntityData;
@@ -33,6 +36,8 @@ export const RecentIssue = observer(function RecentIssue(props: BlockProps) {
   const { setPeekIssue } = useIssueDetail();
   const { setPeekIssue: setPeekEpic } = useIssueDetail(EIssueServiceType.EPICS);
   const { getProjectIdentifierById } = useProject();
+  const { currentLocale } = useTranslation();
+  const ppmT = usePpmTranslation();
   // derived values
   const issueDetails: TIssueEntityData = activity.entity_data as TIssueEntityData;
   const projectIdentifier = getProjectIdentifierById(issueDetails?.project_id);
@@ -93,12 +98,15 @@ export const RecentIssue = observer(function RecentIssue(props: BlockProps) {
       }
       appendTitleElement={
         <div className="flex-shrink-0 text-11 font-medium text-placeholder">
-          {calculateTimeAgo(activity.visited_at)}
+          {formatPpmTimeAgo(activity.visited_at, currentLocale)}
         </div>
       }
       quickActionElement={
         <div className="flex gap-4">
-          <Tooltip tooltipHeading="State" tooltipContent={state?.name ?? "State"}>
+          <Tooltip
+            tooltipHeading={ppmT("canvas.work_item_state")}
+            tooltipContent={state?.name ?? ppmT("canvas.work_item_no_state")}
+          >
             <div>
               <StateGroupIcon
                 stateGroup={state?.group ?? "backlog"}
@@ -108,7 +116,10 @@ export const RecentIssue = observer(function RecentIssue(props: BlockProps) {
               />
             </div>
           </Tooltip>
-          <Tooltip tooltipHeading="Priority" tooltipContent={issueDetails?.priority ?? "Priority"}>
+          <Tooltip
+            tooltipHeading={ppmT("canvas.work_item_priority")}
+            tooltipContent={issueDetails?.priority ?? ppmT("canvas.priority_none")}
+          >
             <div>
               <PriorityIcon priority={issueDetails?.priority} withContainer size={12} />
             </div>
@@ -124,7 +135,7 @@ export const RecentIssue = observer(function RecentIssue(props: BlockProps) {
                 buttonVariant={issueDetails?.assignees?.length > 0 ? "transparent-without-text" : "border-without-text"}
                 buttonClassName={issueDetails?.assignees?.length > 0 ? "hover:bg-transparent px-0" : ""}
                 showTooltip={issueDetails?.assignees?.length === 0}
-                placeholder="Assignees"
+                placeholder={ppmT("canvas.work_item_assignees")}
                 optionsClassName="z-10"
                 tooltipContent=""
               />

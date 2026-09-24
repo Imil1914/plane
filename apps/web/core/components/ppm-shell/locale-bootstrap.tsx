@@ -12,6 +12,20 @@ import { PpmState } from "./state";
 
 const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
+export function PpmLocaleFallback() {
+  if (!IS_PPM_SHELL_ENABLED) return null;
+
+  return (
+    <div className="flex h-screen w-full items-center justify-center bg-canvas">
+      <PpmState
+        variant="loading"
+        title={getPpmTranslation("ru", "state.loading_title")}
+        description={getPpmTranslation("ru", "state.loading_description")}
+      />
+    </div>
+  );
+}
+
 export function PpmLocaleBootstrap({ children }: { children: React.ReactNode }) {
   const [isReady, setIsReady] = useState(!IS_PPM_SHELL_ENABLED);
 
@@ -24,16 +38,7 @@ export function PpmLocaleBootstrap({ children }: { children: React.ReactNode }) 
     void setLanguage(initialLanguage).finally(() => setIsReady(true));
   }, []);
 
-  if (!isReady)
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-canvas">
-        <PpmState
-          variant="loading"
-          title={getPpmTranslation("ru", "state.loading_title")}
-          description={getPpmTranslation("ru", "state.loading_description")}
-        />
-      </div>
-    );
+  if (!isReady) return <PpmLocaleFallback />;
 
   return children;
 }

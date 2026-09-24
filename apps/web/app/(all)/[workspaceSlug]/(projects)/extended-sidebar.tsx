@@ -10,10 +10,13 @@ import { useParams } from "next/navigation";
 // plane imports
 import { WORKSPACE_SIDEBAR_DYNAMIC_NAVIGATION_ITEMS_LINKS, EUserPermissionsLevel } from "@plane/constants";
 import type { EUserWorkspaceRoles } from "@plane/types";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkspaceNavigationPreferences } from "@/hooks/use-navigation-preferences";
+import { usePpmAdminAccess } from "@/hooks/use-ppm-admin-access";
+import { canAccessPpmWorkspaceAdministration } from "@/helpers/ppm-workspace-access.helper";
 // components
 import { ExtendedSidebarItem } from "@/components/workspace/sidebar/extended-sidebar-item";
 import { ExtendedSidebarWrapper } from "./extended-sidebar-wrapper";
@@ -26,10 +29,16 @@ export const ExtendedAppSidebar = observer(function ExtendedAppSidebar() {
   // store hooks
   const { isExtendedSidebarOpened, toggleExtendedSidebar } = useAppTheme();
   const { allowPermissions } = useUserPermissions();
+  const { isGlobalAdmin } = usePpmAdminAccess();
   const { preferences: workspacePreferences, updateWorkspaceItemSortOrder } = useWorkspaceNavigationPreferences();
 
   // derived values
   const currentWorkspaceNavigationPreferences = workspacePreferences.items;
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const canAccessWorkspaceAdministration = canAccessPpmWorkspaceAdministration({
+    isGlobalAdmin,
+    isPpmShell,
+  });
 
   const sortedNavigationItems = useMemo(() => {
     const slug = workspaceSlug.toString();
@@ -119,6 +128,8 @@ export const ExtendedAppSidebar = observer(function ExtendedAppSidebar() {
   };
 
   const handleClose = useCallback(() => toggleExtendedSidebar(false), [toggleExtendedSidebar]);
+
+  if (!canAccessWorkspaceAdministration) return null;
 
   return (
     <ExtendedSidebarWrapper

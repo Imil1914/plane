@@ -1,0 +1,80 @@
+from django.urls import path
+
+from .views import (
+    PpmGitCodeIndexPolicyView,
+    PpmGitConnectionDetailView,
+    PpmGitHubCallbackView,
+    PpmGitHubConnectStartView,
+    PpmGitHubInstallationRepositoriesView,
+    PpmGitHubInstallationRefreshView,
+    PpmGitHubRepositoryConnectView,
+    PpmGitHubSetupView,
+    PpmGitHubWebhookView,
+    PpmGitLinkDetailView,
+    PpmGitLinkListView,
+    PpmGitOverviewView,
+    PpmGitRepositoryDetailView,
+    PpmGitRepositoryListView,
+    PpmGitWriteActionDecisionView,
+    PpmGitWriteActionDetailView,
+    PpmGitWriteActionListView,
+)
+
+
+PROJECT = "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/git/"
+
+urlpatterns = [
+    path("git/github/setup/", PpmGitHubSetupView.as_view(), name="ppm-github-setup"),
+    path("git/github/callback/", PpmGitHubCallbackView.as_view(), name="ppm-github-callback"),
+    path("git/github/webhook/", PpmGitHubWebhookView.as_view(), name="ppm-github-webhook"),
+    path(PROJECT, PpmGitOverviewView.as_view(), name="ppm-project-git"),
+    path(
+        f"{PROJECT}providers/github/start/",
+        PpmGitHubConnectStartView.as_view(),
+        name="ppm-github-connect-start",
+    ),
+    path(
+        f"{PROJECT}providers/github/installations/<uuid:installation_id>/repositories/",
+        PpmGitHubInstallationRepositoriesView.as_view(),
+        name="ppm-github-installation-repositories",
+    ),
+    path(
+        f"{PROJECT}providers/github/installations/<uuid:installation_id>/refresh/",
+        PpmGitHubInstallationRefreshView.as_view(),
+        name="ppm-github-installation-refresh",
+    ),
+    path(
+        f"{PROJECT}providers/github/repositories/",
+        PpmGitHubRepositoryConnectView.as_view(),
+        name="ppm-github-repository-connect",
+    ),
+    path(
+        f"{PROJECT}connections/<uuid:connection_id>/",
+        PpmGitConnectionDetailView.as_view(),
+        name="ppm-git-connection",
+    ),
+    path(f"{PROJECT}repositories/", PpmGitRepositoryListView.as_view(), name="ppm-git-repositories"),
+    path(
+        f"{PROJECT}repositories/<uuid:repository_id>/",
+        PpmGitRepositoryDetailView.as_view(),
+        name="ppm-git-repository",
+    ),
+    path(
+        f"{PROJECT}repositories/<uuid:repository_id>/code-index/",
+        PpmGitCodeIndexPolicyView.as_view(),
+        name="ppm-git-code-index-policy",
+    ),
+    path(f"{PROJECT}links/", PpmGitLinkListView.as_view(), name="ppm-git-links"),
+    path(f"{PROJECT}links/<uuid:link_id>/", PpmGitLinkDetailView.as_view(), name="ppm-git-link"),
+    path(f"{PROJECT}write-actions/", PpmGitWriteActionListView.as_view(), name="ppm-git-write-actions"),
+    path(
+        f"{PROJECT}write-actions/<uuid:action_id>/",
+        PpmGitWriteActionDetailView.as_view(),
+        name="ppm-git-write-action",
+    ),
+    path(
+        f"{PROJECT}write-actions/<uuid:action_id>/decision/",
+        PpmGitWriteActionDecisionView.as_view(),
+        name="ppm-git-write-action-decision",
+    ),
+]

@@ -64,11 +64,23 @@ describe("PPM project navigation capabilities", () => {
     ]);
   });
 
-  it.each([
-    ["member", EUserPermissions.MEMBER],
-    ["admin", EUserPermissions.ADMIN],
-  ])("adds editor sections for a %s", (_roleName, role) => {
-    expect(visibleKeys({ isPpmShellEnabled: true, role })).toEqual([
+  it("keeps a participant out of project settings", () => {
+    expect(visibleKeys({ isPpmShellEnabled: true, role: EUserPermissions.MEMBER })).toEqual([
+      "overview",
+      "brain",
+      "work_items",
+      "views",
+      "cycles",
+      "modules",
+      "intake",
+      "knowledge",
+      "pages",
+      "code",
+    ]);
+  });
+
+  it("lets the project lead configure their project", () => {
+    expect(visibleKeys({ isPpmShellEnabled: true, role: EUserPermissions.ADMIN })).toEqual([
       "overview",
       "brain",
       "work_items",

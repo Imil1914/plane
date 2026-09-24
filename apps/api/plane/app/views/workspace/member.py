@@ -22,6 +22,7 @@ from plane.app.serializers import (
 )
 from plane.app.views.base import BaseAPIView
 from plane.db.models import Project, ProjectMember, WorkspaceMember, DraftIssue
+from plane.ppm_core.permissions import is_ppm_global_admin
 from plane.utils.cache import invalidate_cache
 
 from .. import BaseViewSet
@@ -84,6 +85,18 @@ class WorkSpaceMemberViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if is_ppm_global_admin(user=workspace_member.member, workspace_slug=slug):
+            return Response(
+                {"error": "The global administrator role cannot be changed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if "role" in request.data and int(request.data.get("role")) == ROLE.ADMIN.value:
+            return Response(
+                {"error": "Global administrator access belongs only to the workspace owner."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # If a user is moved to a guest role he can't have any other role in projects
         if "role" in request.data and int(request.data.get("role")) == 5:
             ProjectMember.objects.filter(workspace__slug=slug, member_id=workspace_member.member_id).update(role=5)
@@ -113,6 +126,12 @@ class WorkSpaceMemberViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if is_ppm_global_admin(user=workspace_member.member, workspace_slug=slug):
+            return Response(
+                {"error": "The global administrator cannot be removed from the workspace."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         if requesting_workspace_member.role < workspace_member.role:
             return Response(
                 {"error": "You cannot remove a user having role higher than you"},
@@ -125,7 +144,7 @@ class WorkSpaceMemberViewSet(BaseViewSet):
                 member_with_role=Count(
                     "project_projectmember",
                     filter=Q(
-                        project_projectmember__member_id=workspace_member.id,
+                        project_projectmember__member_id=workspace_member.member_id,
                         project_projectmember__role=20,
                     ),
                 ),
@@ -161,14 +180,12 @@ class WorkSpaceMemberViewSet(BaseViewSet):
     def leave(self, request, slug):
         workspace_member = WorkspaceMember.objects.get(workspace__slug=slug, member=request.user, is_active=True)
 
-        # Check if the leaving user is the only admin of the workspace
-        if (
-            workspace_member.role == 20
-            and not WorkspaceMember.objects.filter(workspace__slug=slug, role=20, is_active=True).count() > 1
-        ):
+        if is_ppm_global_admin(user=request.user, workspace_slug=slug):
             return Response(
                 {
-                    "error": "You cannot leave the workspace as you are the only admin of the workspace you will have to either delete the workspace or promote another user to admin."  # noqa: E501
+                    "error": (
+                        "The global administrator owns this workspace and cannot leave it. Transfer ownership first."
+                    )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -242,11 +259,14 @@ class WorkspaceProjectMemberEndpoint(BaseAPIView):
 
     def get(self, request, slug):
         # Fetch all project IDs where the user is involved
-        project_ids = (
-            ProjectMember.objects.filter(member=request.user, is_active=True)
-            .values_list("project_id", flat=True)
-            .distinct()
-        )
+        if is_ppm_global_admin(user=request.user, workspace_slug=slug):
+            project_ids = Project.objects.filter(workspace__slug=slug).values_list("id", flat=True)
+        else:
+            project_ids = (
+                ProjectMember.objects.filter(member=request.user, is_active=True)
+                .values_list("project_id", flat=True)
+                .distinct()
+            )
 
         # Get all the project members in which the user is involved
         project_members = ProjectMember.objects.filter(

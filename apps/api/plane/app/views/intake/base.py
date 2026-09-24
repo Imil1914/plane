@@ -33,7 +33,6 @@ from plane.db.models import (
     ProjectMember,
     CycleIssue,
     IssueDescriptionVersion,
-    WorkspaceMember,
 )
 from plane.app.serializers import (
     IssueCreateSerializer,
@@ -52,6 +51,7 @@ from plane.utils.timezone_converter import user_timezone_converter
 from plane.utils.global_paginator import paginate
 from plane.utils.host import base_host
 from plane.db.models.intake import SourceType
+from plane.ppm_core.permissions import is_ppm_global_admin
 
 
 class IntakeViewSet(BaseViewSet):
@@ -351,21 +351,16 @@ class IntakeIssueViewSet(BaseViewSet):
             is_active=True,
         ).first()
 
-        is_workspace_admin = WorkspaceMember.objects.filter(
-            workspace__slug=slug,
-            is_active=True,
-            member=request.user,
-            role=ROLE.ADMIN.value,
-        ).exists()
+        is_global_admin = is_ppm_global_admin(user=request.user, workspace_slug=slug)
 
-        if not project_member and not is_workspace_admin:
+        if not project_member and not is_global_admin:
             return Response(
                 {"error": "Only admin or creator can update the intake work items"},
                 status=status.HTTP_403_FORBIDDEN,
             )
 
         # Only project members admins and created_by users can access this endpoint
-        if ((project_member and project_member.role <= ROLE.GUEST.value) and not is_workspace_admin) and str(
+        if ((project_member and project_member.role <= ROLE.GUEST.value) and not is_global_admin) and str(
             intake_issue.created_by_id
         ) != str(request.user.id):
             return Response(
@@ -422,7 +417,7 @@ class IntakeIssueViewSet(BaseViewSet):
         intake_serializer = None
         intake_current_instance = None
 
-        if (project_member and project_member.role > ROLE.MEMBER.value) or is_workspace_admin:
+        if (project_member and project_member.role > ROLE.MEMBER.value) or is_global_admin:
             intake_current_instance = json.dumps(IntakeIssueSerializer(intake_issue).data, cls=DjangoJSONEncoder)
             intake_serializer = IntakeIssueSerializer(intake_issue, data=request.data, partial=True)
 

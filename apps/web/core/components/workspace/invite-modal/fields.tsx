@@ -13,8 +13,10 @@ import { useTranslation } from "@plane/i18n";
 import { CloseIcon } from "@plane/propel/icons";
 import { CustomSelect, Input } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import type { InvitationFormValues } from "@/hooks/use-workspace-invitation";
 
 type TInvitationFieldsProps = {
@@ -37,10 +39,16 @@ export const InvitationFields = observer(function InvitationFields(props: TInvit
   } = props;
   // plane hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // store hooks
   const { workspaceInfoBySlug } = useUserPermissions();
   // derived values
   const currentWorkspaceRole = workspaceInfoBySlug(workspaceSlug.toString())?.role;
+  const getRoleLabel = (role: number) => {
+    if (!isPpmShell) return ROLE[role as keyof typeof ROLE];
+    return role === 15 ? ppmT("access.member") : ppmT("access.guest");
+  };
 
   return (
     <div className={cn("mb-3 space-y-4", className)}>
@@ -91,16 +99,18 @@ export const InvitationFields = observer(function InvitationFields(props: TInvit
                 render={({ field: { value, onChange } }) => (
                   <CustomSelect
                     value={value}
-                    label={<span className="text-caption-sm-regular sm:text-body-xs-regular">{ROLE[value]}</span>}
+                    label={
+                      <span className="text-caption-sm-regular sm:text-body-xs-regular">{getRoleLabel(value)}</span>
+                    }
                     onChange={onChange}
                     className="w-24 flex-grow"
                     input
                   >
-                    {Object.entries(ROLE).map(([key, value]) => {
-                      if (currentWorkspaceRole && currentWorkspaceRole >= parseInt(key))
+                    {Object.keys(ROLE).map((key) => {
+                      if (parseInt(key) !== 20 && currentWorkspaceRole && currentWorkspaceRole >= parseInt(key))
                         return (
                           <CustomSelect.Option key={key} value={parseInt(key)}>
-                            {value}
+                            {getRoleLabel(parseInt(key))}
                           </CustomSelect.Option>
                         );
                     })}

@@ -11,6 +11,7 @@ import { getAssetIdFromUrl, checkURLValidity } from "@plane/utils";
 // helpers
 // hooks
 import useKeypress from "@/hooks/use-keypress";
+import { useCanCreateProject } from "@/hooks/use-can-create-project";
 // plane web components
 import { CreateProjectForm } from "@/components/projects/create/root";
 // plane web types
@@ -39,6 +40,7 @@ export function CreateProjectModal(props: Props) {
   // states
   const [currentStep, setCurrentStep] = useState<EProjectCreationSteps>(EProjectCreationSteps.CREATE_PROJECT);
   const [createdProjectId, setCreatedProjectId] = useState<string | null>(null);
+  const canCreateProject = useCanCreateProject();
 
   useEffect(() => {
     if (isOpen) {
@@ -64,6 +66,8 @@ export function CreateProjectModal(props: Props) {
   useKeypress("Escape", () => {
     if (isOpen) onClose();
   });
+
+  if (!canCreateProject) return null;
 
   return (
     <ModalCore isOpen={isOpen} position={EModalPosition.TOP} width={EModalWidth.XXXXL}>

@@ -16,6 +16,7 @@ export const coreRoutes: RouteConfigEntry[] = [
   layout("./(home)/layout.tsx", [index("./(home)/page.tsx")]),
 
   // PPM brand foundation and open-source attribution
+  route("about/ppm-guide", "./(home)/about/ppm-guide/page.tsx"),
   route("about/open-source", "./(home)/about/open-source/page.tsx"),
   route("about/brand-foundation", "./(home)/about/brand-foundation/page.tsx"),
 
@@ -51,6 +52,9 @@ export const coreRoutes: RouteConfigEntry[] = [
   // ALL APP ROUTES
   // ========================================================================
   layout("./(all)/layout.tsx", [
+    // Protected PPM global administration center
+    route("ppm-admin", "./(all)/ppm-admin/page.tsx"),
+
     // ======================================================================
     // WORKSPACE-SCOPED ROUTES
     // ======================================================================

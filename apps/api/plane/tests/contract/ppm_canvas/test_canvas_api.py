@@ -1,10 +1,12 @@
 import uuid
 
 import pytest
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from rest_framework import status
 
-from plane.ppm_canvas.models import PpmCanvasVersion, PpmProjectCanvas
+from plane.ppm_canvas.models import PpmCanvasBoard, PpmCanvasVersion, PpmProjectCanvas
+from plane.ppm_canvas.schema import canvas_snapshot_hash
 from plane.tests.factories import (
     ProjectFactory,
     ProjectMemberFactory,
@@ -15,6 +17,10 @@ from plane.tests.factories import (
 
 
 pytestmark = [pytest.mark.contract, pytest.mark.django_db]
+
+
+def test_canvas_request_id_header_is_allowed_by_cors():
+    assert "x-request-id" in {header.lower() for header in settings.CORS_ALLOW_HEADERS}
 
 
 def make_user():
@@ -43,7 +49,7 @@ def snapshot(label="one"):
 
 def save_payload(*, base_version=0, operation_id=None, value=None):
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "base_version": base_version,
         "snapshot": value or snapshot(),
         "client_operation_id": str(operation_id or uuid.uuid4()),
@@ -122,6 +128,34 @@ def test_reload_returns_the_saved_snapshot(api_client, canvas_project):
     assert response.data["snapshot_status"] == "ready"
     assert response.data["snapshot"] == expected
     assert response.data["version"] == 1
+
+
+def test_schema_v1_snapshot_remains_readable_during_v2_migration(api_client, canvas_project):
+    user, workspace, project = canvas_project
+    authenticate(api_client, user)
+    opened = api_client.get(canvas_url(workspace, project))
+    board = PpmCanvasBoard.objects.get(id=opened.data["board_id"])
+    legacy_snapshot = snapshot("legacy-v1")
+    PpmCanvasVersion.objects.create(
+        canvas=board.canvas,
+        board=board,
+        version=1,
+        schema_version=1,
+        snapshot_json=legacy_snapshot,
+        content_hash=canvas_snapshot_hash(legacy_snapshot),
+        client_operation_id=uuid.uuid4(),
+        request_id=uuid.uuid4(),
+        created_by=user.id,
+    )
+    board.current_version = 1
+    board.save(update_fields=["current_version", "updated_at"])
+
+    response = api_client.get(canvas_url(workspace, project))
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["schema_version"] == 2
+    assert response.data["snapshot_status"] == "ready"
+    assert response.data["snapshot"] == legacy_snapshot
 
 
 def test_stale_second_user_save_conflicts_without_overwrite(api_client, canvas_project):
@@ -231,8 +265,23 @@ def test_corrupt_snapshot_falls_back_without_mutation(api_client, canvas_project
         created_by=user.id,
         current_version=1,
     )
+    board = PpmCanvasBoard.objects.create(
+        workspace_id=workspace.id,
+        project_id=project.id,
+        canvas=canvas,
+        name="Главная",
+        normalized_name="главная",
+        position=0,
+        current_version=1,
+        created_operation_id=uuid.uuid4(),
+        created_by=user.id,
+        updated_by=user.id,
+    )
+    canvas.default_board = board
+    canvas.save(update_fields=["default_board", "updated_at"])
     PpmCanvasVersion.objects.create(
         canvas=canvas,
+        board=board,
         version=1,
         snapshot_json={"not_document": True},
         content_hash="0" * 64,

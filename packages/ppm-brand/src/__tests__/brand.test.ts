@@ -8,6 +8,7 @@ import {
   PLANE_SOURCE_ATTRIBUTION,
   PPM_BRAND,
   PPM_PROJECT_NAVIGATION_CONTRACT,
+  PPM_SOURCE_ATTRIBUTION,
   resolvePpmInitialLanguage,
   shouldInitializePpmProfileLanguage,
 } from "../index";
@@ -69,7 +70,18 @@ describe("PPM shell contract", () => {
   it("keeps Russian and English terminology behind stable keys", () => {
     expect(getPpmTranslation("ru", "project.tasks")).toBe("Задачи");
     expect(getPpmTranslation("en", "project.tasks")).toBe("Tasks");
-    expect(getPpmTranslation("fr", "project.brain")).toBe("Project brain");
+    expect(getPpmTranslation("ru", "project.brain")).toBe("Холст");
+    expect(getPpmTranslation("fr", "project.brain")).toBe("Canvas");
+    expect(getPpmTranslation("ru", "actions.open_canvas")).toBe("Открыть холст");
+    expect(getPpmTranslation("ru", "project.views")).toBe("Фильтры задач");
+    expect(getPpmTranslation("ru", "project.stages")).toBe("Спринты");
+    expect(getPpmTranslation("ru", "project.knowledge")).toBe("Хранилище");
+    expect(getPpmTranslation("ru", "project.collaborative_pages")).toBe("Документы");
+    expect(getPpmTranslation("ru", "help.title")).toBe("Помощь");
+    expect(getPpmTranslation("ru", "help.guide")).toBe("Руководство PPM");
+    expect(getPpmTranslation("ru", "help.report_problem")).toBe("Сообщить о проблеме");
+    expect(getPpmTranslation("ru", "about.title")).toBe("О программе");
+    expect(getPpmTranslation("en", "about.source_code")).toBe("PPM source code");
     expect(getPpmTranslation("ru", "navigation.project")).toBe("Навигация проекта");
     expect(getPpmTranslation("en", "navigation.more_project_sections")).toBe("More project sections");
     expect(getPpmTranslation("ru", "navigation.search_commands")).toBe("Поиск команд…");
@@ -110,10 +122,10 @@ describe("PPM shell contract", () => {
   it("marks unavailable capabilities with a delivery stage", () => {
     const plannedCapabilities = PPM_PROJECT_NAVIGATION_CONTRACT.filter(({ capability }) => capability === "planned");
 
-    expect(plannedCapabilities).toEqual([
-      expect.objectContaining({ key: "knowledge", stage: "I0.7" }),
-      expect.objectContaining({ key: "code", stage: "G0.1" }),
-    ]);
+    expect(plannedCapabilities).toEqual([expect.objectContaining({ key: "code", stage: "G0.1" })]);
+    expect(PPM_PROJECT_NAVIGATION_CONTRACT).toContainEqual(
+      expect.objectContaining({ key: "knowledge", capability: "available" })
+    );
   });
 });
 
@@ -145,6 +157,13 @@ describe("Plane source attribution", () => {
     expect(PLANE_SOURCE_ATTRIBUTION.releaseTag).toBe("v1.4.2");
     expect(PLANE_SOURCE_ATTRIBUTION.baselineCommit).toHaveLength(40);
     expect(PLANE_SOURCE_ATTRIBUTION.license).toBe("AGPL-3.0-only");
+  });
+
+  it("publishes the PPM source and release identity contract", () => {
+    expect(PPM_SOURCE_ATTRIBUTION.version).toBe("0.1.0");
+    expect(PPM_SOURCE_ATTRIBUTION.repository).toBe("https://github.com/Imil1914/PPM");
+    expect(PPM_SOURCE_ATTRIBUTION.license).toBe("AGPL-3.0-only");
+    expect(PPM_SOURCE_ATTRIBUTION.sourceRevisionEnvironment).toBe("VITE_PPM_SOURCE_REVISION");
   });
 });
 

@@ -5,7 +5,7 @@
  */
 
 import type { ElementType } from "react";
-import { BrainCircuit, Code2, Gauge, Settings } from "lucide-react";
+import { Code2, Gauge, Network, Settings } from "lucide-react";
 import { EUserPermissions } from "@plane/constants";
 import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, ViewsIcon, WorkItemsIcon } from "@plane/propel/icons";
 import type { EUserProjectRoles, IPartialProject } from "@plane/types";
@@ -37,6 +37,7 @@ type TBuildProjectNavigationItems = {
 
 const ALL_PROJECT_MEMBERS = [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST];
 const PROJECT_EDITORS = [EUserPermissions.ADMIN, EUserPermissions.MEMBER];
+const PROJECT_LEADS = [EUserPermissions.ADMIN];
 
 export function buildProjectNavigationItems({
   isPpmCanvasEnabled,
@@ -63,9 +64,9 @@ export function buildProjectNavigationItems({
     {
       i18n_key: "brain",
       key: "brain",
-      name: "Project brain",
+      name: "Canvas",
       href: getPpmProjectPath(workspaceSlug, projectId, "brain"),
-      icon: BrainCircuit,
+      icon: Network,
       access: ALL_PROJECT_MEMBERS,
       shouldRender: isPpmCanvasEnabled,
       sortOrder: 2,
@@ -174,7 +175,7 @@ export function buildProjectNavigationItems({
       name: "Project settings",
       href: `/${workspaceSlug}/settings/projects/${projectId}`,
       icon: Settings,
-      access: PROJECT_EDITORS,
+      access: PROJECT_LEADS,
       shouldRender: true,
       sortOrder: 40,
       ppmLabelKey: "project.settings",

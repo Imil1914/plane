@@ -8,6 +8,7 @@
 import ipaddress
 import logging
 import os
+from pathlib import Path
 from urllib.parse import urlparse
 from urllib.parse import urljoin
 
@@ -44,7 +45,7 @@ if SECRET_KEY in _INSECURE_SECRET_KEYS:
         "This makes your installation vulnerable to session forgery, CSRF bypass, and "
         "password-reset token forging. Set a unique SECRET_KEY before deploying to production. "
         "Generate one with: "
-        "python3 -c \"from django.utils.crypto import get_random_secret_key; print(get_random_secret_key())\""
+        'python3 -c "from django.utils.crypto import get_random_secret_key; print(get_random_secret_key())"'
     )
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -74,9 +75,7 @@ for _cidr in _webhook_allowed_ips_raw.split(","):
 # Example: "silo,silo.namespace.svc.cluster.local,internal-api.lan"
 _webhook_allowed_hosts_raw = os.environ.get("WEBHOOK_ALLOWED_HOSTS", "")
 WEBHOOK_ALLOWED_HOSTS = [
-    _host.strip().rstrip(".").lower()
-    for _host in _webhook_allowed_hosts_raw.split(",")
-    if _host.strip()
+    _host.strip().rstrip(".").lower() for _host in _webhook_allowed_hosts_raw.split(",") if _host.strip()
 ]
 
 # Webhook disallowed domains — comma-separated hostnames. Webhooks targeting
@@ -85,9 +84,7 @@ WEBHOOK_ALLOWED_HOSTS = [
 # for self-hosted deployments; set to e.g. "plane.so" to block specific domains.
 _webhook_disallowed_domains_raw = os.environ.get("WEBHOOK_DISALLOWED_DOMAINS", "")
 WEBHOOK_DISALLOWED_DOMAINS = [
-    _d.strip().rstrip(".").lower()
-    for _d in _webhook_disallowed_domains_raw.split(",")
-    if _d.strip()
+    _d.strip().rstrip(".").lower() for _d in _webhook_disallowed_domains_raw.split(",") if _d.strip()
 ]
 
 # Allowed Hosts
@@ -111,7 +108,10 @@ INSTALLED_APPS = [
     "plane.license",
     "plane.api",
     "plane.authentication",
+    "plane.ppm_brain",
     "plane.ppm_canvas",
+    "plane.ppm_git",
+    "plane.ppm_vault",
     # Third-party things
     "rest_framework",
     "corsheaders",
@@ -142,6 +142,8 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "30/minute",
         "asset_id": "5/minute",
+        # Shared-IP clients all request this public, cached endpoint while bootstrapping.
+        "ppm_instance_bootstrap": os.environ.get("PPM_INSTANCE_BOOTSTRAP_RATE_LIMIT", "300/minute"),
     },
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
@@ -153,6 +155,121 @@ REST_FRAMEWORK = {
 
 # API key throttle rate (DRF SimpleRateThrottle format, e.g. "60/minute")
 API_KEY_RATE_LIMIT = os.environ.get("API_KEY_RATE_LIMIT", "60/minute")
+
+# Project Brain stays keyword-only unless an operator explicitly approves external
+# text processing and configures a provider. API keys remain server environment only.
+PPM_BRAIN_ENABLED = os.environ.get("PPM_BRAIN_ENABLED", "1") == "1"
+PPM_BRAIN_GRAPH_ENABLED = os.environ.get("PPM_BRAIN_GRAPH_ENABLED", "1") == "1"
+PPM_BRAIN_EMBEDDING_PROVIDER = os.environ.get("PPM_BRAIN_EMBEDDING_PROVIDER", "disabled")
+PPM_BRAIN_ALLOW_EXTERNAL_EMBEDDINGS = os.environ.get("PPM_BRAIN_ALLOW_EXTERNAL_EMBEDDINGS", "0") == "1"
+PPM_BRAIN_EMBEDDING_MODEL = os.environ.get("PPM_BRAIN_EMBEDDING_MODEL", "text-embedding-3-small")
+PPM_BRAIN_ANSWERS_ENABLED = os.environ.get("PPM_BRAIN_ANSWERS_ENABLED", "1") == "1"
+PPM_BRAIN_COMPLETION_PROVIDER = os.environ.get("PPM_BRAIN_COMPLETION_PROVIDER", "disabled")
+PPM_BRAIN_ALLOW_EXTERNAL_COMPLETIONS = os.environ.get("PPM_BRAIN_ALLOW_EXTERNAL_COMPLETIONS", "0") == "1"
+PPM_BRAIN_COMPLETION_MODEL = os.environ.get("PPM_BRAIN_COMPLETION_MODEL", "gpt-4o-mini")
+PPM_BRAIN_COMPLETION_POLICY_VERSION = os.environ.get("PPM_BRAIN_COMPLETION_POLICY_VERSION", "").strip()
+PPM_BRAIN_COMPLETION_TIMEOUT_SECONDS = int(os.environ.get("PPM_BRAIN_COMPLETION_TIMEOUT_SECONDS", "45"))
+# Agent registry and proposal records are available without an external model.
+# Canonical writes remain disabled until the owner approves model/retention policy
+# and the individual apply paths pass their permission/precondition gates.
+PPM_AGENTS_ENABLED = os.environ.get("PPM_AGENTS_ENABLED", "1") == "1"
+PPM_AGENTS_WRITE_ENABLED = os.environ.get("PPM_AGENTS_WRITE_ENABLED", "0") == "1"
+try:
+    PPM_AGENT_RUN_TIMEOUT_SECONDS = int(os.environ.get("PPM_AGENT_RUN_TIMEOUT_SECONDS", "120"))
+    if not 30 <= PPM_AGENT_RUN_TIMEOUT_SECONDS <= 3600:
+        raise ValueError
+except ValueError:
+    _logger.warning("PPM_AGENT_RUN_TIMEOUT_SECONDS must be between 30 and 3600; using 120 seconds")
+    PPM_AGENT_RUN_TIMEOUT_SECONDS = 120
+try:
+    PPM_AGENT_LEASE_SECONDS = int(os.environ.get("PPM_AGENT_LEASE_SECONDS", "180"))
+    if not 60 <= PPM_AGENT_LEASE_SECONDS <= 600:
+        raise ValueError
+except ValueError:
+    _logger.warning("PPM_AGENT_LEASE_SECONDS must be between 60 and 600; using 180 seconds")
+    PPM_AGENT_LEASE_SECONDS = 180
+try:
+    PPM_AGENT_MAX_ATTEMPTS = int(os.environ.get("PPM_AGENT_MAX_ATTEMPTS", "3"))
+    if not 1 <= PPM_AGENT_MAX_ATTEMPTS <= 10:
+        raise ValueError
+except ValueError:
+    _logger.warning("PPM_AGENT_MAX_ATTEMPTS must be between 1 and 10; using 3 attempts")
+    PPM_AGENT_MAX_ATTEMPTS = 3
+_ppm_brain_embedding_dimensions = os.environ.get("PPM_BRAIN_EMBEDDING_DIMENSIONS", "").strip()
+try:
+    PPM_BRAIN_EMBEDDING_DIMENSIONS = int(_ppm_brain_embedding_dimensions) if _ppm_brain_embedding_dimensions else None
+    if PPM_BRAIN_EMBEDDING_DIMENSIONS is not None and PPM_BRAIN_EMBEDDING_DIMENSIONS <= 0:
+        raise ValueError
+except ValueError:
+    _logger.warning("PPM_BRAIN_EMBEDDING_DIMENSIONS must be a positive integer; using provider default")
+    PPM_BRAIN_EMBEDDING_DIMENSIONS = None
+
+# PPM rollout switches. The legacy default-board Canvas adapter remains available
+# when multi-board routes are disabled so a rollback does not strand saved data.
+PPM_CANVAS_MULTIBOARD_ENABLED = os.environ.get("PPM_CANVAS_MULTIBOARD_ENABLED", "1") == "1"
+PPM_GLOBAL_ADMIN_ENABLED = os.environ.get("PPM_GLOBAL_ADMIN_ENABLED", "1") == "1"
+PPM_ADMIN_CENTER_ENABLED = os.environ.get("PPM_ADMIN_CENTER_ENABLED", "1") == "1"
+PPM_ADMIN_REAUTH_TTL_SECONDS = int(os.environ.get("PPM_ADMIN_REAUTH_TTL_SECONDS", "600"))
+PPM_VAULT_MARKDOWN_MAX_BYTES = int(os.environ.get("PPM_VAULT_MARKDOWN_MAX_BYTES", "1048576"))
+PPM_VAULT_PDF_MAX_BYTES = int(os.environ.get("PPM_VAULT_PDF_MAX_BYTES", os.environ.get("FILE_SIZE_LIMIT", "5242880")))
+PPM_VAULT_STORAGE_ROOT = os.environ.get("PPM_VAULT_STORAGE_ROOT")
+
+
+def _ppm_secret(value_name, file_name):
+    file_path = os.environ.get(file_name, "").strip()
+    if file_path:
+        try:
+            return Path(file_path).read_text(encoding="utf-8").strip()
+        except OSError:
+            _logger.error("PPM secret file is unavailable: %s", file_name)
+            return ""
+    return os.environ.get(value_name, "").replace("\\n", "\n").strip()
+
+
+# Completion credentials are dedicated to Project Brain and never fall back to
+# legacy OPENAI_API_KEY variables. This prevents accidental egress when an old
+# Plane integration happens to be configured on the same host.
+PPM_BRAIN_COMPLETION_API_KEY = _ppm_secret(
+    "PPM_BRAIN_COMPLETION_API_KEY",
+    "PPM_BRAIN_COMPLETION_API_KEY_FILE",
+)
+
+
+# GitHub App credentials stay on the API server. Installation access tokens are
+# generated on demand and are never persisted by PPM.
+PPM_GITHUB_APP_ID = os.environ.get("PPM_GITHUB_APP_ID", "").strip()
+PPM_GITHUB_APP_SLUG = os.environ.get("PPM_GITHUB_APP_SLUG", "").strip()
+PPM_GITHUB_APP_CLIENT_ID = os.environ.get("PPM_GITHUB_APP_CLIENT_ID", "").strip()
+PPM_GITHUB_CALLBACK_URL = os.environ.get("PPM_GITHUB_CALLBACK_URL", "").strip()
+PPM_GITHUB_APP_CLIENT_SECRET = _ppm_secret(
+    "PPM_GITHUB_APP_CLIENT_SECRET",
+    "PPM_GITHUB_APP_CLIENT_SECRET_FILE",
+)
+PPM_GITHUB_APP_PRIVATE_KEY = _ppm_secret(
+    "PPM_GITHUB_APP_PRIVATE_KEY",
+    "PPM_GITHUB_APP_PRIVATE_KEY_FILE",
+)
+PPM_GITHUB_WEBHOOK_SECRET = _ppm_secret(
+    "PPM_GITHUB_WEBHOOK_SECRET",
+    "PPM_GITHUB_WEBHOOK_SECRET_FILE",
+)
+PPM_GITHUB_API_VERSION = os.environ.get("PPM_GITHUB_API_VERSION", "2022-11-28").strip()
+PPM_GITHUB_WEBHOOK_MAX_BYTES = int(os.environ.get("PPM_GITHUB_WEBHOOK_MAX_BYTES", "2097152"))
+PPM_GITHUB_CONNECT_STATE_TTL_SECONDS = int(os.environ.get("PPM_GITHUB_CONNECT_STATE_TTL_SECONDS", "600"))
+# Provider writes stay disabled until the owner accepts the write-permission ADR
+# and the explicit branch/draft-PR applier. Preview and approval remain local.
+PPM_GIT_WRITE_ENABLED = os.environ.get("PPM_GIT_WRITE_ENABLED", "0") == "1"
+PPM_GITHUB_APP_CONFIGURED = all(
+    (
+        PPM_GITHUB_APP_ID,
+        PPM_GITHUB_APP_SLUG,
+        PPM_GITHUB_APP_CLIENT_ID,
+        PPM_GITHUB_CALLBACK_URL,
+        PPM_GITHUB_APP_CLIENT_SECRET,
+        PPM_GITHUB_APP_PRIVATE_KEY,
+        PPM_GITHUB_WEBHOOK_SECRET,
+    )
+)
 
 # Django Auth Backend
 AUTHENTICATION_BACKENDS = ("django.contrib.auth.backends.ModelBackend",)  # default
@@ -190,7 +307,7 @@ else:
     CORS_ALLOW_ALL_ORIGINS = True
     secure_origins = False
 
-CORS_ALLOW_HEADERS = [*default_headers, "X-API-Key"]
+CORS_ALLOW_HEADERS = [*default_headers, "X-API-Key", "X-Request-ID"]
 
 # Application Settings
 WSGI_APPLICATION = "plane.wsgi.application"
@@ -242,6 +359,24 @@ if os.environ.get("ENABLE_READ_REPLICA", "0") == "1":
 # Redis Config
 REDIS_URL = os.environ.get("REDIS_URL")
 REDIS_SSL = REDIS_URL and "rediss" in REDIS_URL
+
+# PPM Canvas realtime rooms must work across API processes. Redis is the
+# production channel layer; the in-memory fallback exists only for isolated
+# checks where Redis is intentionally absent.
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [REDIS_URL],
+                "capacity": int(os.environ.get("PPM_REALTIME_CHANNEL_CAPACITY", 300)),
+                "expiry": int(os.environ.get("PPM_REALTIME_MESSAGE_EXPIRY", 30)),
+                "group_expiry": int(os.environ.get("PPM_REALTIME_GROUP_EXPIRY", 90)),
+            },
+        }
+    }
+else:
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
 if REDIS_SSL:
     CACHES = {

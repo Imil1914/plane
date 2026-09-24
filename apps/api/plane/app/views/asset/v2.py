@@ -4,10 +4,11 @@
 
 # Python imports
 import uuid
+from pathlib import Path
 
 # Django imports
 from django.conf import settings
-from django.http import HttpResponseRedirect
+from django.http import FileResponse, HttpResponseRedirect
 from django.utils import timezone
 from django.db import IntegrityError
 from django.db.models import Q
@@ -26,6 +27,33 @@ from plane.utils.cache import invalidate_cache_directly
 from plane.utils.path_validator import sanitize_filename
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.throttles.asset import AssetRateThrottle
+
+
+def _ppm_local_asset_root():
+    return Path(settings.BASE_DIR, "uploads", "ppm-local-assets").resolve()
+
+
+def _ppm_local_asset_path(asset):
+    raw_path = (asset.storage_metadata or {}).get("ppm_local_path")
+    if not raw_path:
+        return None
+    root = _ppm_local_asset_root()
+    candidate = Path(raw_path).resolve()
+    if candidate != root and root not in candidate.parents:
+        return None
+    return candidate
+
+
+def _save_ppm_local_asset(uploaded_file, asset_key):
+    root = _ppm_local_asset_root()
+    root.mkdir(parents=True, exist_ok=True)
+    destination = (root / asset_key).resolve()
+    if root not in destination.parents:
+        raise ValueError("Unsafe local asset path.")
+    with destination.open("wb") as output:
+        for chunk in uploaded_file.chunks():
+            output.write(chunk)
+    return destination
 
 
 class UserAssetsV2Endpoint(BaseAPIView):
@@ -110,9 +138,10 @@ class UserAssetsV2Endpoint(BaseAPIView):
 
     def post(self, request):
         # get the asset key
-        name = sanitize_filename(request.data.get("name")) or "unnamed"
-        type = request.data.get("type", "image/jpeg")
-        size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
+        uploaded_file = request.FILES.get("file")
+        name = sanitize_filename(request.data.get("name") or getattr(uploaded_file, "name", None)) or "unnamed"
+        type = request.data.get("type") or getattr(uploaded_file, "content_type", None) or "image/jpeg"
+        size = int(request.data.get("size") or getattr(uploaded_file, "size", settings.FILE_SIZE_LIMIT))
         entity_type = request.data.get("entity_type", False)
 
         # Check if the file size is within the limit
@@ -144,6 +173,43 @@ class UserAssetsV2Endpoint(BaseAPIView):
 
         # asset key
         asset_key = f"{uuid.uuid4().hex}-{name}"
+
+        if uploaded_file is not None:
+            if not getattr(settings, "PPM_LOCAL_ASSET_UPLOADS", False):
+                return Response(
+                    {"error": "Local asset uploads are disabled.", "status": False},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if size <= 0 or size > settings.FILE_SIZE_LIMIT:
+                return Response(
+                    {"error": "The image size cannot exceed 5 MB.", "status": False},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            destination = _save_ppm_local_asset(uploaded_file, asset_key)
+            asset = FileAsset.objects.create(
+                attributes={"name": name, "type": type, "size": size},
+                asset=f"ppm-local-assets/{asset_key}",
+                size=size,
+                user=request.user,
+                created_by=request.user,
+                entity_type=entity_type,
+                is_uploaded=True,
+                storage_metadata={"ppm_local_path": str(destination)},
+            )
+            self.entity_asset_save(
+                asset_id=asset.id,
+                entity_type=entity_type,
+                asset=asset,
+                request=request,
+            )
+            return Response(
+                {
+                    "upload_data": {"url": "", "fields": {}},
+                    "asset_id": str(asset.id),
+                    "asset_url": asset.asset_url,
+                },
+                status=status.HTTP_201_CREATED,
+            )
 
         # Create a File Asset
         asset = FileAsset.objects.create(
@@ -192,6 +258,9 @@ class UserAssetsV2Endpoint(BaseAPIView):
 
     def delete(self, request, asset_id):
         asset = FileAsset.objects.get(id=asset_id, user_id=request.user.id)
+        local_path = _ppm_local_asset_path(asset)
+        if local_path and local_path.is_file():
+            local_path.unlink()
         asset.is_deleted = True
         asset.deleted_at = timezone.now()
         # get the entity and save the asset id for the request field
@@ -339,9 +408,10 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def post(self, request, slug):
-        name = sanitize_filename(request.data.get("name")) or "unnamed"
-        type = request.data.get("type", "image/jpeg")
-        size = int(request.data.get("size", settings.FILE_SIZE_LIMIT))
+        uploaded_file = request.FILES.get("file")
+        name = sanitize_filename(request.data.get("name") or getattr(uploaded_file, "name", None)) or "unnamed"
+        type = request.data.get("type") or getattr(uploaded_file, "content_type", None) or "image/jpeg"
+        size = int(request.data.get("size") or getattr(uploaded_file, "size", settings.FILE_SIZE_LIMIT))
         entity_type = request.data.get("entity_type")
         entity_identifier = request.data.get("entity_identifier", False)
 
@@ -388,6 +458,51 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
 
         # asset key
         asset_key = f"{workspace.id}/{uuid.uuid4().hex}-{name}"
+
+        if uploaded_file is not None:
+            if not getattr(settings, "PPM_LOCAL_ASSET_UPLOADS", False):
+                return Response(
+                    {"error": "Local asset uploads are disabled.", "status": False},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if size <= 0 or size > settings.FILE_SIZE_LIMIT:
+                return Response(
+                    {"error": "The image size cannot exceed 5 MB.", "status": False},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            destination = _save_ppm_local_asset(uploaded_file, asset_key.replace("/", "-"))
+            asset = FileAsset.objects.create(
+                attributes={"name": name, "type": type, "size": size},
+                asset=f"ppm-local-assets/{destination.name}",
+                size=size,
+                workspace=workspace,
+                created_by=request.user,
+                entity_type=entity_type,
+                is_uploaded=True,
+                storage_metadata={"ppm_local_path": str(destination)},
+                **self.get_entity_id_field(entity_type=entity_type, entity_id=entity_identifier),
+            )
+            if not self.has_project_asset_access(request, asset):
+                destination.unlink(missing_ok=True)
+                asset.delete()
+                return Response(
+                    {"error": "You don't have access to this project."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            self.entity_asset_save(
+                asset_id=asset.id,
+                entity_type=entity_type,
+                asset=asset,
+                request=request,
+            )
+            return Response(
+                {
+                    "upload_data": {"url": "", "fields": {}},
+                    "asset_id": str(asset.id),
+                    "asset_url": asset.asset_url,
+                },
+                status=status.HTTP_201_CREATED,
+            )
 
         # Create a File Asset
         asset = FileAsset.objects.create(
@@ -451,6 +566,9 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
                 {"error": "You don't have access to this asset."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        local_path = _ppm_local_asset_path(asset)
+        if local_path and local_path.is_file():
+            local_path.unlink()
         asset.is_deleted = True
         asset.deleted_at = timezone.now()
         # get the entity and save the asset id for the request field
@@ -475,6 +593,16 @@ class WorkspaceFileAssetEndpoint(BaseAPIView):
                 {"error": "The requested asset could not be found."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        local_path = _ppm_local_asset_path(asset)
+        if local_path is not None:
+            if not local_path.is_file():
+                return Response(
+                    {"error": "The requested asset could not be found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            asset_mime_type = (asset.attributes.get("type") or "application/octet-stream").split(";")[0].strip()
+            return FileResponse(local_path.open("rb"), content_type=asset_mime_type)
 
         # Get the presigned URL
         storage = S3Storage(request=request)
@@ -515,6 +643,16 @@ class StaticFileAssetEndpoint(BaseAPIView):
                 {"error": "Invalid entity type.", "status": False},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        local_path = _ppm_local_asset_path(asset)
+        if local_path is not None:
+            if not local_path.is_file():
+                return Response(
+                    {"error": "The requested asset could not be found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            asset_mime_type = (asset.attributes.get("type") or "application/octet-stream").split(";")[0].strip()
+            return FileResponse(local_path.open("rb"), content_type=asset_mime_type)
 
         # Get the presigned URL.
         # Force attachment disposition for script-capable MIME types to prevent

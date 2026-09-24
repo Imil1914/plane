@@ -10,7 +10,7 @@ import { Controller, useForm } from "react-hook-form";
 import { CircleMinus } from "lucide-react";
 import { Disclosure } from "@headlessui/react";
 // plane imports
-import { ROLE, EUserPermissions, MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
+import { EUserPermissions, MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { EUserProjectRoles, IUser, IWorkspaceMember, TProjectMembership } from "@plane/types";
 import { CustomMenu, CustomSelect } from "@plane/ui";
@@ -18,6 +18,8 @@ import { getFileURL } from "@plane/utils";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { usePpmAdminAccess } from "@/hooks/use-ppm-admin-access";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 export interface RowData extends Pick<TProjectMembership, "original_role"> {
   member: IWorkspaceMember;
@@ -42,10 +44,13 @@ export function NameColumn(props: NameProps) {
   const { rowData, workspaceSlug, isAdmin, currentUser, setRemoveMemberModal } = props;
   // derived values
   const { avatar_url, display_name, email, first_name, id, last_name } = rowData.member;
+  const { isGlobalAdmin: isCurrentUserGlobalAdmin } = usePpmAdminAccess();
+  const ppmT = usePpmTranslation();
+  const isGlobalAdmin = isCurrentUserGlobalAdmin && currentUser?.id === rowData.member.id;
 
   return (
     <Disclosure>
-      {({}) => (
+      {() => (
         <div className="group relative">
           <div className="flex w-72 items-center gap-2">
             <div className="flex flex-1 items-center gap-x-2 gap-y-2">
@@ -68,7 +73,7 @@ export function NameColumn(props: NameProps) {
               )}
               {first_name} {last_name}
             </div>
-            {(isAdmin || id === currentUser?.id) && (
+            {!isGlobalAdmin && (isAdmin || id === currentUser?.id) && (
               <CustomMenu
                 ellipsis
                 buttonClassName="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -76,14 +81,15 @@ export function NameColumn(props: NameProps) {
                 placement="bottom-end"
               >
                 <CustomMenu.MenuItem>
-                  <div
+                  <button
+                    type="button"
                     className="flex cursor-pointer items-center gap-x-1 font-medium text-danger-primary"
                     data-ph-element={MEMBER_TRACKER_ELEMENTS.PROJECT_MEMBER_TABLE_CONTEXT_MENU}
                     onClick={() => setRemoveMemberModal(rowData)}
                   >
                     <CircleMinus className="size-3.5 flex-shrink-0" />
-                    {rowData.member?.id === currentUser?.id ? "Leave " : "Remove "}
-                  </div>
+                    {rowData.member?.id === currentUser?.id ? ppmT("members.leave") : ppmT("members.remove")}
+                  </button>
                 </CustomMenu.MenuItem>
               </CustomMenu>
             )}
@@ -102,43 +108,42 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
     workspace: { getWorkspaceMemberDetails },
   } = useMember();
   const { data: currentUser } = useUser();
+  const { isGlobalAdmin: isCurrentUserGlobalAdmin } = usePpmAdminAccess();
   const { getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
+  const ppmT = usePpmTranslation();
   // form info
   const {
     control,
     formState: { errors },
   } = useForm();
   // derived values
-  const roleLabel = ROLE[rowData.original_role ?? EUserPermissions.GUEST];
   const isCurrentUser = currentUser?.id === rowData.member.id;
-  const isRowDataWorkspaceAdmin = [EUserPermissions.ADMIN].includes(
-    Number(getWorkspaceMemberDetails(rowData.member.id)?.role) ?? EUserPermissions.GUEST
-  );
-  const isCurrentUserWorkspaceAdmin = currentUser
-    ? [EUserPermissions.ADMIN].includes(
-        Number(getWorkspaceMemberDetails(currentUser.id)?.role) ?? EUserPermissions.GUEST
-      )
-    : false;
+  const isRowDataGlobalAdmin = isCurrentUserGlobalAdmin && isCurrentUser;
   const currentProjectRole = getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId);
+  const getRoleLabel = (role: number) => {
+    if (isRowDataGlobalAdmin) return ppmT("access.global_admin");
+    if (role === EUserPermissions.ADMIN) return ppmT("access.project_lead");
+    if (role === EUserPermissions.MEMBER) return ppmT("access.member");
+    return ppmT("access.guest");
+  };
+  const roleLabel = getRoleLabel(rowData.original_role ?? EUserPermissions.GUEST);
 
   const isCurrentUserProjectAdmin = currentProjectRole
-    ? ![EUserPermissions.MEMBER, EUserPermissions.GUEST].includes(Number(currentProjectRole) ?? EUserPermissions.GUEST)
+    ? ![EUserPermissions.MEMBER, EUserPermissions.GUEST].includes(Number(currentProjectRole))
     : false;
 
   // logic
-  // Workspace admin can change his own role
-  // Project admin can change any role except his own and workspace admin's role
-  const isRoleEditable =
-    (isCurrentUserWorkspaceAdmin && isCurrentUser) ||
-    (isCurrentUserProjectAdmin && !isRowDataWorkspaceAdmin && !isCurrentUser);
+  // The global administrator inherits every project and cannot be changed here.
+  const isRoleEditable = isCurrentUserProjectAdmin && !isRowDataGlobalAdmin && !isCurrentUser;
   const checkCurrentOptionWorkspaceRole = (value: string) => {
     const currentMemberWorkspaceRole = getWorkspaceMemberDetails(value)?.role as EUserPermissions | undefined;
-    if (!value || !currentMemberWorkspaceRole) return ROLE;
+    if (!value || !currentMemberWorkspaceRole)
+      return [EUserPermissions.GUEST, EUserPermissions.MEMBER, EUserPermissions.ADMIN];
 
     const isGuest = [EUserPermissions.GUEST].includes(currentMemberWorkspaceRole);
 
-    return Object.fromEntries(
-      Object.entries(ROLE).filter(([key]) => !isGuest || parseInt(key) === EUserPermissions.GUEST)
+    return [EUserPermissions.GUEST, EUserPermissions.MEMBER, EUserPermissions.ADMIN].filter(
+      (role) => !isGuest || role === EUserPermissions.GUEST
     );
   };
 
@@ -148,7 +153,7 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
         <Controller
           name="role"
           control={control}
-          rules={{ required: "Role is required." }}
+          rules={{ required: ppmT("members.role_required") }}
           render={() => (
             <CustomSelect
               value={rowData.original_role}
@@ -162,8 +167,8 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
 
                     setToast({
                       type: TOAST_TYPE.ERROR,
-                      title: "You can’t change this role yet.",
-                      message: errorString ?? "An error occurred while updating member role. Please try again.",
+                      title: ppmT("members.role_update_error_title"),
+                      message: errorString ?? ppmT("members.role_update_error_message"),
                     });
                   }
                 );
@@ -177,9 +182,9 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
               className="w-32 rounded-md p-0"
               input
             >
-              {Object.entries(checkCurrentOptionWorkspaceRole(rowData.member.id)).map(([key, label]) => (
-                <CustomSelect.Option key={key} value={key}>
-                  {label}
+              {checkCurrentOptionWorkspaceRole(rowData.member.id).map((role) => (
+                <CustomSelect.Option key={role} value={role}>
+                  {getRoleLabel(role)}
                 </CustomSelect.Option>
               ))}
             </CustomSelect>

@@ -7,6 +7,7 @@ from rest_framework.permissions import BasePermission, SAFE_METHODS
 
 # Module imports
 from plane.db.models import WorkspaceMember
+from plane.ppm_core.permissions import is_ppm_global_admin
 
 
 # Permission Mappings
@@ -21,6 +22,9 @@ class WorkSpaceBasePermission(BasePermission):
         # allow anyone to create a workspace
         if request.user.is_anonymous:
             return False
+
+        if is_ppm_global_admin(user=request.user, workspace_slug=getattr(view, "workspace_slug", None)):
+            return True
 
         if request.method == "POST":
             return True
@@ -53,6 +57,9 @@ class WorkspaceOwnerPermission(BasePermission):
         if request.user.is_anonymous:
             return False
 
+        if is_ppm_global_admin(user=request.user, workspace_slug=getattr(view, "workspace_slug", None)):
+            return True
+
         return WorkspaceMember.objects.filter(
             workspace__slug=view.workspace_slug, member=request.user, role=Admin, is_active=True
         ).exists()
@@ -62,6 +69,9 @@ class WorkSpaceAdminPermission(BasePermission):
     def has_permission(self, request, view):
         if request.user.is_anonymous:
             return False
+
+        if is_ppm_global_admin(user=request.user, workspace_slug=getattr(view, "workspace_slug", None)):
+            return True
 
         return WorkspaceMember.objects.filter(
             member=request.user,
@@ -75,6 +85,9 @@ class WorkspaceEntityPermission(BasePermission):
     def has_permission(self, request, view):
         if request.user.is_anonymous:
             return False
+
+        if is_ppm_global_admin(user=request.user, workspace_slug=getattr(view, "workspace_slug", None)):
+            return True
 
         ## Safe Methods -> Handle the filtering logic in queryset
         if request.method in SAFE_METHODS:
@@ -95,6 +108,9 @@ class WorkspaceViewerPermission(BasePermission):
         if request.user.is_anonymous:
             return False
 
+        if is_ppm_global_admin(user=request.user, workspace_slug=getattr(view, "workspace_slug", None)):
+            return True
+
         return WorkspaceMember.objects.filter(
             member=request.user, workspace__slug=view.workspace_slug, is_active=True
         ).exists()
@@ -104,6 +120,9 @@ class WorkspaceUserPermission(BasePermission):
     def has_permission(self, request, view):
         if request.user.is_anonymous:
             return False
+
+        if is_ppm_global_admin(user=request.user, workspace_slug=getattr(view, "workspace_slug", None)):
+            return True
 
         return WorkspaceMember.objects.filter(
             member=request.user, workspace__slug=view.workspace_slug, is_active=True
@@ -123,12 +142,15 @@ class WorkspaceMemberPermission(BasePermission):
             return False
 
         workspace_id = view.kwargs.get("workspace_id")
+        slug = view.kwargs.get("slug")
+        if is_ppm_global_admin(user=request.user, workspace_id=workspace_id, workspace_slug=slug):
+            return True
+
         if workspace_id:
             return WorkspaceMember.objects.filter(
                 workspace_id=workspace_id, member=request.user, is_active=True
             ).exists()
 
-        slug = view.kwargs.get("slug")
         if slug:
             return WorkspaceMember.objects.filter(
                 workspace__slug=slug, member=request.user, is_active=True

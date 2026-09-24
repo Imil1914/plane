@@ -22,6 +22,7 @@ import { useInstance } from "@/hooks/store/use-instance";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserProfile, useUserSettings } from "@/hooks/store/user";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { toWorkspaceSlug } from "@/helpers/workspace-slug.helper";
 // services
 import { WorkspaceService } from "@/services/workspace.service";
 // local components
@@ -75,12 +76,19 @@ export const WorkspaceCreateStep = observer(function WorkspaceCreateStep({
   const handleCreateWorkspace = async (formData: IWorkspace) => {
     if (isSubmitting) return;
 
+    const normalizedSlug = toWorkspaceSlug(formData.slug);
+    if (validateSlug(normalizedSlug) !== true) {
+      setInvalidSlug(true);
+      return;
+    }
+    const normalizedFormData = { ...formData, slug: normalizedSlug };
+
     try {
-      const res = (await workspaceService.workspaceSlugCheck(formData.slug)) as { status: boolean };
-      if (res.status === true && !RESTRICTED_URLS.includes(formData.slug)) {
+      const res = (await workspaceService.workspaceSlugCheck(normalizedSlug)) as { status: boolean };
+      if (res.status === true && !RESTRICTED_URLS.includes(normalizedSlug)) {
         setSlugError(false);
         try {
-          const workspaceResponse = await createWorkspace(formData);
+          const workspaceResponse = await createWorkspace(normalizedFormData);
           setToast({
             type: TOAST_TYPE.SUCCESS,
             title: t("workspace_creation.toast.success.title"),
@@ -92,8 +100,8 @@ export const WorkspaceCreateStep = observer(function WorkspaceCreateStep({
         } catch {
           setToast({
             type: TOAST_TYPE.ERROR,
-            title: t("workspace_creation.toast.error.title"),
-            message: t("workspace_creation.toast.error.message"),
+            title: isPpmShell ? ppmT("workspace.create_error_title") : t("workspace_creation.toast.error.title"),
+            message: isPpmShell ? ppmT("workspace.create_error_message") : t("workspace_creation.toast.error.message"),
           });
         }
       } else {
@@ -102,8 +110,8 @@ export const WorkspaceCreateStep = observer(function WorkspaceCreateStep({
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: t("workspace_creation.toast.error.title"),
-        message: t("workspace_creation.toast.error.message"),
+        title: isPpmShell ? ppmT("workspace.create_error_title") : t("workspace_creation.toast.error.title"),
+        message: isPpmShell ? ppmT("workspace.create_error_message") : t("workspace_creation.toast.error.message"),
       });
     }
   };
@@ -122,9 +130,9 @@ export const WorkspaceCreateStep = observer(function WorkspaceCreateStep({
     return (
       <div className="flex flex-col gap-10">
         <span className="text-center text-14 text-tertiary">
-          You don&apos;t seem to have any invites to a workspace and your instance admin has restricted creation of new
-          workspaces. Please ask a workspace owner or admin to invite you to a workspace first and come back to this
-          screen to join.
+          {isPpmShell
+            ? ppmT("onboarding.creation_restricted")
+            : "You don’t have a workspace invitation, and workspace creation is restricted. Ask an administrator to invite you."}
         </span>
       </div>
     );
@@ -169,7 +177,7 @@ export const WorkspaceCreateStep = observer(function WorkspaceCreateStep({
                   onChange={(event) => {
                     onChange(event.target.value);
                     setValue("name", event.target.value);
-                    setValue("slug", event.target.value.toLocaleLowerCase().trim().replace(/ /g, "-"), {
+                    setValue("slug", toWorkspaceSlug(event.target.value), {
                       shouldValidate: true,
                     });
                   }}
@@ -202,6 +210,7 @@ export const WorkspaceCreateStep = observer(function WorkspaceCreateStep({
             name="slug"
             rules={{
               required: t("common.errors.required"),
+              validate: (value) => validateSlug(value),
               maxLength: {
                 value: 48,
                 message: t("workspace_creation.errors.validation.url_length"),
@@ -224,12 +233,13 @@ export const WorkspaceCreateStep = observer(function WorkspaceCreateStep({
                   id="slug"
                   name="slug"
                   type="text"
-                  value={value.toLocaleLowerCase().trim().replace(/ /g, "-")}
+                  value={value}
                   onChange={(e) => {
-                    const validation = validateSlug(e.target.value);
+                    const normalizedSlug = toWorkspaceSlug(e.target.value);
+                    const validation = validateSlug(normalizedSlug);
                     if (validation === true) setInvalidSlug(false);
                     else setInvalidSlug(true);
-                    onChange(e.target.value.toLowerCase());
+                    onChange(normalizedSlug);
                   }}
                   ref={ref}
                   placeholder={t("workspace_creation.form.url.placeholder")}

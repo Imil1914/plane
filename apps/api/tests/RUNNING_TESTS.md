@@ -2,6 +2,19 @@
 
 This guide covers running the Django/pytest suite for `apps/api` inside Docker via `docker-compose-test.yml` at the repo root. The compose file boots an isolated stack — Postgres, Valkey (Redis), RabbitMQ, MinIO — with tmpfs-backed data dirs, so every run begins from a clean slate and a single teardown command removes everything.
 
+For the AF1.2 full browser and backup/restore gate on an ARM64 host where Quay/Docker Hub
+cannot serve the pinned MinIO image, build a disposable local image from checksum-verified
+official MinIO and `mc` GitHub release assets, then explicitly select it for this run:
+
+```bash
+bash scripts/ppm-build-local-minio-test-image.sh
+PPM_E2E_MINIO_IMAGE=ppm-af12-minio:RELEASE.2025-09-07T16-13-09Z bash scripts/ppm-canvas-browser-gate.sh chrome
+```
+
+This fallback does not change the default Compose image or install the binaries in the repo.
+It is test-only; MinIO and `mc` are AGPLv3. Omit `--browser-only` for the real
+PostgreSQL + Vault + Plane attachment restore drill.
+
 For background on the test layout, markers, and fixtures, see [`TESTING_GUIDE.md`](./TESTING_GUIDE.md) and [`README.md`](./README.md).
 
 ## Prerequisites

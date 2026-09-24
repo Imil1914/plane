@@ -7,13 +7,15 @@
 import { useRouter } from "next/navigation";
 import { Logo } from "@plane/propel/emoji-icon-picker";
 import { PageIcon } from "@plane/propel/icons";
+import { useTranslation } from "@plane/i18n";
 // plane import
 import type { TActivityEntityData, TPageEntityData } from "@plane/types";
 import { Avatar } from "@plane/ui";
-import { calculateTimeAgo, getFileURL, getPageName } from "@plane/utils";
+import { getFileURL, getPageName } from "@plane/utils";
 import { ListItem } from "@/components/core/list";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
+import { formatPpmTimeAgo } from "@/helpers/ppm-time-ago.helper";
 
 type BlockProps = {
   activity: TActivityEntityData;
@@ -27,6 +29,7 @@ export function RecentPage(props: BlockProps) {
   const router = useRouter();
   // store hooks
   const { getUserDetails } = useMember();
+  const { currentLocale } = useTranslation();
   // derived values
   const pageDetails = activity.entity_data as TPageEntityData;
 
@@ -60,7 +63,7 @@ export function RecentPage(props: BlockProps) {
       }
       appendTitleElement={
         <div className="flex-shrink-0 text-11 font-medium text-placeholder">
-          {calculateTimeAgo(activity.visited_at)}
+          {formatPpmTimeAgo(activity.visited_at, currentLocale)}
         </div>
       }
       quickActionElement={

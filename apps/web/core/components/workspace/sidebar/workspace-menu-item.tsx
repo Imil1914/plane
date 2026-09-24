@@ -12,6 +12,7 @@ import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import type { EUserWorkspaceRoles } from "@plane/types";
 import { cn } from "@plane/utils";
+import { getPpmTranslation, isPpmShellEnabled } from "@ppm/brand";
 // components
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 // hooks
@@ -35,7 +36,8 @@ export const SidebarWorkspaceMenuItem = observer(function SidebarWorkspaceMenuIt
 ) {
   const { item } = props;
 
-  const { t } = useTranslation();
+  const { currentLocale, t } = useTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // nextjs hooks
   const pathname = usePathname();
   const { workspaceSlug } = useParams();
@@ -54,6 +56,10 @@ export const SidebarWorkspaceMenuItem = observer(function SidebarWorkspaceMenuIt
   }
 
   const isActive = item.href === pathname;
+  const itemLabel =
+    isPpmShell && item.key === "projects"
+      ? getPpmTranslation(currentLocale, "global.all_projects")
+      : t(item.labelTranslationKey);
 
   return (
     <Link href={item.href} onClick={() => handleLinkClick()}>
@@ -64,7 +70,7 @@ export const SidebarWorkspaceMenuItem = observer(function SidebarWorkspaceMenuIt
               "rotate-180": item.key === "active_cycles",
             })}
           />
-          <p className="text-13 leading-5 font-medium">{t(item.labelTranslationKey)}</p>
+          <p className="text-13 leading-5 font-medium">{itemLabel}</p>
         </div>
         <div className="flex-shrink-0">
           <UpgradeBadge />

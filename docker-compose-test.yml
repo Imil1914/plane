@@ -72,7 +72,7 @@ services:
       retries: 10
 
   test-minio:
-    image: minio/minio
+    image: ${PPM_E2E_MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-09-06T17-38-46Z}
     networks:
       - test_env
     env_file:
@@ -80,17 +80,51 @@ services:
     environment:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-access-key}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-secret-key}
+      AWS_S3_BUCKET_NAME: ${PPM_E2E_ASSET_SOURCE_BUCKET:-uploads}
     entrypoint: >
       /bin/sh -c "
-      mkdir -p /export/${AWS_S3_BUCKET_NAME:-uploads} &&
+      mkdir -p /export/${PPM_E2E_ASSET_SOURCE_BUCKET:-uploads} &&
       minio server /export --console-address ':9090' &
       sleep 3 &&
       mc alias set local http://localhost:9000 ${AWS_ACCESS_KEY_ID:-access-key} ${AWS_SECRET_ACCESS_KEY:-secret-key} &&
-      mc mb local/${AWS_S3_BUCKET_NAME:-uploads} -p || true &&
+      mc mb local/${PPM_E2E_ASSET_SOURCE_BUCKET:-uploads} -p || true &&
       tail -f /dev/null
       "
     tmpfs:
       - /export
+    volumes:
+      - af12-asset-backup:/tmp/ppm-af12-asset-backup
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Separate object store for the AF1.2 restore drill. Its /export is not shared
+  # with the source service; only the disposable backup directory is shared.
+  test-minio-restore:
+    image: ${PPM_E2E_MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-09-06T17-38-46Z}
+    networks:
+      - test_env
+    env_file:
+      - ./apps/api/.env
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-access-key}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-secret-key}
+      AWS_S3_BUCKET_NAME: ${PPM_E2E_ASSET_RESTORE_BUCKET:-ppm-af12-restore}
+    entrypoint: >
+      /bin/sh -c "
+      mkdir -p /export/${PPM_E2E_ASSET_RESTORE_BUCKET:-ppm-af12-restore} &&
+      minio server /export --console-address ':9090' &
+      sleep 3 &&
+      mc alias set local http://localhost:9000 ${AWS_ACCESS_KEY_ID:-access-key} ${AWS_SECRET_ACCESS_KEY:-secret-key} &&
+      mc mb local/${PPM_E2E_ASSET_RESTORE_BUCKET:-ppm-af12-restore} -p || true &&
+      tail -f /dev/null
+      "
+    tmpfs:
+      - /export
+    volumes:
+      - af12-asset-backup:/tmp/ppm-af12-asset-backup
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s
@@ -116,11 +150,14 @@ services:
       REDIS_URL: redis://test-redis:6379/
       RABBITMQ_HOST: test-mq
       AWS_S3_ENDPOINT_URL: http://test-minio:9000
+      AWS_S3_BUCKET_NAME: ${PPM_E2E_ASSET_SOURCE_BUCKET:-uploads}
       # Magic-link tests mock the celery delay but the view first checks that
       # EMAIL_HOST is configured. Set a placeholder so the check passes.
       EMAIL_HOST: test-smtp.invalid
     volumes:
       - ./apps/api:/code
+      - af12-vault-source:/tmp/ppm-af12-vault-source
+      - af12-vault-restore:/tmp/ppm-af12-vault-restore
     working_dir: /code
     depends_on:
       test-db:
@@ -146,6 +183,46 @@ services:
       - --
     command: ["pytest"]
 
+  # Browser gate uses the same disposable services, but never touches the
+  # developer's local API/database and does not need object storage for Canvas.
+  api-browser-gate:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+    networks:
+      - test_env
+    env_file:
+      - ./apps/api/.env
+    environment:
+      DJANGO_SETTINGS_MODULE: plane.settings.test
+      POSTGRES_HOST: test-db
+      DATABASE_URL: postgresql://${POSTGRES_USER:-plane}:${POSTGRES_PASSWORD:-plane}@test-db:5432/${POSTGRES_DB:-plane}
+      REDIS_HOST: test-redis
+      REDIS_URL: redis://test-redis:6379/
+      RABBITMQ_HOST: test-mq
+      APP_BASE_URL: http://localhost:${PPM_E2E_WEB_PORT:-3100}
+      WEB_URL: http://localhost:${PPM_E2E_API_PORT:-8100}
+      CORS_ALLOWED_ORIGINS: http://localhost:${PPM_E2E_WEB_PORT:-3100}
+      IS_TEST: "1"
+    volumes:
+      - ./apps/api:/code
+    working_dir: /code
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
+      test-mq:
+        condition: service_healthy
+    command: ["uvicorn", "plane.asgi:application", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:${PPM_E2E_API_PORT:-8100}:8000"
+
 networks:
   test_env:
     driver: bridge
+
+volumes:
+  af12-vault-source:
+  af12-vault-restore:
+  af12-asset-backup:

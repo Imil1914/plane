@@ -1,0 +1,81 @@
+{
+  "document": {
+    "schema": {
+      "schemaVersion": 2,
+      "sequences": {}
+    },
+    "store": {
+      "page:page": {
+        "id": "page:page",
+        "typeName": "page",
+        "name": "Page 1"
+      },
+      "shape:desktop-note": {
+        "id": "shape:desktop-note",
+        "typeName": "shape",
+        "type": "flow-node",
+        "parentId": "page:page",
+        "x": 120,
+        "y": 80,
+        "rotation": 0,
+        "props": {
+          "kind": "note",
+          "title": "Desktop заметка",
+          "body": "Проверка переноса",
+          "extra": "{}",
+          "w": 320,
+          "h": 220
+        }
+      },
+      "shape:desktop-document": {
+        "id": "shape:desktop-document",
+        "typeName": "shape",
+        "type": "flow-node",
+        "parentId": "page:page",
+        "x": 520,
+        "y": 80,
+        "rotation": 0,
+        "props": {
+          "kind": "doc",
+          "title": "Desktop документ",
+          "body": "# Заголовок",
+          "extra": "{}",
+          "w": 360,
+          "h": 260
+        }
+      },
+      "shape:desktop-arrow": {
+        "id": "shape:desktop-arrow",
+        "typeName": "shape",
+        "type": "arrow",
+        "parentId": "page:page",
+        "x": 440,
+        "y": 190,
+        "rotation": 0,
+        "props": {
+          "start": { "x": 0, "y": 0 },
+          "end": { "x": 80, "y": 0 }
+        }
+      },
+      "binding:desktop-arrow-start": {
+        "id": "binding:desktop-arrow-start",
+        "typeName": "binding",
+        "type": "arrow",
+        "fromId": "shape:desktop-arrow",
+        "toId": "shape:desktop-note",
+        "props": { "terminal": "start", "normalizedAnchor": { "x": 1, "y": 0.5 } }
+      },
+      "binding:desktop-arrow-end": {
+        "id": "binding:desktop-arrow-end",
+        "typeName": "binding",
+        "type": "arrow",
+        "fromId": "shape:desktop-arrow",
+        "toId": "shape:desktop-document",
+        "props": { "terminal": "end", "normalizedAnchor": { "x": 0, "y": 0.5 } }
+      }
+    }
+  },
+  "session": {
+    "currentPageId": "page:page"
+  }
+}

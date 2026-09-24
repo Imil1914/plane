@@ -1,0 +1,65 @@
+{
+  "document": {
+    "schema": {
+      "schemaVersion": 2,
+      "sequences": {}
+    },
+    "store": {
+      "page:page": {
+        "id": "page:page",
+        "typeName": "page",
+        "name": "Page 1"
+      },
+      "shape:free-arrow-frame": {
+        "id": "shape:free-arrow-frame",
+        "typeName": "shape",
+        "type": "frame",
+        "parentId": "page:page",
+        "x": 100,
+        "y": 100,
+        "rotation": 0,
+        "props": {
+          "name": "Проверка свободной стрелки",
+          "w": 500,
+          "h": 360
+        }
+      },
+      "shape:free-arrow-note": {
+        "id": "shape:free-arrow-note",
+        "typeName": "shape",
+        "type": "flow-node",
+        "parentId": "shape:free-arrow-frame",
+        "x": 40,
+        "y": 190,
+        "rotation": 0,
+        "props": {
+          "kind": "note",
+          "title": "AF1.2 тест импорта",
+          "body": "Синтетический файл без личных данных",
+          "extra": "{}",
+          "w": 320,
+          "h": 120
+        }
+      },
+      "shape:free-arrow": {
+        "id": "shape:free-arrow",
+        "typeName": "shape",
+        "type": "arrow",
+        "parentId": "shape:free-arrow-frame",
+        "x": 50,
+        "y": 80,
+        "rotation": 0,
+        "props": {
+          "start": { "x": 0, "y": 0 },
+          "end": { "x": 180, "y": 60 },
+          "color": "light-blue",
+          "dash": "dashed",
+          "text": "Свободная стрелка AF1.2"
+        }
+      }
+    }
+  },
+  "session": {
+    "currentPageId": "page:page"
+  }
+}

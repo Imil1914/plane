@@ -6,6 +6,7 @@ from plane.db.models import WorkspaceMember, ProjectMember
 from functools import wraps
 from rest_framework.response import Response
 from rest_framework import status
+from plane.ppm_core.permissions import is_ppm_global_admin
 
 from enum import Enum
 
@@ -42,6 +43,8 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
 
             # Check role permissions
             if level == "WORKSPACE":
+                if is_ppm_global_admin(user=request.user, workspace_slug=kwargs["slug"]):
+                    return view_func(instance, request, *args, **kwargs)
                 if WorkspaceMember.objects.filter(
                     member=request.user,
                     workspace__slug=kwargs["slug"],
@@ -50,6 +53,10 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
                 ).exists():
                     return view_func(instance, request, *args, **kwargs)
             else:
+                # Only the protected, non-delegable PPM role inherits every project.
+                if is_ppm_global_admin(user=request.user, workspace_slug=kwargs["slug"]):
+                    return view_func(instance, request, *args, **kwargs)
+
                 is_user_has_allowed_role = ProjectMember.objects.filter(
                     member=request.user,
                     workspace__slug=kwargs["slug"],
@@ -58,23 +65,7 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
                     is_active=True,
                 ).exists()
 
-                # Return if the user has the allowed role else if they are workspace admin and part of the project regardless of the role # noqa: E501
                 if is_user_has_allowed_role:
-                    return view_func(instance, request, *args, **kwargs)
-                elif (
-                    ProjectMember.objects.filter(
-                        member=request.user,
-                        workspace__slug=kwargs["slug"],
-                        project_id=kwargs["project_id"],
-                        is_active=True,
-                    ).exists()
-                    and WorkspaceMember.objects.filter(
-                        member=request.user,
-                        workspace__slug=kwargs["slug"],
-                        role=ROLE.ADMIN.value,
-                        is_active=True,
-                    ).exists()
-                ):
                     return view_func(instance, request, *args, **kwargs)
 
             # Return permission denied if no conditions are met

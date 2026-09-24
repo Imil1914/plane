@@ -32,7 +32,7 @@ export default function BrandFoundationPage() {
             className="text-body-sm-semibold text-link-primary hover:text-link-primary-hover"
             href="/about/open-source"
           >
-            Открытый код
+            О программе
           </Link>
         </header>
 
@@ -71,6 +71,8 @@ function ThemeSmoke({
   theme: "light" | "dark";
   title: string;
 }) {
+  const inputId = `brand-foundation-${theme}-project-name`;
+
   return (
     <section
       data-theme={theme}
@@ -85,9 +87,9 @@ function ThemeSmoke({
       </div>
 
       <div className="grid gap-3">
-        <label className="grid gap-1.5 text-body-xs-medium text-secondary">
+        <label className="grid gap-1.5 text-body-xs-medium text-secondary" htmlFor={inputId}>
           Название проекта
-          <Input aria-label={`Название проекта, тема ${title}`} defaultValue="Новый проект" />
+          <Input id={inputId} aria-label={`Название проекта, тема ${title}`} defaultValue="Новый проект" />
         </label>
         <div className="flex flex-wrap gap-2">
           <Button>Создать</Button>

@@ -76,6 +76,20 @@ export class FileService extends APIService {
     uploadProgressHandler?: AxiosRequestConfig["onUploadProgress"]
   ): Promise<TFileSignedURLResponse> {
     const fileMetaData = await getFileMetaDataForUpload(file);
+    if (import.meta.env.VITE_PPM_LOCAL_ASSET_UPLOADS === "1") {
+      const localPayload = new FormData();
+      localPayload.append("file", file);
+      localPayload.append("entity_identifier", data.entity_identifier ?? "");
+      localPayload.append("entity_type", data.entity_type);
+      return this.post(`/api/assets/v2/workspaces/${workspaceSlug}/`, localPayload, {
+        headers: { "Content-Type": "multipart/form-data" },
+        onUploadProgress: uploadProgressHandler,
+      })
+        .then((response) => response?.data)
+        .catch((error) => {
+          throw error?.response?.data;
+        });
+    }
     return this.post(`/api/assets/v2/workspaces/${workspaceSlug}/`, {
       ...data,
       ...fileMetaData,
@@ -153,6 +167,20 @@ export class FileService extends APIService {
     uploadProgressHandler?: AxiosRequestConfig["onUploadProgress"]
   ): Promise<TFileSignedURLResponse> {
     const fileMetaData = await getFileMetaDataForUpload(file);
+    if (import.meta.env.VITE_PPM_LOCAL_ASSET_UPLOADS === "1") {
+      const localPayload = new FormData();
+      localPayload.append("file", file);
+      localPayload.append("entity_identifier", data.entity_identifier ?? "");
+      localPayload.append("entity_type", data.entity_type);
+      return this.post(`/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/`, localPayload, {
+        headers: { "Content-Type": "multipart/form-data" },
+        onUploadProgress: uploadProgressHandler,
+      })
+        .then((response) => response?.data)
+        .catch((error) => {
+          throw error?.response?.data;
+        });
+    }
     return this.post(`/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/`, {
       ...data,
       ...fileMetaData,
@@ -183,6 +211,19 @@ export class FileService extends APIService {
 
   async uploadUserAsset(data: TFileEntityInfo, file: File): Promise<TFileSignedURLResponse> {
     const fileMetaData = await getFileMetaDataForUpload(file);
+    if (import.meta.env.VITE_PPM_LOCAL_ASSET_UPLOADS === "1") {
+      const localPayload = new FormData();
+      localPayload.append("file", file);
+      localPayload.append("entity_identifier", data.entity_identifier ?? "");
+      localPayload.append("entity_type", data.entity_type);
+      return this.post(`/api/assets/v2/user-assets/`, localPayload, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+        .then((response) => response?.data)
+        .catch((error) => {
+          throw error?.response?.data;
+        });
+    }
     return this.post(`/api/assets/v2/user-assets/`, {
       ...data,
       ...fileMetaData,

@@ -11,6 +11,7 @@ import { FormProvider, useForm } from "react-hook-form";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EFileAssetType } from "@plane/types";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import ProjectCommonAttributes from "@/components/project/create/common-attributes";
 import ProjectCreateHeader from "@/components/project/create/header";
@@ -19,6 +20,7 @@ import ProjectCreateButtons from "@/components/project/create/project-create-but
 import { getCoverImageType, uploadCoverImage } from "@/helpers/cover-image.helper";
 import { useProject } from "@/hooks/store/use-project";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web types
 import type { TProject } from "@plane/types";
 import { ProjectAttributes } from "./attributes";
@@ -38,6 +40,8 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
   const { setToFavorite, workspaceSlug, data, onClose, handleNextStep, updateCoverImageStatus } = props;
   // store
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   const { addProjectToFavorites, createProject, updateProject } = useProject();
   // states
   const [shouldAutoSyncIdentifier, setShouldAutoSyncIdentifier] = useState(true);
@@ -81,8 +85,12 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
           console.error("Error uploading cover image:", error);
           setToast({
             type: TOAST_TYPE.ERROR,
-            title: t("toast.error"),
-            message: error instanceof Error ? error.message : "Failed to upload cover image",
+            title: isPpmShell ? ppmT("image_upload.error_title") : t("toast.error"),
+            message: isPpmShell
+              ? ppmT("image_upload.error_message")
+              : error instanceof Error
+                ? error.message
+                : "Failed to upload cover image",
           });
           return Promise.reject(error);
         }
@@ -148,8 +156,8 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
           } else {
             setToast({
               type: TOAST_TYPE.ERROR,
-              title: t("toast.error"),
-              message: t("something_went_wrong"),
+              title: isPpmShell ? ppmT("project.create_error_title") : t("toast.error"),
+              message: isPpmShell ? ppmT("project.create_error_message") : t("something_went_wrong"),
             });
           }
         } catch (error) {
@@ -157,8 +165,8 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
           console.error("Error processing API error:", error);
           setToast({
             type: TOAST_TYPE.ERROR,
-            title: t("toast.error"),
-            message: t("something_went_wrong"),
+            title: isPpmShell ? ppmT("project.create_error_title") : t("toast.error"),
+            message: isPpmShell ? ppmT("project.create_error_message") : t("something_went_wrong"),
           });
         }
       });

@@ -20,7 +20,11 @@ urlpatterns = [
     path("api/public/", include("plane.space.urls")),
     path("api/instances/", include("plane.license.urls")),
     path("api/v1/", include("plane.api.urls")),
+    path("api/ppm/v1/", include("plane.ppm_core.urls")),
+    path("api/ppm/v1/", include("plane.ppm_brain.urls")),
     path("api/ppm/v1/", include("plane.ppm_canvas.urls")),
+    path("api/ppm/v1/", include("plane.ppm_git.urls")),
+    path("api/ppm/v1/", include("plane.ppm_vault.urls")),
     path("auth/", include("plane.authentication.urls")),
     path("", include("plane.web.urls")),
 ]

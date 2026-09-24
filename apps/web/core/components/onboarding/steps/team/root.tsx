@@ -29,6 +29,7 @@ import { EOnboardingSteps } from "@plane/types";
 import { Input, Spinner } from "@plane/ui";
 import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
+import { useUser } from "@/hooks/store/user";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // services
@@ -103,6 +104,7 @@ const InviteMemberInput = observer(function InviteMemberInput(props: InviteMembe
 
   const email = watch(`emails.${index}.email`);
   const getRoleLabel = (role: EUserPermissions) => {
+    if (isPpmShell) return role === 15 ? ppmT("access.member") : ppmT("access.guest");
     const details = ROLE_DETAILS[role as keyof typeof ROLE_DETAILS];
     return details ? t(details.i18n_title) : ROLE[role];
   };
@@ -170,7 +172,7 @@ const InviteMemberInput = observer(function InviteMemberInput(props: InviteMembe
                 hasError={Boolean(errors.emails?.[index]?.email)}
                 placeholder={placeholderEmails[index % placeholderEmails.length]}
                 className="w-full border-strong text-11 placeholder:text-placeholder sm:text-13"
-                autoComplete="off"
+                autoComplete="new-password"
               />
             )}
           />
@@ -217,28 +219,34 @@ const InviteMemberInput = observer(function InviteMemberInput(props: InviteMembe
                     style={styles.popper}
                     {...attributes.popper}
                   >
-                    {Object.entries(ROLE_DETAILS).map(([key, roleDetails]) => (
-                      <Listbox.Option
-                        as="div"
-                        key={key}
-                        value={parseInt(key)}
-                        className={({ active, selected }) =>
-                          `cursor-pointer truncate rounded-sm px-1 py-1.5 select-none ${
-                            active || selected ? "bg-onboarding-background-400/40" : ""
-                          } ${selected ? "text-primary" : "text-secondary"}`
-                        }
-                      >
-                        {({ selected }) => (
-                          <div className="flex items-center gap-2 p-1 text-wrap">
-                            <div className="flex flex-col">
-                              <div className="text-13 font-medium">{t(roleDetails.i18n_title)}</div>
-                              <div className="flex text-11 text-tertiary">{t(roleDetails.i18n_description)}</div>
+                    {Object.entries(ROLE_DETAILS)
+                      .filter(([key]) => parseInt(key) !== 20)
+                      .map(([key, roleDetails]) => (
+                        <Listbox.Option
+                          as="div"
+                          key={key}
+                          value={parseInt(key)}
+                          className={({ active, selected }) =>
+                            `cursor-pointer truncate rounded-sm px-1 py-1.5 select-none ${
+                              active || selected ? "bg-onboarding-background-400/40" : ""
+                            } ${selected ? "text-primary" : "text-secondary"}`
+                          }
+                        >
+                          {({ selected }) => (
+                            <div className="flex items-center gap-2 p-1 text-wrap">
+                              <div className="flex flex-col">
+                                <div className="text-13 font-medium">
+                                  {isPpmShell
+                                    ? getRoleLabel(parseInt(key) as EUserPermissions)
+                                    : t(roleDetails.i18n_title)}
+                                </div>
+                                <div className="flex text-11 text-tertiary">{t(roleDetails.i18n_description)}</div>
+                              </div>
+                              {selected && <CheckIcon className="h-4 w-4 shrink-0" />}
                             </div>
-                            {selected && <CheckIcon className="h-4 w-4 shrink-0" />}
-                          </div>
-                        )}
-                      </Listbox.Option>
-                    ))}
+                          )}
+                        </Listbox.Option>
+                      ))}
                   </div>
                 </Listbox.Options>
               </Listbox>
@@ -274,6 +282,7 @@ export const InviteTeamStep = observer(function InviteTeamStep(props: Props) {
 
   const [isInvitationDisabled, setIsInvitationDisabled] = useState(true);
 
+  const { data: currentUser } = useUser();
   const { workspaces } = useWorkspace();
   const workspacesList = Object.values(workspaces ?? {});
   const workspace = workspacesList[0];
@@ -299,12 +308,19 @@ export const InviteTeamStep = observer(function InviteTeamStep(props: Props) {
   const onSubmit = async (formData: FormValues) => {
     if (!workspace) return;
 
-    let payload = { ...formData };
-    payload = { emails: payload.emails.filter((email) => email.email !== "") };
+    const currentUserEmail = currentUser?.email?.trim().toLocaleLowerCase();
+    const invitees = formData.emails
+      .map((entry) => ({ ...entry, email: entry.email.trim().toLocaleLowerCase() }))
+      .filter((entry) => entry.email !== "" && entry.email !== currentUserEmail);
+
+    if (invitees.length === 0) {
+      await nextStep();
+      return;
+    }
 
     try {
       await workspaceService.inviteWorkspace(workspace.slug, {
-        emails: payload.emails.map((email) => ({
+        emails: invitees.map((email) => ({
           email: email.email,
           role: email.role,
         })),
@@ -396,8 +412,11 @@ export const InviteTeamStep = observer(function InviteTeamStep(props: Props) {
         </button>
       </div>
       <div className="mx-auto flex w-full flex-col items-center justify-center gap-4 px-8 sm:px-2">
+        <Button variant="primary" type="button" size="xl" className="w-full" disabled={isSubmitting} onClick={nextStep}>
+          {isPpmShell ? ppmT("onboarding.enter_workspace") : "Enter workspace"}
+        </Button>
         <Button
-          variant="primary"
+          variant="secondary"
           type="submit"
           size="xl"
           className="w-full"
@@ -406,13 +425,10 @@ export const InviteTeamStep = observer(function InviteTeamStep(props: Props) {
           {isSubmitting ? (
             <Spinner height="20px" width="20px" />
           ) : isPpmShell ? (
-            ppmT("onboarding.continue")
+            ppmT("onboarding.send_invitations")
           ) : (
-            "Continue"
+            "Send invitations and enter"
           )}
-        </Button>
-        <Button variant="ghost" size="xl" className="w-full" onClick={nextStep}>
-          {isPpmShell ? ppmT("onboarding.do_later") : "I’ll do it later"}
         </Button>
       </div>
     </form>

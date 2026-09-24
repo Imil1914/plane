@@ -14,7 +14,7 @@ import { observer } from "mobx-react";
 import { useParams, useRouter } from "next/navigation";
 import { createRoot } from "react-dom/client";
 import scrollIntoView from "smooth-scroll-into-view-if-needed";
-import { Settings, Share2, LogOut, MoreHorizontal } from "lucide-react";
+import { Settings, Share2, LogOut, MoreHorizontal, Network } from "lucide-react";
 import { Disclosure, Transition } from "@headlessui/react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel, MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
@@ -26,6 +26,8 @@ import { IconButton } from "@plane/propel/icon-button";
 import { Tooltip } from "@plane/propel/tooltip";
 import { CustomMenu, DropIndicator, DragHandle, ControlLink } from "@plane/ui";
 import { cn } from "@plane/utils";
+import { getPpmProjectPath, isPpmShellEnabled } from "@ppm/brand";
+import { isPpmCanvasEnabled } from "@ppm/canvas";
 // components
 import { DEFAULT_TAB_KEY, getTabUrl } from "@/components/navigation/tab-navigation-utils";
 import { useTabPreferences } from "@/components/navigation/use-tab-preferences";
@@ -37,6 +39,7 @@ import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useProjectNavigationPreferences } from "@/hooks/use-navigation-preferences";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
 import { HIGHLIGHT_CLASS, highlightIssueOnDrop } from "../../issues/issue-layouts/utils";
@@ -71,6 +74,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
   } = props;
   // store hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
   const { getPartialProjectById } = useProject();
   const { isMobile } = usePlatformOS();
   const { allowPermissions } = useUserPermissions();
@@ -86,7 +90,6 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
   const isProjectListOpen = getIsProjectListOpen(projectId);
   const [instruction, setInstruction] = useState<"DRAG_OVER" | "DRAG_BELOW" | undefined>(undefined);
   // refs
-  const actionSectionRef = useRef<HTMLButtonElement | null>(null);
   const projectRef = useRef<HTMLDivElement | null>(null);
   const dragHandleRef = useRef<HTMLButtonElement | null>(null);
   // router
@@ -94,6 +97,9 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
   const router = useRouter();
   // derived values
   const project = getPartialProjectById(projectId);
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const isPpmCanvas = isPpmCanvasEnabled(process.env.PPM_CANVAS_ENABLED, isPpmShell);
+  const canvasUrl = getPpmProjectPath(workspaceSlug.toString(), projectId, "brain");
 
   // Get available navigation items for this project
   const navigationItems = useNavigationItems({
@@ -230,7 +236,6 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
     else toggleAnySidebarDropdown(false);
   }, [isMenuActive, toggleAnySidebarDropdown]);
 
-  useOutsideClickDetector(actionSectionRef, () => setIsMenuActive(false));
   useOutsideClickDetector(projectRef, () => projectRef?.current?.classList?.remove(HIGHLIGHT_CLASS));
 
   useEffect(() => {
@@ -309,10 +314,9 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                 position="top-end"
                 disabled={isDragging}
               >
-                <button
-                  type="button"
+                <DragHandle
                   className={cn(
-                    "absolute top-1/2 -left-3 hidden -translate-y-1/2 cursor-grab items-center justify-center rounded-sm text-placeholder group-hover/project-item:flex",
+                    "absolute top-1/2 -left-3 hidden -translate-y-1/2 cursor-grab items-center justify-center rounded-sm bg-transparent text-placeholder group-hover/project-item:flex",
                     {
                       "cursor-not-allowed opacity-60": project.sort_order === null,
                       "cursor-grabbing": isDragging,
@@ -320,17 +324,14 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                     }
                   )}
                   ref={dragHandleRef}
-                >
-                  <DragHandle className="bg-transparent" />
-                </button>
+                />
               </Tooltip>
             )}
             <>
               <ControlLink href={defaultTabUrl} className="flex flex-grow truncate" onClick={handleItemClick}>
                 {isAccordionMode ? (
                   <Disclosure.Button
-                    as="button"
-                    type="button"
+                    as="div"
                     className={cn("flex w-full flex-grow items-center gap-1.5 text-left select-none", {})}
                     aria-label={
                       isProjectListOpen
@@ -353,24 +354,32 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                 )}
               </ControlLink>
               <div className="flex items-center gap-1">
-                <CustomMenu
-                  customButton={
+                {isPpmCanvas && (
+                  <Tooltip tooltipHeading={ppmT("actions.open_canvas")} tooltipContent="">
                     <IconButton
-                      ref={actionSectionRef}
                       variant="ghost"
                       size="sm"
-                      icon={MoreHorizontal}
-                      onClick={() => setIsMenuActive(!isMenuActive)}
-                      className="text-placeholder"
+                      icon={Network}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        router.push(canvasUrl);
+                        if (isExtendedProjectSidebarOpened) toggleExtendedProjectSidebar(false);
+                      }}
+                      className="text-accent-primary"
+                      aria-label={`${ppmT("actions.open_canvas")}: ${project.name}`}
                     />
-                  }
+                  </Tooltip>
+                )}
+                <CustomMenu
+                  customButton={<MoreHorizontal className="size-4" aria-hidden="true" />}
                   className={cn(
                     "pointer-events-none flex-shrink-0 opacity-0 group-hover/project-item:pointer-events-auto group-hover/project-item:opacity-100",
                     {
                       "pointer-events-auto opacity-100": isMenuActive,
                     }
                   )}
-                  customButtonClassName="grid place-items-center"
+                  customButtonClassName="grid size-6 place-items-center rounded-md text-placeholder hover:bg-layer-transparent-hover"
+                  menuButtonOnClick={() => !isMenuActive && setIsMenuActive(true)}
                   placement="bottom-start"
                   ariaLabel={t("aria_labels.projects_sidebar.toggle_quick_actions_menu")}
                   useCaptureForOutsideClick
@@ -422,16 +431,18 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
                       </div>
                     </CustomMenu.MenuItem>
                   )}
-                  <CustomMenu.MenuItem
-                    onClick={() => {
-                      router.push(`/${workspaceSlug}/settings/projects/${project?.id}`);
-                    }}
-                  >
-                    <div className="flex cursor-pointer items-center justify-start gap-2">
-                      <Settings className="h-3.5 w-3.5 stroke-[1.5]" />
-                      <span>{t("settings")}</span>
-                    </div>
-                  </CustomMenu.MenuItem>
+                  {isAdmin && (
+                    <CustomMenu.MenuItem
+                      onClick={() => {
+                        router.push(`/${workspaceSlug}/settings/projects/${project?.id}`);
+                      }}
+                    >
+                      <div className="flex cursor-pointer items-center justify-start gap-2">
+                        <Settings className="h-3.5 w-3.5 stroke-[1.5]" />
+                        <span>{t("settings")}</span>
+                      </div>
+                    </CustomMenu.MenuItem>
+                  )}
                   {/* leave project */}
                   {!isAuthorized && (
                     <CustomMenu.MenuItem

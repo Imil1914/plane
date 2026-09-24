@@ -21,6 +21,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "plane.settings.production")
 
 ri = redis_instance()
 
+
 # Configurable metrics push interval (in minutes)
 # Default: 360 (6 hours), set to 5 for development/testing
 def _get_metrics_push_interval_minutes() -> int:
@@ -32,6 +33,7 @@ def _get_metrics_push_interval_minutes() -> int:
         return value if 0 < value <= 10_000_000 else 360
     except (ValueError, OverflowError):
         return 360
+
 
 METRICS_PUSH_INTERVAL_MINUTES = _get_metrics_push_interval_minutes()
 
@@ -50,6 +52,26 @@ app.conf.beat_schedule = {
     "push-instance-metrics": {
         "task": "plane.license.bgtasks.telemetry_metrics.push_instance_metrics",
         "schedule": schedule(run_every=timedelta(minutes=METRICS_PUSH_INTERVAL_MINUTES)),
+    },
+    "ppm-git-reconcile": {
+        "task": "plane.ppm_git.tasks.reconcile_active_git_connections",
+        "schedule": schedule(run_every=timedelta(minutes=15)),
+    },
+    "ppm-brain-recover-jobs": {
+        "task": "plane.ppm_brain.tasks.recover_brain_index_jobs",
+        "schedule": schedule(run_every=timedelta(minutes=2)),
+    },
+    "ppm-agent-expire-stale-runs": {
+        "task": "plane.ppm_brain.tasks.expire_stale_agent_runs_task",
+        "schedule": schedule(run_every=timedelta(minutes=1)),
+    },
+    "ppm-agent-recover-queued-runs": {
+        "task": "plane.ppm_brain.tasks.recover_queued_agent_runs_task",
+        "schedule": schedule(run_every=timedelta(minutes=1)),
+    },
+    "ppm-brain-reconcile": {
+        "task": "plane.ppm_brain.tasks.reconcile_all_brain_projects",
+        "schedule": schedule(run_every=timedelta(minutes=15)),
     },
     # Occurs once every day
     "check-every-day-to-delete-hard-delete": {

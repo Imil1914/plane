@@ -80,6 +80,7 @@ from plane.db.models import (
 )
 from plane.settings.storage import S3Storage
 from plane.utils.path_validator import sanitize_filename
+from plane.utils.issue_access import user_can_view_issue
 from plane.utils.order_queryset import (
     ACTIVITY_ORDER_BY_ALLOWLIST,
     ISSUE_ORDER_BY_ALLOWLIST,
@@ -1883,6 +1884,8 @@ class IssueAttachmentListCreateAPIEndpoint(BaseAPIView):
         Generate presigned URL for uploading file attachments to a work item.
         Validates file type and size before creating the attachment record.
         """
+        if not user_can_view_issue(user=request.user, slug=slug, project_id=project_id, issue_id=issue_id):
+            return Response({"error": "Work item is not accessible."}, status=status.HTTP_403_FORBIDDEN)
         issue = Issue.objects.get(pk=issue_id, workspace__slug=slug, project_id=project_id)
         # if the user is creator or admin,member then allow the upload
         if not user_has_issue_permission(
@@ -2002,6 +2005,8 @@ class IssueAttachmentListCreateAPIEndpoint(BaseAPIView):
 
         List all attachments for an issue.
         """
+        if not user_can_view_issue(user=request.user, slug=slug, project_id=project_id, issue_id=issue_id):
+            return Response({"error": "Work item is not accessible."}, status=status.HTTP_403_FORBIDDEN)
         # Get all the attachments
         issue_attachments = FileAsset.objects.filter(
             issue_id=issue_id,
@@ -2039,6 +2044,8 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
         Soft delete an attachment from a work item by marking it as deleted.
         Records deletion activity and triggers metadata cleanup.
         """
+        if not user_can_view_issue(user=request.user, slug=slug, project_id=project_id, issue_id=issue_id):
+            return Response({"error": "Work item is not accessible."}, status=status.HTTP_403_FORBIDDEN)
         issue = Issue.objects.get(pk=issue_id, workspace__slug=slug, project_id=project_id)
         # if the request user is creator or admin then delete the attachment
         if not user_has_issue_permission(
@@ -2053,7 +2060,13 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        issue_attachment = FileAsset.objects.get(pk=pk, workspace__slug=slug, project_id=project_id)
+        issue_attachment = FileAsset.objects.get(
+            pk=pk,
+            workspace__slug=slug,
+            project_id=project_id,
+            issue_id=issue_id,
+            entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+        )
         issue_attachment.is_deleted = True
         issue_attachment.deleted_at = timezone.now()
         issue_attachment.save()
@@ -2113,6 +2126,8 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
 
         Retrieve details of a specific attachment.
         """
+        if not user_can_view_issue(user=request.user, slug=slug, project_id=project_id, issue_id=issue_id):
+            return Response({"error": "Work item is not accessible."}, status=status.HTTP_403_FORBIDDEN)
         # if the user is part of the project then allow the download
         if not user_has_issue_permission(
             request.user.id,
@@ -2127,7 +2142,13 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
             )
 
         # Get the asset
-        asset = FileAsset.objects.get(id=pk, workspace__slug=slug, project_id=project_id)
+        asset = FileAsset.objects.get(
+            id=pk,
+            workspace__slug=slug,
+            project_id=project_id,
+            issue_id=issue_id,
+            entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+        )
 
         # Check if the asset is uploaded
         if not asset.is_uploaded:
@@ -2176,7 +2197,8 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
         Mark an attachment as uploaded after successful file transfer to storage.
         Triggers activity logging and metadata extraction.
         """
-
+        if not user_can_view_issue(user=request.user, slug=slug, project_id=project_id, issue_id=issue_id):
+            return Response({"error": "Work item is not accessible."}, status=status.HTTP_403_FORBIDDEN)
         issue = Issue.objects.get(pk=issue_id, workspace__slug=slug, project_id=project_id)
         # if the user is creator or admin then allow the upload
         if not user_has_issue_permission(
@@ -2191,7 +2213,13 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        issue_attachment = FileAsset.objects.get(pk=pk, workspace__slug=slug, project_id=project_id)
+        issue_attachment = FileAsset.objects.get(
+            pk=pk,
+            workspace__slug=slug,
+            project_id=project_id,
+            issue_id=issue_id,
+            entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+        )
         serializer = IssueAttachmentSerializer(issue_attachment)
 
         # Send this activity only if the attachment is not uploaded before

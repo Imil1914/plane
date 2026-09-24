@@ -5,6 +5,7 @@
 # Python imports
 import json
 import uuid
+from functools import wraps
 
 # Django imports
 from django.utils import timezone
@@ -27,6 +28,22 @@ from plane.settings.storage import S3Storage
 from plane.utils.path_validator import sanitize_filename
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.utils.host import base_host
+from plane.utils.issue_access import user_can_view_issue
+
+
+def require_visible_issue(view_func):
+    @wraps(view_func)
+    def wrapped(instance, request, *args, **kwargs):
+        if not user_can_view_issue(
+            user=request.user,
+            slug=kwargs["slug"],
+            project_id=kwargs["project_id"],
+            issue_id=kwargs["issue_id"],
+        ):
+            return Response({"error": "Work item is not accessible."}, status=status.HTTP_403_FORBIDDEN)
+        return view_func(instance, request, *args, **kwargs)
+
+    return wrapped
 
 
 class IssueAttachmentEndpoint(BaseAPIView):
@@ -35,6 +52,7 @@ class IssueAttachmentEndpoint(BaseAPIView):
     parser_classes = (MultiPartParser, FormParser)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @require_visible_issue
     def post(self, request, slug, project_id, issue_id):
         serializer = IssueAttachmentSerializer(data=request.data)
         workspace = Workspace.objects.get(slug=slug)
@@ -60,6 +78,7 @@ class IssueAttachmentEndpoint(BaseAPIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @allow_permission([ROLE.ADMIN], creator=True, model=FileAsset)
+    @require_visible_issue
     def delete(self, request, slug, project_id, issue_id, pk):
         issue_attachment = FileAsset.objects.filter(
             pk=pk, workspace__slug=slug, project_id=project_id, issue_id=issue_id
@@ -86,6 +105,7 @@ class IssueAttachmentEndpoint(BaseAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @require_visible_issue
     def get(self, request, slug, project_id, issue_id):
         issue_attachments = FileAsset.objects.filter(issue_id=issue_id, workspace__slug=slug, project_id=project_id)
         serializer = IssueAttachmentSerializer(issue_attachments, many=True)
@@ -97,6 +117,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
     model = FileAsset
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @require_visible_issue
     def post(self, request, slug, project_id, issue_id):
         name = sanitize_filename(request.data.get("name")) or "unnamed"
         type = request.data.get("type", False)
@@ -147,10 +168,9 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         )
 
     @allow_permission([ROLE.ADMIN], creator=True, model=FileAsset)
+    @require_visible_issue
     def delete(self, request, slug, project_id, issue_id, pk):
-        issue_attachment = FileAsset.objects.get(
-            pk=pk, workspace__slug=slug, project_id=project_id, issue_id=issue_id
-        )
+        issue_attachment = FileAsset.objects.get(pk=pk, workspace__slug=slug, project_id=project_id, issue_id=issue_id)
         issue_attachment.is_deleted = True
         issue_attachment.deleted_at = timezone.now()
         issue_attachment.save()
@@ -170,6 +190,7 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @require_visible_issue
     def get(self, request, slug, project_id, issue_id, pk=None):
         if pk:
             # Get the asset
@@ -203,10 +224,9 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
+    @require_visible_issue
     def patch(self, request, slug, project_id, issue_id, pk):
-        issue_attachment = FileAsset.objects.get(
-            pk=pk, workspace__slug=slug, project_id=project_id, issue_id=issue_id
-        )
+        issue_attachment = FileAsset.objects.get(pk=pk, workspace__slug=slug, project_id=project_id, issue_id=issue_id)
         serializer = IssueAttachmentSerializer(issue_attachment)
 
         # Send this activity only if the attachment is not uploaded before

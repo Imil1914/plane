@@ -32,8 +32,10 @@ django-storages==1.14.6
 django-crum==0.7.9
 # web server
 uvicorn==0.29.0
+websockets==17.1
 # sockets
 channels==4.3.2
+channels-redis==4.3.0
 # ai
 openai==1.63.2
 # slack
@@ -75,3 +77,5 @@ opentelemetry-exporter-otlp-proto-grpc==1.28.1
 drf-spectacular==0.29.0
 # html sanitizer
 nh3==0.2.18
+# PDF text extraction for the project-scoped knowledge index
+pypdf==6.19.0

@@ -96,7 +96,11 @@ export function WorkspaceJoinInvitesStep(props: Props) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="text-13 font-medium">{truncateText(invitedWorkspace?.name, 30)}</div>
-                  <p className="text-11 text-secondary">{ROLE[invitation.role]}</p>
+                  <p className="text-11 text-secondary">
+                    {isPpmShell
+                      ? ppmT(invitation.role === 5 ? "access.guest" : "access.member")
+                      : ROLE[invitation.role]}
+                  </p>
                 </div>
                 <span className={`flex-shrink-0`}>
                   <Checkbox

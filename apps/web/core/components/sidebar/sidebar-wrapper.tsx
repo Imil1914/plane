@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { PreferencesIcon } from "@plane/propel/icons";
 import { ScrollArea } from "@plane/propel/scrollarea";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { CustomizeNavigationDialog } from "@/components/navigation/customize-navigation-dialog";
 // hooks
@@ -33,17 +34,18 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
   // store hooks
   const { toggleSidebar, sidebarCollapsed } = useAppTheme();
   const windowSize = useSize();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // refs
   const ref = useRef<HTMLDivElement>(null);
 
   useOutsideClickDetector(ref, () => {
     if (sidebarCollapsed === false && window.innerWidth < 768) {
-      toggleSidebar();
+      toggleSidebar(true);
     }
   });
 
   useEffect(() => {
-    if (windowSize[0] < 768 && !sidebarCollapsed) toggleSidebar();
+    if (windowSize[0] < 768 && !sidebarCollapsed) toggleSidebar(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowSize]);
 
@@ -82,14 +84,16 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
           {children}
         </ScrollArea>
         {/* Help Section */}
-        <div className="flex h-12 items-center justify-between border-t border-subtle bg-surface-1 p-3">
-          <WorkspaceEditionBadge />
-          {/* TODO: To be checked if we need this */}
-          {/* <div className="flex items-center gap-2">
-          {!shouldRenderAppRail && <HelpMenu />}
-          {!isAppRailEnabled && <AppSidebarToggleButton />}
-        </div> */}
-        </div>
+        {!isPpmShell && (
+          <div className="flex h-12 items-center justify-between border-t border-subtle bg-surface-1 p-3">
+            <WorkspaceEditionBadge />
+            {/* TODO: To be checked if we need this */}
+            {/* <div className="flex items-center gap-2">
+            {!shouldRenderAppRail && <HelpMenu />}
+            {!isAppRailEnabled && <AppSidebarToggleButton />}
+          </div> */}
+          </div>
+        )}
       </div>
     </>
   );

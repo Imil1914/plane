@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 // icons
@@ -58,7 +58,6 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
   // ref
   const formRef = useRef<HTMLFormElement>(null);
   // states
-  const [csrfPromise, setCsrfPromise] = useState<Promise<{ csrf_token: string }> | undefined>(undefined);
   const [passwordFormData, setPasswordFormData] = useState<TPasswordFormValues>({ ...defaultValues, email });
   const [showPassword, setShowPassword] = useState({
     password: false,
@@ -68,19 +67,13 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
   const [isPasswordInputFocused, setIsPasswordInputFocused] = useState(false);
   const [isRetryPasswordInputFocused, setIsRetryPasswordInputFocused] = useState(false);
   const [isBannerMessage, setBannerMessage] = useState(false);
+  const [csrfError, setCsrfError] = useState(false);
 
   const handleShowPassword = (key: keyof typeof showPassword) =>
     setShowPassword((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const handleFormChange = (key: keyof TPasswordFormValues, value: string) =>
     setPasswordFormData((prev) => ({ ...prev, [key]: value }));
-
-  useEffect(() => {
-    if (csrfPromise === undefined) {
-      const promise = authService.requestCSRFToken();
-      setCsrfPromise(promise);
-    }
-  }, [csrfPromise]);
 
   const redirectToUniqueCodeSignIn = async () => {
     handleAuthStep(EAuthSteps.UNIQUE_CODE);
@@ -123,11 +116,12 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
   const renderPasswordMatchError = !isRetryPasswordInputFocused || confirmPassword.length >= password.length;
 
   const handleCSRFToken = async () => {
-    if (!formRef || !formRef.current) return;
-    const token = await csrfPromise;
-    if (!token?.csrf_token) return;
+    if (!formRef.current) throw new Error("Authentication form is unavailable.");
+    const token = await authService.requestCSRFToken();
+    if (!token?.csrf_token) throw new Error("CSRF token is unavailable.");
     const csrfElement = formRef.current.querySelector("input[name=csrfmiddlewaretoken]");
-    csrfElement?.setAttribute("value", token?.csrf_token);
+    if (!(csrfElement instanceof HTMLInputElement)) throw new Error("CSRF field is unavailable.");
+    csrfElement.value = token.csrf_token;
   };
 
   return (
@@ -156,14 +150,20 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
         action={`${API_BASE_URL}/auth/${mode === EAuthModes.SIGN_IN ? "sign-in" : "sign-up"}/`}
         onSubmit={async (event) => {
           event.preventDefault(); // Prevent form from submitting by default
-          await handleCSRFToken();
           const isPasswordValid =
             mode === EAuthModes.SIGN_UP
               ? getPasswordStrength(passwordFormData.password) === E_PASSWORD_STRENGTH.STRENGTH_VALID
               : true;
           if (isPasswordValid) {
             setIsSubmitting(true);
-            if (formRef.current) formRef.current.submit(); // Manually submit the form if the condition is met
+            setCsrfError(false);
+            try {
+              await handleCSRFToken();
+              formRef.current?.submit(); // Manually submit the form if the condition is met
+            } catch {
+              setCsrfError(true);
+              setIsSubmitting(false);
+            }
           } else {
             setBannerMessage(true);
           }
@@ -173,6 +173,11 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
         }}
       >
         <input type="hidden" name="csrfmiddlewaretoken" />
+        {csrfError && (
+          <p className="text-13 text-danger-primary" role="alert">
+            {ppmT("auth.csrf_error")}
+          </p>
+        )}
         <input type="hidden" value={passwordFormData.email} name="email" />
         {nextPath && <input type="hidden" value={nextPath} name="next_path" />}
         <div className="space-y-1">

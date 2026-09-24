@@ -14,10 +14,13 @@ import { SettingsMobileNav } from "@/components/settings/mobile/nav";
 // plane imports
 import { WORKSPACE_SETTINGS_ACCESS } from "@plane/constants";
 import type { EUserWorkspaceRoles } from "@plane/types";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { WorkspaceSettingsSidebarRoot } from "@/components/settings/workspace/sidebar";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
+import { usePpmAdminAccess } from "@/hooks/use-ppm-admin-access";
+import { canAccessPpmWorkspaceAdministration } from "@/helpers/ppm-workspace-access.helper";
 
 import type { Route } from "./+types/layout";
 
@@ -26,15 +29,23 @@ const WorkspaceSettingLayout = observer(function WorkspaceSettingLayout({ params
   const { workspaceSlug } = params;
   // store hooks
   const { workspaceUserInfo, getWorkspaceRoleByWorkspaceSlug } = useUserPermissions();
+  const { isGlobalAdmin } = usePpmAdminAccess();
   // next hooks
   const pathname = usePathname();
   // derived values
   const { accessKey } = pathnameToAccessKey(pathname);
   const userWorkspaceRole = getWorkspaceRoleByWorkspaceSlug(workspaceSlug);
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const canAccessWorkspaceAdministration = canAccessPpmWorkspaceAdministration({
+    isGlobalAdmin,
+    isPpmShell,
+  });
 
   let isAuthorized: boolean | string = false;
   if (pathname && workspaceSlug && userWorkspaceRole) {
-    isAuthorized = WORKSPACE_SETTINGS_ACCESS[accessKey]?.includes(userWorkspaceRole as EUserWorkspaceRoles);
+    isAuthorized =
+      canAccessWorkspaceAdministration &&
+      WORKSPACE_SETTINGS_ACCESS[accessKey]?.includes(userWorkspaceRole as EUserWorkspaceRoles);
   }
 
   return (

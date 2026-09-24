@@ -5,6 +5,7 @@
  */
 
 import { observer } from "mobx-react";
+import { Info } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useParams } from "react-router";
 // plane imports
@@ -16,6 +17,7 @@ import {
 } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { joinUrlPath } from "@plane/utils";
+import { getPpmTranslation, isPpmShellEnabled } from "@ppm/brand";
 // components
 import { SettingsSidebarItem } from "@/components/settings/sidebar/item";
 // hooks
@@ -30,7 +32,8 @@ export const WorkspaceSettingsSidebarItemCategories = observer(function Workspac
   // store hooks
   const { allowPermissions } = useUserPermissions();
   // translation
-  const { t } = useTranslation();
+  const { currentLocale, t } = useTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
   return (
     <div className="mt-3 flex flex-col divide-y divide-subtle px-3">
@@ -69,6 +72,18 @@ export const WorkspaceSettingsSidebarItemCategories = observer(function Workspac
           </div>
         );
       })}
+      {isPpmShell && (
+        <div className="shrink-0 py-3">
+          <div className="p-2 text-caption-md-medium text-tertiary">PPM</div>
+          <SettingsSidebarItem
+            as="link"
+            href="/about/open-source"
+            isActive={false}
+            icon={Info}
+            label={getPpmTranslation(currentLocale, "about.title")}
+          />
+        </div>
+      )}
     </div>
   );
 });

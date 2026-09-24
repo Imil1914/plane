@@ -7,19 +7,19 @@
 import { useState, useEffect } from "react";
 import { observer } from "mobx-react";
 import { useRouter } from "next/navigation";
-import { LogOut, Settings, Settings2 } from "lucide-react";
+import { LogOut, Settings, ShieldCheck } from "lucide-react";
 // plane imports
-import { GOD_MODE_URL } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Avatar, CustomMenu } from "@plane/ui";
 import { getFileURL } from "@plane/utils";
 // components
 import { CoverImage } from "@/components/common/cover-image";
-import { AppSidebarItem } from "@/components/sidebar/sidebar-item";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
+import { usePpmAdminAccess } from "@/hooks/use-ppm-admin-access";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { useUser } from "@/hooks/store/user";
 
 export const UserMenuRoot = observer(function UserMenuRoot() {
@@ -32,10 +32,10 @@ export const UserMenuRoot = observer(function UserMenuRoot() {
   const { data: currentUser } = useUser();
   const { signOut } = useUser();
   const { toggleProfileSettingsModal } = useCommandPalette();
-  // derived values
-  const isUserInstanceAdmin = false;
+  const { isGlobalAdmin } = usePpmAdminAccess();
   // translation
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
 
   const handleSignOut = () => {
     signOut().catch(() =>
@@ -57,21 +57,15 @@ export const UserMenuRoot = observer(function UserMenuRoot() {
     <CustomMenu
       className="flex items-center"
       customButton={
-        <AppSidebarItem
-          variant="button"
-          item={{
-            icon: (
-              <Avatar
-                name={currentUser?.display_name}
-                src={getFileURL(currentUser?.avatar_url ?? "")}
-                size={20}
-                shape="circle"
-              />
-            ),
-            isActive: isUserMenuOpen,
-          }}
+        <Avatar
+          name={currentUser?.display_name}
+          src={getFileURL(currentUser?.avatar_url ?? "")}
+          size={20}
+          shape="circle"
         />
       }
+      customButtonClassName="grid size-8 place-items-center rounded-md text-tertiary hover:bg-layer-transparent-hover"
+      ariaLabel={t("profile.label")}
       menuButtonOnClick={() => !isUserMenuOpen && setIsUserMenuOpen(true)}
       onMenuClose={() => setIsUserMenuOpen(false)}
       placement="bottom-end"
@@ -118,33 +112,22 @@ export const UserMenuRoot = observer(function UserMenuRoot() {
           className="flex items-center gap-2"
         >
           <Settings className="size-3.5 shrink-0" />
-          {t("settings")}
+          {t("profile.label")}
         </CustomMenu.MenuItem>
-        <CustomMenu.MenuItem
-          onClick={() =>
-            toggleProfileSettingsModal({
-              activeTab: "preferences",
-              isOpen: true,
-            })
-          }
-          className="flex items-center gap-2"
-        >
-          <Settings2 className="size-3.5 shrink-0" />
-          {t("preferences")}
-        </CustomMenu.MenuItem>
+        {isGlobalAdmin && (
+          <CustomMenu.MenuItem
+            onClick={() => router.push("/ppm-admin")}
+            className="mt-1 flex items-center gap-2 bg-accent-primary/10 text-accent-primary hover:bg-accent-primary/20"
+          >
+            <ShieldCheck className="size-3.5 shrink-0" />
+            {ppmT("admin.center")}
+          </CustomMenu.MenuItem>
+        )}
       </div>
       <CustomMenu.MenuItem onClick={handleSignOut} className="flex items-center gap-2">
         <LogOut className="size-3.5 shrink-0" />
         {t("sign_out")}
       </CustomMenu.MenuItem>
-      {isUserInstanceAdmin && (
-        <CustomMenu.MenuItem
-          onClick={() => router.push(GOD_MODE_URL)}
-          className="bg-accent-primary/20 text-accent-primary hover:bg-accent-primary/30 hover:text-accent-secondary"
-        >
-          {t("enter_god_mode")}
-        </CustomMenu.MenuItem>
-      )}
     </CustomMenu>
   );
 });

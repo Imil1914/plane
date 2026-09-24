@@ -55,6 +55,7 @@
     "isbot": "catalog:",
     "lodash-es": "catalog:",
     "lucide-react": "catalog:",
+    "mermaid": "catalog:",
     "mobx": "catalog:",
     "mobx-react": "catalog:",
     "mobx-utils": "catalog:",
@@ -77,11 +78,14 @@
     "swr": "catalog:",
     "tldraw": "catalog:",
     "use-font-face-observer": "catalog:",
-    "uuid": "catalog:"
+    "uuid": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@plane/tailwind-config": "workspace:*",
     "@plane/typescript-config": "workspace:*",
+    "@playwright/test": "catalog:",
     "@react-router/dev": "catalog:",
     "@tailwindcss/postcss": "catalog:",
     "@tailwindcss/typography": "catalog:",

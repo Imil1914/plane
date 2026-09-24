@@ -9,6 +9,7 @@ import os
 from .common import *  # noqa
 
 DEBUG = True
+PPM_LOCAL_ASSET_UPLOADS = os.environ.get("PPM_LOCAL_ASSET_UPLOADS", "1") == "1"
 
 # Debug Toolbar settings
 INSTALLED_APPS += ("debug_toolbar",)  # noqa

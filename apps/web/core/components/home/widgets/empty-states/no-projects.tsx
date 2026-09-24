@@ -22,6 +22,7 @@ import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useProject } from "@/hooks/store/use-project";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { useCanCreateProject } from "@/hooks/use-can-create-project";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web constants
 
@@ -36,6 +37,7 @@ export const NoProjectsEmptyState = observer(function NoProjectsEmptyState() {
   const { data: currentUser } = useUser();
   const { joinedProjectIds } = useProject();
   const { currentWorkspace: activeWorkspace } = useWorkspace();
+  const canCreateProject = useCanCreateProject();
   // local storage
   const { storedValue, setValue } = useLocalStorage(`quickstart-guide-${workspaceSlug}`, {
     hide: false,
@@ -46,11 +48,8 @@ export const NoProjectsEmptyState = observer(function NoProjectsEmptyState() {
   const { t } = useTranslation();
   const ppmT = usePpmTranslation();
   // derived values
-  const canCreateProject = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.WORKSPACE
-  );
-  const isWorkspaceAdmin = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
+  const hasLegacyWorkspaceAdminRole = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
+  const isWorkspaceAdmin = IS_PPM_SHELL_ENABLED ? canCreateProject : hasLegacyWorkspaceAdminRole;
 
   const EMPTY_STATE_DATA = [
     {
@@ -132,6 +131,11 @@ export const NoProjectsEmptyState = observer(function NoProjectsEmptyState() {
       },
     },
   ];
+  const visibleEmptyStateData = EMPTY_STATE_DATA.filter((item) => {
+    if (item.id === "create-project") return canCreateProject;
+    if (["invite-team", "configure-workspace"].includes(item.id)) return isWorkspaceAdmin;
+    return true;
+  });
   const isComplete = (type: string) => {
     switch (type) {
       case "projects":
@@ -163,7 +167,7 @@ export const NoProjectsEmptyState = observer(function NoProjectsEmptyState() {
         </button>
       </div>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {EMPTY_STATE_DATA.map((item) => {
+        {visibleEmptyStateData.map((item) => {
           const isStateComplete = isComplete(item.flag);
           return (
             <div key={item.id} className="flex flex-col rounded-xl border border-subtle bg-layer-2 p-4">

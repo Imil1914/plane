@@ -11,7 +11,7 @@ import uuid
 
 from dateutil.relativedelta import relativedelta
 from django.db import IntegrityError
-from django.db.models import Count, F, Func, OuterRef, Prefetch, Q
+from django.db.models import Count, F, Func, IntegerField, OuterRef, Prefetch, Q, Value
 
 from django.db.models.fields import DateField
 from django.db.models.functions import Cast, ExtractDay, ExtractWeek
@@ -50,6 +50,7 @@ from plane.bgtasks.event_tracking_task import track_event
 from plane.utils.url import contains_url
 from plane.utils.analytics_events import WORKSPACE_CREATED, WORKSPACE_DELETED
 from plane.utils.csv_utils import sanitize_csv_row
+from plane.ppm_core.permissions import is_ppm_global_admin
 
 
 class WorkSpaceViewSet(BaseViewSet):
@@ -70,15 +71,16 @@ class WorkSpaceViewSet(BaseViewSet):
             .values("count")
         )
 
-        return (
-            self.filter_queryset(super().get_queryset().select_related("owner"))
-            .order_by("name")
-            .filter(
-                workspace_member__member=self.request.user,
-                workspace_member__is_active=True,
+        workspaces = self.filter_queryset(super().get_queryset().select_related("owner")).order_by("name")
+        if is_ppm_global_admin(user=self.request.user):
+            return workspaces.annotate(
+                total_members=member_count,
+                role=Value(ROLE.ADMIN.value, output_field=IntegerField()),
             )
-            .annotate(total_members=member_count)
-        )
+        return workspaces.filter(
+            workspace_member__member=self.request.user,
+            workspace_member__is_active=True,
+        ).annotate(total_members=member_count)
 
     def create(self, request):
         try:
@@ -219,17 +221,23 @@ class UserWorkSpacesEndpoint(BaseAPIView):
             "role"
         )
 
-        workspace = (
-            Workspace.objects.prefetch_related(
-                Prefetch(
-                    "workspace_member",
-                    queryset=WorkspaceMember.objects.filter(member=request.user, is_active=True),
+        if is_ppm_global_admin(user=request.user):
+            workspace = Workspace.objects.annotate(
+                role=Value(ROLE.ADMIN.value, output_field=IntegerField()),
+                total_members=member_count,
+            ).distinct()
+        else:
+            workspace = (
+                Workspace.objects.prefetch_related(
+                    Prefetch(
+                        "workspace_member",
+                        queryset=WorkspaceMember.objects.filter(member=request.user, is_active=True),
+                    )
                 )
+                .annotate(role=role, total_members=member_count)
+                .filter(workspace_member__member=request.user, workspace_member__is_active=True)
+                .distinct()
             )
-            .annotate(role=role, total_members=member_count)
-            .filter(workspace_member__member=request.user, workspace_member__is_active=True)
-            .distinct()
-        )
 
         workspaces = WorkSpaceSerializer(
             self.filter_queryset(workspace),

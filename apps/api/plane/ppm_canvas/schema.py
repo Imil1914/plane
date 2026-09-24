@@ -4,7 +4,8 @@ import json
 from rest_framework import serializers
 
 
-PPM_CANVAS_SCHEMA_VERSION = 1
+PPM_CANVAS_SCHEMA_VERSION = 2
+PPM_CANVAS_READABLE_SCHEMA_VERSIONS = frozenset({1, PPM_CANVAS_SCHEMA_VERSION})
 PPM_CANVAS_MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024
 
 
@@ -35,3 +36,14 @@ def validate_canvas_snapshot(snapshot):
 
 def canvas_snapshot_hash(snapshot):
     return hashlib.sha256(canonical_snapshot_bytes(snapshot)).hexdigest()
+
+
+def canvas_snapshot_shape_ids(snapshot):
+    store = snapshot.get("document", {}).get("store", {})
+    if not isinstance(store, dict):
+        return set()
+    return {
+        str(record.get("id", record_id))
+        for record_id, record in store.items()
+        if isinstance(record, dict) and record.get("typeName") == "shape"
+    }

@@ -28,13 +28,10 @@ from plane.db.models import (
     ProjectMember,
     Workspace,
     ProjectMemberInvite,
-    User,
     WorkspaceMember,
-    Project,
-    ProjectUserProperty,
 )
-from plane.db.models.project import ProjectNetwork
 from plane.utils.host import base_host
+from plane.bgtasks.project_invitation_task import project_invitation
 
 
 class ProjectInvitationsViewset(BaseViewSet):
@@ -62,11 +59,13 @@ class ProjectInvitationsViewset(BaseViewSet):
             return Response({"error": "Emails are required"}, status=status.HTTP_400_BAD_REQUEST)
 
         for email in emails:
-            workspace_role = WorkspaceMember.objects.filter(
-                workspace__slug=slug, member__email=email.get("email"), is_active=True
-            ).role
+            workspace_role = (
+                WorkspaceMember.objects.filter(workspace__slug=slug, member__email=email.get("email"), is_active=True)
+                .values_list("role", flat=True)
+                .first()
+            )
 
-            if workspace_role in [5, 20] and workspace_role != email.get("role", 5):
+            if workspace_role == ROLE.GUEST.value and workspace_role != email.get("role", ROLE.GUEST.value):
                 return Response({"error": "You cannot invite a user with different role than workspace role"})
 
         workspace = Workspace.objects.get(slug=slug)
@@ -105,7 +104,7 @@ class ProjectInvitationsViewset(BaseViewSet):
 
         # Send invitations
         for invitation in project_invitations:
-            project_invitations.delay(
+            project_invitation.delay(
                 invitation.email,
                 project_id,
                 invitation.token,
@@ -130,63 +129,10 @@ class UserProjectInvitationsViewset(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def create(self, request, slug):
-        project_ids = request.data.get("project_ids", [])
-
-        # Get the workspace user role
-        workspace_member = WorkspaceMember.objects.get(member=request.user, workspace__slug=slug, is_active=True)
-
-        # Get all the projects
-        projects = Project.objects.filter(id__in=project_ids, workspace__slug=slug).only("id", "network")
-        # Check if user has permission to join each project
-        for project in projects:
-            if project.network == ProjectNetwork.SECRET.value and workspace_member.role != ROLE.ADMIN.value:
-                return Response(
-                    {"error": "Only workspace admins can join private project"},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-        workspace_role = workspace_member.role
-        workspace = workspace_member.workspace
-
-        # Use the workspace-scoped, network-validated project IDs only.
-        # Raw project_ids may contain UUIDs from other workspaces; those are
-        # absent from the `projects` queryset and therefore bypass the SECRET
-        # network check above (GHSA-45hc-q4mw-jhxm).
-        validated_project_ids = [str(p.id) for p in projects]
-
-        # If the user was already part of workspace
-        _ = ProjectMember.objects.filter(
-            workspace__slug=slug, project_id__in=validated_project_ids, member=request.user
-        ).update(is_active=True)
-
-        ProjectMember.objects.bulk_create(
-            [
-                ProjectMember(
-                    project_id=project_id,
-                    member=request.user,
-                    role=workspace_role,
-                    workspace=workspace,
-                    created_by=request.user,
-                )
-                for project_id in validated_project_ids
-            ],
-            ignore_conflicts=True,
+        return Response(
+            {"error": "Project access requires an invitation from the project lead."},
+            status=status.HTTP_403_FORBIDDEN,
         )
-
-        ProjectUserProperty.objects.bulk_create(
-            [
-                ProjectUserProperty(
-                    project_id=project_id,
-                    user=request.user,
-                    workspace=workspace,
-                    created_by=request.user,
-                )
-                for project_id in validated_project_ids
-            ],
-            ignore_conflicts=True,
-        )
-
-        return Response({"message": "Projects joined successfully"}, status=status.HTTP_201_CREATED)
 
 
 class ProjectJoinEndpoint(BaseAPIView):
@@ -251,7 +197,9 @@ class ProjectJoinEndpoint(BaseAPIView):
 
                 # Check if the user was already a member of project then activate the user
                 project_member = ProjectMember.objects.filter(
-                    workspace_id=project_invite.workspace_id, member=user
+                    workspace_id=project_invite.workspace_id,
+                    project_id=project_id,
+                    member=user,
                 ).first()
                 if project_member is None:
                     # Create a Project Member
@@ -262,7 +210,7 @@ class ProjectJoinEndpoint(BaseAPIView):
                     )
                 else:
                     project_member.is_active = True
-                    project_member.role = project_member.role
+                    project_member.role = project_invite.role
                     project_member.save()
 
                 return Response(

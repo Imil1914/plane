@@ -4,6 +4,7 @@
 
 from plane.db.models import ProjectMember, Page
 from plane.app.permissions import ROLE
+from plane.ppm_core.permissions import is_ppm_global_admin
 
 
 from rest_framework.permissions import BasePermission, SAFE_METHODS
@@ -69,6 +70,9 @@ class ProjectPagePermission(BasePermission):
         """
         Check if the user is a project member.
         """
+        if is_ppm_global_admin(user=request.user, workspace_slug=slug):
+            return ADMIN
+
         return (
             ProjectMember.objects.filter(
                 member=request.user,

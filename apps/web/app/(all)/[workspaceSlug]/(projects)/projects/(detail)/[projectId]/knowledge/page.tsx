@@ -4,9 +4,9 @@
  * See the LICENSE file for details.
  */
 
-import { PpmProjectFeaturePage } from "@/components/ppm-shell/project-feature-page";
+import { PpmVaultRoute } from "@/components/ppm-vault/route";
 import type { Route } from "./+types/page";
 
 export default function ProjectKnowledgePage({ params }: Route.ComponentProps) {
-  return <PpmProjectFeaturePage feature="knowledge" {...params} />;
+  return <PpmVaultRoute {...params} />;
 }

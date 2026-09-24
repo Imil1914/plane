@@ -18,6 +18,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { IWorkspace } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { orderWorkspacesList, cn } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // helpers
 import { AppSidebarItem } from "@/components/sidebar/sidebar-item";
 // hooks
@@ -25,6 +26,8 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUser, useUserProfile } from "@/hooks/store/user";
 import { useInstance } from "@/hooks/store/use-instance";
+import { usePpmAdminAccess } from "@/hooks/use-ppm-admin-access";
+import { canAccessPpmWorkspaceAdministration } from "@/helpers/ppm-workspace-access.helper";
 // components
 import { WorkspaceLogo } from "../logo";
 import SidebarDropdownItem from "./dropdown-item";
@@ -42,8 +45,11 @@ export const WorkspaceMenuRoot = observer(function WorkspaceMenuRoot(props: Work
   const { signOut } = useUser();
   const { updateUserProfile } = useUserProfile();
   const { currentWorkspace: activeWorkspace, workspaces } = useWorkspace();
+  const { isGlobalAdmin } = usePpmAdminAccess();
   // derived values
   const isWorkspaceCreationDisabled = config?.is_workspace_creation_disabled ?? false;
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const canAccessWorkspaceAdministration = canAccessPpmWorkspaceAdministration({ isGlobalAdmin, isPpmShell });
   // translation
   const { t } = useTranslation();
   // local state
@@ -147,15 +153,15 @@ export const WorkspaceMenuRoot = observer(function WorkspaceMenuRoot(props: Work
               <Menu.Items as={Fragment}>
                 <div
                   className={cn(
-                    "fixed z-21 mt-1 flex w-[19rem] origin-top-left flex-col divide-y divide-subtle rounded-md border-[0.5px] border-strong bg-surface-1 shadow-raised-200 outline-none",
+                    "fixed z-21 mt-1 flex w-[22rem] max-w-[calc(100vw-1.5rem)] origin-top-left flex-col divide-y divide-subtle overflow-hidden rounded-xl border border-subtle bg-surface-1 shadow-raised-200 outline-none",
                     {
                       "top-11 left-14": variant === "sidebar",
                       "top-10 left-4": variant === "top-navigation",
                     }
                   )}
                 >
-                  <div className="vertical-scrollbar flex scrollbar-sm max-h-96 flex-col items-start justify-start overflow-x-hidden overflow-y-scroll">
-                    <span className="sticky top-0 z-21 h-full w-full flex-shrink-0 truncate rounded-md bg-surface-1 px-4 pt-3 pb-1 text-left text-13 font-medium text-placeholder">
+                  <div className="vertical-scrollbar flex scrollbar-sm max-h-96 flex-col items-start justify-start overflow-x-hidden overflow-y-auto">
+                    <span className="sticky top-0 z-21 h-full w-full flex-shrink-0 truncate bg-surface-1 px-4 pt-3 pb-2 text-left text-12 font-medium text-placeholder">
                       {currentUser?.email}
                     </span>
                     {workspacesList ? (
@@ -186,12 +192,12 @@ export const WorkspaceMenuRoot = observer(function WorkspaceMenuRoot(props: Work
                       </div>
                     )}
                   </div>
-                  <div className="flex w-full flex-col items-start justify-start gap-2 px-4 py-2 text-13">
-                    {!isWorkspaceCreationDisabled && (
+                  <div className="flex w-full flex-col items-start justify-start gap-1 p-2 text-13">
+                    {!isWorkspaceCreationDisabled && canAccessWorkspaceAdministration && (
                       <Link href="/create-workspace" className="w-full">
                         <Menu.Item
                           as="div"
-                          className="flex items-center gap-2 rounded-sm px-2 py-1 text-13 font-medium text-secondary hover:bg-layer-transparent-hover"
+                          className="flex min-h-9 items-center gap-2.5 rounded-lg px-3 py-2 text-13 font-medium text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
                         >
                           <CirclePlus className="size-4 flex-shrink-0" />
                           {t("create_workspace")}
@@ -199,21 +205,23 @@ export const WorkspaceMenuRoot = observer(function WorkspaceMenuRoot(props: Work
                       </Link>
                     )}
 
-                    <Link href="/invitations" className="w-full" onClick={handleItemClick}>
-                      <Menu.Item
-                        as="div"
-                        className="flex items-center gap-2 rounded-sm px-2 py-1 text-13 font-medium text-secondary hover:bg-layer-transparent-hover"
-                      >
-                        <Mails className="h-4 w-4 flex-shrink-0" />
-                        {t("workspace_invites")}
-                      </Menu.Item>
-                    </Link>
+                    {canAccessWorkspaceAdministration && (
+                      <Link href="/invitations" className="w-full" onClick={handleItemClick}>
+                        <Menu.Item
+                          as="div"
+                          className="flex min-h-9 items-center gap-2.5 rounded-lg px-3 py-2 text-13 font-medium text-secondary transition-colors hover:bg-layer-transparent-hover hover:text-primary"
+                        >
+                          <Mails className="h-4 w-4 flex-shrink-0" />
+                          {t("workspace_invites")}
+                        </Menu.Item>
+                      </Link>
+                    )}
 
                     <div className="w-full">
                       <Menu.Item
                         as="button"
                         type="button"
-                        className="flex w-full items-center gap-2 rounded-sm px-2 py-1 text-13 font-medium text-danger-primary hover:bg-layer-transparent-hover"
+                        className="flex min-h-9 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-13 font-medium text-danger-primary transition-colors hover:bg-layer-transparent-hover"
                         onClick={handleSignOut}
                       >
                         <LogOut className="size-4 flex-shrink-0" />

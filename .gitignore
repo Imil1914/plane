@@ -10,6 +10,8 @@ node_modules
 
 # Testing
 /coverage
+apps/web/test-results/
+apps/web/playwright-report/
 
 # Next.js
 /.next/
@@ -109,7 +111,8 @@ build/
 build/
 .react-router/
 temp/
-scripts/
+scripts/*
+!scripts/ppm-canvas-browser-gate.sh
 !packages/i18n/scripts/
 
 # i18n auto-generated types (regenerated on every build)

@@ -77,6 +77,10 @@ services:
     command: ./bin/docker-entrypoint-api-local.sh
     env_file:
       - ./apps/api/.env
+    environment:
+      # Local-only: enables the explicit, user-confirmed apply step for Project Brain actions.
+      # Production remains deny-by-default through plane.settings.common.
+      PPM_AGENTS_WRITE_ENABLED: "1"
     depends_on:
       - plane-db
       - plane-redis

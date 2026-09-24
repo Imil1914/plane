@@ -16,9 +16,11 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Avatar, CustomSelect, CustomSearchSelect, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 // helpers
 import { getFileURL } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useUserPermissions } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type Props = {
   isOpen: boolean;
@@ -50,6 +52,8 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
   const { isOpen, onClose, onSuccess, projectId, workspaceSlug } = props;
   // plane hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // store hooks
   const { getProjectRoleByWorkspaceSlugAndProjectId } = useUserPermissions();
   const {
@@ -71,6 +75,12 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
   });
   // derived values
   const currentProjectRole = getProjectRoleByWorkspaceSlugAndProjectId(workspaceSlug, projectId);
+  const getRoleLabel = (role: number) => {
+    if (!isPpmShell) return ROLE[role as keyof typeof ROLE];
+    if (role === EUserPermissions.ADMIN) return ppmT("access.project_lead");
+    if (role === EUserPermissions.MEMBER) return ppmT("access.member");
+    return ppmT("access.guest");
+  };
   const uninvitedPeople = workspaceMemberIds?.filter((userId) => {
     const projectMemberDetails = getProjectMemberDetails(userId, projectId);
     const isInvited = projectMemberDetails?.member.id && projectMemberDetails?.original_role;
@@ -82,22 +92,20 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
 
     const payload = { ...formData };
 
-    await bulkAddMembersToProject(workspaceSlug.toString(), projectId.toString(), payload)
-      .then(() => {
-        if (onSuccess) onSuccess();
-        onClose();
-        setToast({
-          title: "Success!",
-          type: TOAST_TYPE.SUCCESS,
-          message: "Members added successfully.",
-        });
-      })
-      .catch((error) => {
-        console.error(error);
-      })
-      .finally(() => {
-        reset(defaultValues);
+    try {
+      await bulkAddMembersToProject(workspaceSlug.toString(), projectId.toString(), payload);
+      if (onSuccess) onSuccess();
+      onClose();
+      setToast({
+        title: "Success!",
+        type: TOAST_TYPE.SUCCESS,
+        message: "Members added successfully.",
       });
+    } catch (error) {
+      console.error(error);
+    } finally {
+      reset(defaultValues);
+    }
   };
 
   const handleClose = () => {
@@ -162,12 +170,10 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
     const currentMemberWorkspaceRole = getWorkspaceMemberDetails(value)?.role;
     if (!value || !currentMemberWorkspaceRole) return ROLE;
 
-    const isGuestOROwner = [EUserPermissions.ADMIN, EUserPermissions.GUEST].includes(
-      currentMemberWorkspaceRole as EUserPermissions
-    );
+    const isGuest = currentMemberWorkspaceRole === EUserPermissions.GUEST;
 
     return Object.fromEntries(
-      Object.entries(ROLE).filter(([key]) => !isGuestOROwner || [currentMemberWorkspaceRole].includes(parseInt(key)))
+      Object.entries(ROLE).filter(([key]) => !isGuest || currentMemberWorkspaceRole === parseInt(key))
     );
   };
 
@@ -183,8 +189,8 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
           </div>
 
           <div className="mb-3 space-y-4">
-            {fields.map((field, index) => (
-              <div key={field.id} className="group mb-1 flex w-full items-start justify-between gap-x-4 text-13">
+            {fields.map((memberField, index) => (
+              <div key={memberField.id} className="group mb-1 flex w-full items-start justify-between gap-x-4 text-13">
                 <div className="flex w-full grow flex-col gap-1">
                   <Controller
                     control={control}
@@ -241,24 +247,24 @@ export const SendProjectInvitationModal = observer(function SendProjectInvitatio
                       name={`members.${index}.role`}
                       control={control}
                       rules={{ required: "Select Role" }}
-                      render={({ field }) => (
+                      render={({ field: roleField }) => (
                         <CustomSelect
-                          {...field}
+                          {...roleField}
                           customButton={
                             <div className="shadow-sm flex w-24 items-center justify-between gap-1 rounded-md border border-subtle px-3 py-2.5 text-left text-13 text-secondary duration-300 hover:bg-layer-1 hover:text-primary focus:outline-none">
-                              <span className="capitalize">{field.value ? ROLE[field.value] : "Select role"}</span>
+                              <span>{roleField.value ? getRoleLabel(roleField.value) : "Select role"}</span>
                               <ChevronDownIcon className="h-3 w-3" aria-hidden="true" />
                             </div>
                           }
                           input
                         >
                           {Object.entries(checkCurrentOptionWorkspaceRole(watch(`members.${index}.member_id`))).map(
-                            ([key, label]) => {
+                            ([key]) => {
                               if (parseInt(key) > (currentProjectRole ?? EUserPermissions.GUEST)) return null;
 
                               return (
                                 <CustomSelect.Option key={key} value={key}>
-                                  {label}
+                                  {getRoleLabel(parseInt(key))}
                                 </CustomSelect.Option>
                               );
                             }

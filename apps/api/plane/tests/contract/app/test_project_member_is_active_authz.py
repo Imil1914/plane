@@ -57,9 +57,7 @@ def project(db, workspace, create_user):
     )
     # create_user is the workspace owner (role=20 via the workspace fixture);
     # make them a project ADMIN too — this is the takeover victim.
-    ProjectMember.objects.create(
-        workspace=workspace, project=project, member=create_user, role=20, is_active=True
-    )
+    ProjectMember.objects.create(workspace=workspace, project=project, member=create_user, role=20, is_active=True)
     return project
 
 
@@ -69,8 +67,7 @@ class TestProjectMemberIsActiveAuthz:
     def test_guest_cannot_deactivate_admin(self, workspace, project, create_user):
         """A project GUEST must not deactivate a project ADMIN via is_active."""
         attacker = _make_user("guest-attacker@plane.so")
-        # non-workspace-admin (role 15) so is_workspace_admin bypass does not apply,
-        # project GUEST (role 5)
+        # Workspace member (role 15), project GUEST (role 5).
         _add_member(workspace, project, attacker, ws_role=15, project_role=5)
         victim = ProjectMember.objects.get(project=project, member=create_user)
 
@@ -144,14 +141,12 @@ class TestProjectMemberIsActiveAuthz:
         target_member.refresh_from_db()
         assert target_member.is_active is False
 
-    def test_workspace_admin_with_low_project_role_can_deactivate(self, workspace, project, create_user):
+    def test_workspace_admin_with_low_project_role_cannot_deactivate(self, workspace, project, create_user):
         """
-        Positive control: the intended workspace-admin bypass is preserved.
+        Workspace role 20 does not grant authority over every project.
 
-        A workspace ADMIN (role 20) may deactivate any project member — even a
-        project ADMIN — despite holding only a project GUEST role, because
-        is_workspace_admin short-circuits the role-comparison guard. Locks in the
-        bypass so future changes don't silently remove it.
+        A non-owner workspace administrator with only a project GUEST role
+        cannot deactivate this project's lead.
         """
         ws_admin = _make_user("ws-admin@plane.so")
         # workspace ADMIN (20) but only a project GUEST (5)
@@ -167,6 +162,6 @@ class TestProjectMemberIsActiveAuthz:
             format="json",
         )
 
-        assert response.status_code == status.HTTP_200_OK
+        assert response.status_code == status.HTTP_403_FORBIDDEN
         victim.refresh_from_db()
-        assert victim.is_active is False
+        assert victim.is_active is True

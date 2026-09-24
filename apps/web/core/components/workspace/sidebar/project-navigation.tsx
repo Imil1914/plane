@@ -8,6 +8,7 @@ import React, { useCallback, useMemo } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
+import { useSearchParams } from "react-router";
 import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { isPpmShellEnabled } from "@ppm/brand";
@@ -20,7 +21,9 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
+import { usePpmAdminAccess } from "@/hooks/use-ppm-admin-access";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { getPpmAdminModeNavigationHref } from "@/helpers/ppm-admin-mode.helper";
 import {
   buildProjectNavigationItems,
   type TProjectNavigationItem,
@@ -43,6 +46,8 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
   const { isExtendedProjectSidebarOpened, toggleExtendedProjectSidebar, toggleSidebar } = useAppTheme();
   const { getPartialProjectById } = useProject();
   const { allowPermissions } = useUserPermissions();
+  const { isGlobalAdmin } = usePpmAdminAccess();
+  const [searchParams] = useSearchParams();
   const {
     issue: { getIssueIdByIdentifier, getIssueById },
   } = useIssueDetail();
@@ -122,7 +127,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         return (
           <Link
             key={item.key}
-            href={item.href}
+            href={getPpmAdminModeNavigationHref(item.href, isGlobalAdmin, searchParams.get("ppm_admin_mode"))}
             aria-current={itemIsActive ? "page" : undefined}
             className="focus-visible:outline-accent-primary block rounded-md focus-visible:outline-2 focus-visible:outline-offset-2"
             onClick={handleProjectClick}

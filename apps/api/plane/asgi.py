@@ -4,15 +4,22 @@
 
 import os
 
-from channels.routing import ProtocolTypeRouter
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "plane.settings.production")
+
+from channels.auth import AuthMiddlewareStack
+from channels.routing import ProtocolTypeRouter, URLRouter
+from channels.security.websocket import AllowedHostsOriginValidator
 from django.core.asgi import get_asgi_application
 
 django_asgi_app = get_asgi_application()
 
+# Import routes only after Django has populated the app registry. Consumers use
+# project models during module import, so moving this import higher breaks ASGI startup.
+from plane.ppm_canvas.routing import websocket_urlpatterns  # noqa: E402
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "plane.settings.production")
-# Initialize Django ASGI application early to ensure the AppRegistry
-# is populated before importing code that may import ORM models.
-
-
-application = ProtocolTypeRouter({"http": get_asgi_application()})
+application = ProtocolTypeRouter(
+    {
+        "http": django_asgi_app,
+        "websocket": AllowedHostsOriginValidator(AuthMiddlewareStack(URLRouter(websocket_urlpatterns))),
+    }
+)

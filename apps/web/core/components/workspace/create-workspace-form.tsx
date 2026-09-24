@@ -16,9 +16,12 @@ import type { IWorkspace } from "@plane/types";
 // ui
 import { CustomSelect, Input } from "@plane/ui";
 import { validateWorkspaceName, validateSlug } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { toWorkspaceSlug } from "@/helpers/workspace-slug.helper";
 // services
 import { WorkspaceService } from "@/services/workspace.service";
 
@@ -41,6 +44,8 @@ const workspaceService = new WorkspaceService();
 
 export const CreateWorkspaceForm = observer(function CreateWorkspaceForm(props: Props) {
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   const {
     onSubmit,
     defaultValues,
@@ -68,12 +73,18 @@ export const CreateWorkspaceForm = observer(function CreateWorkspaceForm(props: 
   } = useForm<IWorkspace>({ defaultValues, mode: "onChange" });
 
   const handleCreateWorkspace = async (formData: IWorkspace) => {
+    const normalizedSlug = toWorkspaceSlug(formData.slug);
+    if (validateSlug(normalizedSlug) !== true) {
+      setInvalidSlug(true);
+      return;
+    }
+    const normalizedFormData = { ...formData, slug: normalizedSlug };
     try {
-      const res = (await workspaceService.workspaceSlugCheck(formData.slug)) as { status: boolean };
-      if (res.status === true && !RESTRICTED_URLS.includes(formData.slug)) {
+      const res = (await workspaceService.workspaceSlugCheck(normalizedSlug)) as { status: boolean };
+      if (res.status === true && !RESTRICTED_URLS.includes(normalizedSlug)) {
         setSlugError(false);
         try {
-          const workspaceResponse = await createWorkspace(formData);
+          const workspaceResponse = await createWorkspace(normalizedFormData);
           setToast({
             type: TOAST_TYPE.SUCCESS,
             title: t("workspace_creation.toast.success.title"),
@@ -84,8 +95,8 @@ export const CreateWorkspaceForm = observer(function CreateWorkspaceForm(props: 
         } catch {
           setToast({
             type: TOAST_TYPE.ERROR,
-            title: t("workspace_creation.toast.error.title"),
-            message: t("workspace_creation.toast.error.message"),
+            title: isPpmShell ? ppmT("workspace.create_error_title") : t("workspace_creation.toast.error.title"),
+            message: isPpmShell ? ppmT("workspace.create_error_message") : t("workspace_creation.toast.error.message"),
           });
         }
       } else {
@@ -94,8 +105,8 @@ export const CreateWorkspaceForm = observer(function CreateWorkspaceForm(props: 
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: t("workspace_creation.toast.error.title"),
-        message: t("workspace_creation.toast.error.message"),
+        title: isPpmShell ? ppmT("workspace.create_error_title") : t("workspace_creation.toast.error.title"),
+        message: isPpmShell ? ppmT("workspace.create_error_message") : t("workspace_creation.toast.error.message"),
       });
     }
   };
@@ -141,7 +152,7 @@ export const CreateWorkspaceForm = observer(function CreateWorkspaceForm(props: 
                   onChange={(e) => {
                     onChange(e.target.value);
                     setValue("name", e.target.value);
-                    setValue("slug", e.target.value.toLocaleLowerCase().trim().replace(/ /g, "-"), {
+                    setValue("slug", toWorkspaceSlug(e.target.value), {
                       shouldValidate: true,
                     });
                   }}
@@ -167,6 +178,7 @@ export const CreateWorkspaceForm = observer(function CreateWorkspaceForm(props: 
               name="slug"
               rules={{
                 required: t("common.errors.required"),
+                validate: (value) => validateSlug(value),
                 maxLength: {
                   value: 48,
                   message: t("workspace_creation.errors.validation.url_length"),
@@ -176,12 +188,13 @@ export const CreateWorkspaceForm = observer(function CreateWorkspaceForm(props: 
                 <Input
                   id="workspaceUrl"
                   type="text"
-                  value={value.toLocaleLowerCase().trim().replace(/ /g, "-")}
+                  value={value}
                   onChange={(e) => {
-                    const validation = validateSlug(e.target.value);
+                    const normalizedSlug = toWorkspaceSlug(e.target.value);
+                    const validation = validateSlug(normalizedSlug);
                     if (validation === true) setInvalidSlug(false);
                     else setInvalidSlug(true);
-                    onChange(e.target.value.toLowerCase());
+                    onChange(normalizedSlug);
                   }}
                   ref={ref}
                   hasError={Boolean(errors.slug)}

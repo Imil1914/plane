@@ -20,6 +20,7 @@ import { validateWorkspaceName, validateSlug } from "@plane/utils";
 // hooks
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserProfile, useUserSettings } from "@/hooks/store/user";
+import { toWorkspaceSlug } from "@/helpers/workspace-slug.helper";
 // services
 import { WorkspaceService } from "@/services/workspace.service";
 
@@ -62,11 +63,18 @@ export const CreateWorkspace = observer(function CreateWorkspace(props: Props) {
   const handleCreateWorkspace = async (formData: IWorkspace) => {
     if (isSubmitting) return;
 
+    const normalizedSlug = toWorkspaceSlug(formData.slug);
+    if (validateSlug(normalizedSlug) !== true) {
+      setInvalidSlug(true);
+      return;
+    }
+    const normalizedFormData = { ...formData, slug: normalizedSlug };
+
     try {
-      const res = await workspaceService.workspaceSlugCheck(formData.slug);
-      if (res?.status === true && !RESTRICTED_URLS.includes(formData.slug)) {
+      const res = await workspaceService.workspaceSlugCheck(normalizedSlug);
+      if (res?.status === true && !RESTRICTED_URLS.includes(normalizedSlug)) {
         setSlugError(false);
-        const workspaceResponse = await createWorkspace(formData);
+        const workspaceResponse = await createWorkspace(normalizedFormData);
         setToast({
           type: TOAST_TYPE.SUCCESS,
           title: t("workspace_creation.toast.success.title"),
@@ -155,7 +163,7 @@ export const CreateWorkspace = observer(function CreateWorkspace(props: Props) {
                   onChange={(event) => {
                     onChange(event.target.value);
                     setValue("name", event.target.value);
-                    setValue("slug", event.target.value.toLocaleLowerCase().trim().replace(/ /g, "-"), {
+                    setValue("slug", toWorkspaceSlug(event.target.value), {
                       shouldValidate: true,
                     });
                   }}
@@ -182,6 +190,7 @@ export const CreateWorkspace = observer(function CreateWorkspace(props: Props) {
             name="slug"
             rules={{
               required: t("common.errors.required"),
+              validate: (value) => validateSlug(value),
               maxLength: {
                 value: 48,
                 message: t("workspace_creation.errors.validation.url_length"),
@@ -198,12 +207,13 @@ export const CreateWorkspace = observer(function CreateWorkspace(props: Props) {
                   id="slug"
                   name="slug"
                   type="text"
-                  value={value.toLocaleLowerCase().trim().replace(/ /g, "-")}
+                  value={value}
                   onChange={(e) => {
-                    const validation = validateSlug(e.target.value);
+                    const normalizedSlug = toWorkspaceSlug(e.target.value);
+                    const validation = validateSlug(normalizedSlug);
                     if (validation === true) setInvalidSlug(false);
                     else setInvalidSlug(true);
-                    onChange(e.target.value.toLowerCase());
+                    onChange(normalizedSlug);
                   }}
                   ref={ref}
                   hasError={Boolean(errors.slug)}

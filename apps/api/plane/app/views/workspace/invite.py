@@ -57,6 +57,12 @@ class WorkspaceInvitationsViewset(BaseViewSet):
         if not emails:
             return Response({"error": "Emails are required"}, status=status.HTTP_400_BAD_REQUEST)
 
+        if any(int(email.get("role", 5)) == 20 for email in emails):
+            return Response(
+                {"error": "Global administrator access cannot be granted by invitation."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # check for role level of the requesting user
         requesting_user = WorkspaceMember.objects.get(workspace__slug=slug, member=request.user, is_active=True)
 
@@ -142,6 +148,31 @@ class WorkspaceInvitationsViewset(BaseViewSet):
 
         return Response({"message": "Emails sent successfully"}, status=status.HTTP_200_OK)
 
+    def partial_update(self, request, slug, pk):
+        invitation = self.get_queryset().get(pk=pk)
+        requesting_user = WorkspaceMember.objects.get(
+            workspace__slug=slug,
+            member=request.user,
+            is_active=True,
+        )
+        requested_role = int(request.data.get("role", invitation.role))
+
+        if requested_role not in (5, 15):
+            return Response(
+                {"error": "Global administrator access cannot be granted by invitation."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if requested_role > requesting_user.role:
+            return Response(
+                {"error": "You cannot assign a role higher than your own"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = self.get_serializer(invitation, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     def destroy(self, request, slug, pk):
         workspace_member_invite = WorkspaceMemberInvite.objects.get(pk=pk, workspace__slug=slug)
         workspace_member_invite.delete()
@@ -200,20 +231,21 @@ class WorkspaceJoinEndpoint(BaseAPIView):
 
                 # If the user is present then create the workspace member
                 if user is not None:
+                    assigned_role = 15 if workspace_invite.role == 20 else workspace_invite.role
                     # Check if the user was already a member of workspace then activate the user
                     workspace_member = WorkspaceMember.objects.filter(
                         workspace=workspace_invite.workspace, member=user
                     ).first()
                     if workspace_member is not None:
                         workspace_member.is_active = True
-                        workspace_member.role = workspace_invite.role
+                        workspace_member.role = assigned_role
                         workspace_member.save()
                     else:
                         # Create a Workspace
                         _ = WorkspaceMember.objects.create(
                             workspace=workspace_invite.workspace,
                             member=user,
-                            role=workspace_invite.role,
+                            role=assigned_role,
                         )
 
                     # Set the user last_workspace_id to the accepted workspace
@@ -227,7 +259,7 @@ class WorkspaceJoinEndpoint(BaseAPIView):
                             "user_id": user.id,
                             "workspace_id": workspace_invite.workspace.id,
                             "workspace_slug": workspace_invite.workspace.slug,
-                            "role": workspace_invite.role,
+                            "role": assigned_role,
                             "joined_at": str(timezone.now()),
                         },
                     )
@@ -279,6 +311,7 @@ class UserWorkspaceInvitationsViewSet(BaseViewSet):
 
         # If the user is already a member of workspace and was deactivated then activate the user
         for invitation in workspace_invitations:
+            assigned_role = 15 if invitation.role == 20 else invitation.role
             invalidate_cache_directly(
                 path=f"/api/workspaces/{invitation.workspace.slug}/members/",
                 user=False,
@@ -287,7 +320,7 @@ class UserWorkspaceInvitationsViewSet(BaseViewSet):
             )
             # Update the WorkspaceMember for this specific invitation
             WorkspaceMember.objects.filter(workspace_id=invitation.workspace_id, member=request.user).update(
-                is_active=True, role=invitation.role
+                is_active=True, role=assigned_role
             )
 
             # Track event
@@ -299,7 +332,7 @@ class UserWorkspaceInvitationsViewSet(BaseViewSet):
                     "user_id": request.user.id,
                     "workspace_id": invitation.workspace.id,
                     "workspace_slug": invitation.workspace.slug,
-                    "role": invitation.role,
+                    "role": assigned_role,
                     "joined_at": str(timezone.now()),
                 },
             )
@@ -310,7 +343,7 @@ class UserWorkspaceInvitationsViewSet(BaseViewSet):
                 WorkspaceMember(
                     workspace=invitation.workspace,
                     member=request.user,
-                    role=invitation.role,
+                    role=(15 if invitation.role == 20 else invitation.role),
                     created_by=request.user,
                 )
                 for invitation in workspace_invitations

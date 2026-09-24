@@ -9,7 +9,7 @@ import { BrainCircuit, LockKeyhole, RotateCcw } from "lucide-react";
 import { Navigate } from "react-router";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { getPpmProjectPath, isPpmShellEnabled, type TPpmTranslationKey } from "@ppm/brand";
-import { isPpmCanvasEnabled } from "@ppm/canvas";
+import { isPpmAntyFlowShellEnabled, isPpmCanvasEnabled } from "@ppm/canvas";
 import { PageHead } from "@/components/core/page-title";
 import { useProject } from "@/hooks/store/use-project";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -17,7 +17,8 @@ import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { resolvePpmCanvasAccess } from "./access";
 
-const PpmCanvasEditor = lazy(() => import("./editor"));
+const PpmCanvasWorkspace = lazy(() => import("./workspace"));
+const PpmMinimalCanvasWorkspace = lazy(() => import("./minimal-workspace"));
 
 type TPpmCanvasRouteProps = {
   projectId: string;
@@ -37,6 +38,7 @@ export function PpmCanvasRoute({ projectId, workspaceSlug }: TPpmCanvasRouteProp
   const workspace = getWorkspaceBySlug(workspaceSlug);
   const isShellEnabled = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   const isCanvasEnabled = isPpmCanvasEnabled(process.env.PPM_CANVAS_ENABLED, isShellEnabled);
+  const isAntyFlowShellEnabled = isPpmAntyFlowShellEnabled(process.env.PPM_ANTYFLOW_SHELL_ENABLED);
 
   if (!isCanvasEnabled) return <Navigate replace to={getPpmProjectPath(workspaceSlug, projectId, "tasks")} />;
   if (!project || !currentUser || !workspace) return <CanvasState kind="loading" />;
@@ -52,22 +54,26 @@ export function PpmCanvasRoute({ projectId, workspaceSlug }: TPpmCanvasRouteProp
     <>
       <PageHead title={`${project.name} — ${ppmT("brain.title")}`} />
       <main className="relative h-full min-h-0 overflow-hidden bg-surface-1" aria-label={ppmT("brain.title")}>
-        <div className="pointer-events-none absolute top-3 left-3 z-[310] flex max-w-[calc(100%-1.5rem)] gap-2">
-          <span className="shadow-sm rounded-full border border-subtle bg-surface-1/95 px-2.5 py-1 text-11 font-semibold text-primary backdrop-blur">
-            {project.name}
-          </span>
-          <span className="shadow-sm rounded-full border border-subtle bg-surface-1/95 px-2.5 py-1 text-11 font-medium text-secondary backdrop-blur">
-            {ppmT("canvas.shared_badge")}
-          </span>
-        </div>
         <CanvasErrorBoundary>
           <Suspense fallback={<CanvasState kind="loading" />}>
-            <PpmCanvasEditor
-              authorId={currentUser.id}
-              canEdit={canEdit && roleAccess === "edit"}
-              projectId={projectId}
-              workspaceId={workspace.id}
-            />
+            {isAntyFlowShellEnabled ? (
+              <PpmCanvasWorkspace
+                authorId={currentUser.id}
+                canEdit={canEdit && roleAccess === "edit"}
+                projectId={projectId}
+                projectName={project.name}
+                workspaceId={workspace.id}
+                workspaceSlug={workspaceSlug}
+              />
+            ) : (
+              <PpmMinimalCanvasWorkspace
+                authorId={currentUser.id}
+                canEdit={canEdit && roleAccess === "edit"}
+                projectId={projectId}
+                workspaceId={workspace.id}
+                workspaceSlug={workspaceSlug}
+              />
+            )}
           </Suspense>
         </CanvasErrorBoundary>
       </main>

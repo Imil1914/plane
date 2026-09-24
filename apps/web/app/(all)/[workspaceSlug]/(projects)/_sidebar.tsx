@@ -54,7 +54,6 @@ export const ProjectAppSidebar = observer(function ProjectAppSidebar() {
         defaultCollapsed={sidebarCollapsed}
         peekDuration={1500}
         onWidthChange={handleWidthChange}
-        onCollapsedChange={toggleSidebar}
         isCollapsed={sidebarCollapsed}
         toggleCollapsed={toggleSidebar}
         togglePeek={toggleSidebarPeek}

@@ -8,7 +8,7 @@ import React, { useRef, useState } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArchiveRestoreIcon, Settings, UserPlus } from "lucide-react";
+import { ArchiveRestoreIcon, Network, Settings, UserPlus } from "lucide-react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel, IS_FAVORITE_MENU_OPEN } from "@plane/constants";
 import { useLocalStorage } from "@plane/hooks";
@@ -21,6 +21,8 @@ import type { IProject } from "@plane/types";
 import type { TContextMenuItem } from "@plane/ui";
 import { Avatar, AvatarGroup, ContextMenu, FavoriteStar } from "@plane/ui";
 import { copyUrlToClipboard, cn, getFileURL, renderFormattedDate } from "@plane/utils";
+import { getPpmProjectPath, isPpmShellEnabled } from "@ppm/brand";
+import { isPpmCanvasEnabled } from "@ppm/canvas";
 // components
 // hooks
 import { useMember } from "@/hooks/store/use-member";
@@ -28,6 +30,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // local imports
 import { CoverImage } from "@/components/common/cover-image";
 import { DeleteProjectModal } from "./delete-project-modal";
@@ -53,6 +56,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
   const { getUserDetails } = useMember();
   const { addProjectToFavorites, removeProjectFromFavorites } = useProject();
   const { allowPermissions } = useUserPermissions();
+  const ppmT = usePpmTranslation();
   // hooks
   const { isMobile } = usePlatformOS();
   // derived values
@@ -64,9 +68,11 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
   // auth
   const isMemberOfProject = !!project.member_role;
   const hasAdminRole = project.member_role === EUserPermissions.ADMIN;
-  const hasMemberRole = project.member_role === EUserPermissions.MEMBER;
   // archive
   const isArchived = !!project.archived_at;
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const isPpmCanvas = isPpmCanvasEnabled(process.env.PPM_CANVAS_ENABLED, isPpmShell);
+  const canvasUrl = getPpmProjectPath(workspaceSlug.toString(), project.id, "brain");
   // local storage
   const { setValue: toggleFavoriteMenu, storedValue: isFavoriteMenuOpen } = useLocalStorage<boolean>(
     IS_FAVORITE_MENU_OPEN,
@@ -128,7 +134,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
       action: () => router.push(`/${workspaceSlug}/settings/projects/${project.id}`),
       title: "Settings",
       icon: Settings,
-      shouldRender: !isArchived && (hasAdminRole || hasMemberRole),
+      shouldRender: !isArchived && hasAdminRole,
     },
     {
       key: "join",
@@ -307,7 +313,8 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
             {isArchived ? (
               hasAdminRole && (
                 <div className="flex items-center justify-center gap-2">
-                  <div
+                  <button
+                    type="button"
                     className="flex items-center justify-center text-11 font-medium text-placeholder hover:text-secondary"
                     onClick={(e) => {
                       e.preventDefault();
@@ -319,23 +326,41 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                       <ArchiveRestoreIcon className="h-3.5 w-3.5" />
                       Restore
                     </div>
-                  </div>
-                  <div
+                  </button>
+                  <button
+                    type="button"
                     className="flex items-center justify-center text-11 font-medium text-placeholder hover:text-secondary"
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
                       setDeleteProjectModal(true);
                     }}
+                    aria-label="Delete project"
                   >
                     <TrashIcon className="h-3.5 w-3.5" />
-                  </div>
+                  </button>
                 </div>
               )
             ) : (
-              <>
+              <div className="flex items-center gap-2">
+                {isPpmCanvas && isMemberOfProject && (
+                  <button
+                    type="button"
+                    data-prevent-progress
+                    className="flex items-center gap-1.5 rounded-md border border-accent-strong/30 bg-accent-primary/10 px-2.5 py-1 text-11 font-medium text-accent-primary transition-colors hover:bg-accent-primary/20"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      router.push(canvasUrl);
+                    }}
+                    aria-label={`${ppmT("actions.open_canvas")}: ${project.name}`}
+                  >
+                    <Network className="size-3.5" aria-hidden="true" />
+                    <span>{ppmT("project.brain")}</span>
+                  </button>
+                )}
                 {isMemberOfProject &&
-                  (hasAdminRole || hasMemberRole ? (
+                  (hasAdminRole ? (
                     <Link
                       className="flex items-center justify-center rounded-sm p-1 text-placeholder hover:bg-layer-1 hover:text-secondary"
                       onClick={(e) => {
@@ -366,7 +391,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                     </Button>
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
         </div>

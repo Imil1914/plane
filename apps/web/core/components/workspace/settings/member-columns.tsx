@@ -10,7 +10,7 @@ import { Controller, useForm } from "react-hook-form";
 
 import { Disclosure } from "@headlessui/react";
 // plane imports
-import { ROLE, EUserPermissions, EUserPermissionsLevel, MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
+import { EUserPermissions, EUserPermissionsLevel, MEMBER_TRACKER_ELEMENTS } from "@plane/constants";
 import { TrashIcon, SuspendedUserIcon } from "@plane/propel/icons";
 import { Pill, EPillVariant, EPillSize } from "@plane/propel/pill";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
@@ -22,6 +22,8 @@ import { getFileURL } from "@plane/utils";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { usePpmAdminAccess } from "@/hooks/use-ppm-admin-access";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 export interface RowData {
   member: IWorkspaceMember;
@@ -47,6 +49,9 @@ export function NameColumn(props: NameProps) {
   // derived values
   const { avatar_url, display_name, email, first_name, id, last_name } = rowData.member;
   const isSuspended = rowData.is_active === false;
+  const { isGlobalAdmin: isCurrentUserGlobalAdmin } = usePpmAdminAccess();
+  const ppmT = usePpmTranslation();
+  const isGlobalAdmin = isCurrentUserGlobalAdmin && currentUser?.id === id;
 
   return (
     <Disclosure>
@@ -80,16 +85,15 @@ export function NameColumn(props: NameProps) {
               </span>
             </div>
 
-            {!isSuspended && (isAdmin || id === currentUser?.id) && (
+            {!isGlobalAdmin && !isSuspended && (isAdmin || id === currentUser?.id) && (
               <PopoverMenu
                 data={[""]}
                 keyExtractor={(item) => item}
                 popoverClassName="justify-end"
                 buttonClassName="outline-none	origin-center rotate-90 size-8 aspect-square flex-shrink-0 grid place-items-center opacity-0 group-hover:opacity-100 transition-opacity"
                 render={() => (
-                  <div
-                    role="button"
-                    tabIndex={0}
+                  <button
+                    type="button"
                     className="flex cursor-pointer items-center gap-x-3"
                     onClick={() => setRemoveMemberModal(rowData)}
                     onKeyDown={(e) => {
@@ -100,8 +104,9 @@ export function NameColumn(props: NameProps) {
                     }}
                     data-ph-element={MEMBER_TRACKER_ELEMENTS.WORKSPACE_MEMBER_TABLE_CONTEXT_MENU}
                   >
-                    <TrashIcon className="size-3.5 align-middle" /> {id === currentUser?.id ? "Leave " : "Remove "}
-                  </div>
+                    <TrashIcon className="size-3.5 align-middle" />
+                    {id === currentUser?.id ? ppmT("members.leave") : ppmT("members.remove")}
+                  </button>
                 )}
               />
             )}
@@ -126,38 +131,47 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
     workspace: { updateMember },
   } = useMember();
   const { data: currentUser } = useUser();
+  const { isGlobalAdmin: isCurrentUserGlobalAdmin } = usePpmAdminAccess();
+  const ppmT = usePpmTranslation();
 
   // derived values
   const isCurrentUser = currentUser?.id === rowData.member.id;
+  const isGlobalAdmin = isCurrentUserGlobalAdmin && isCurrentUser;
   const isAdminRole = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
-  const isRoleNonEditable = isCurrentUser || !isAdminRole;
+  const isRoleNonEditable = isCurrentUser || isGlobalAdmin || !isAdminRole;
   const isSuspended = rowData.is_active === false;
+  const getRoleLabel = (role: EUserPermissions) => {
+    if (isGlobalAdmin) return ppmT("access.global_admin");
+    if (role === EUserPermissions.ADMIN) return ppmT("access.workspace_admin");
+    if (role === EUserPermissions.MEMBER) return ppmT("access.member");
+    return ppmT("access.guest");
+  };
 
   return (
     <>
       {isSuspended ? (
         <div className="flex w-32">
           <Pill variant={EPillVariant.DEFAULT} size={EPillSize.SM} className="border-none">
-            Suspended
+            {ppmT("members.suspended")}
           </Pill>
         </div>
       ) : isRoleNonEditable ? (
         <div className="flex w-32">
-          <span>{ROLE[rowData.role]}</span>
+          <span>{getRoleLabel(rowData.role)}</span>
         </div>
       ) : (
         <Controller
           name="role"
           control={control}
-          rules={{ required: "Role is required." }}
-          render={({ field: { value } }) => (
+          rules={{ required: ppmT("members.role_required") }}
+          render={({ field: { value: currentValue } }) => (
             <CustomSelect
-              value={value as EUserPermissions}
-              onChange={async (value: EUserPermissions) => {
+              value={currentValue as EUserPermissions}
+              onChange={async (nextValue: EUserPermissions) => {
                 if (!workspaceSlug) return;
                 try {
                   await updateMember(workspaceSlug.toString(), rowData.member.id, {
-                    role: value as unknown as EUserPermissions,
+                    role: nextValue as unknown as EUserPermissions,
                   });
                 } catch (err: unknown) {
                   const error = err as { error?: string | string[] };
@@ -165,23 +179,23 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
 
                   setToast({
                     type: TOAST_TYPE.ERROR,
-                    title: "Error!",
-                    message: errorString ?? "An error occurred while updating member role. Please try again.",
+                    title: ppmT("members.role_update_error_title"),
+                    message: errorString ?? ppmT("members.role_update_error_message"),
                   });
                 }
               }}
               label={
                 <div className="flex">
-                  <span>{ROLE[rowData.role]}</span>
+                  <span>{getRoleLabel(rowData.role)}</span>
                 </div>
               }
               buttonClassName={`!px-0 !justify-start hover:bg-surface-1 ${errors.role ? "border-danger-strong" : "border-none"}`}
               className="w-32 rounded-md p-0"
               input
             >
-              {Object.keys(ROLE).map((item) => (
+              {[EUserPermissions.GUEST, EUserPermissions.MEMBER].map((item) => (
                 <CustomSelect.Option key={item} value={item as unknown as EUserPermissions}>
-                  {ROLE[item as unknown as keyof typeof ROLE]}
+                  {getRoleLabel(item)}
                 </CustomSelect.Option>
               ))}
             </CustomSelect>

@@ -5,7 +5,7 @@
 # Third Party imports
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import Min
+from django.db.models import F, Min
 
 # Module imports
 from .base import BaseViewSet, BaseAPIView
@@ -22,6 +22,7 @@ from plane.db.models import Project, ProjectMember, ProjectUserProperty, Workspa
 from plane.bgtasks.project_add_user_email_task import project_add_user_email
 from plane.utils.host import base_host
 from plane.app.permissions.base import allow_permission, ROLE
+from plane.ppm_core.permissions import is_ppm_global_admin
 
 
 class ProjectMemberViewSet(BaseViewSet):
@@ -67,15 +68,14 @@ class ProjectMemberViewSet(BaseViewSet):
 
         # check the workspace role of the new user
         for member in member_roles:
+            if str(member) == str(project.workspace.owner_id):
+                return Response(
+                    {"error": "The global administrator already has inherited access to every project."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             workspace_member_role = WorkspaceMember.objects.get(
                 workspace__slug=slug, member=member, is_active=True
             ).role
-            if workspace_member_role in [20] and member_roles.get(member) in [5, 15]:
-                return Response(
-                    {"error": "You cannot add a user with role lower than the workspace role"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
             if workspace_member_role in [5] and member_roles.get(member) in [15, 20]:
                 return Response(
                     {"error": "You cannot add a user with role higher than the workspace role"},
@@ -165,17 +165,49 @@ class ProjectMemberViewSet(BaseViewSet):
             member__member_workspace__is_active=True,
         ).select_related("project", "member", "workspace")
 
-        serializer = ProjectMemberRoleSerializer(project_members, fields=("id", "member", "role"), many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        members_data = list(
+            ProjectMemberRoleSerializer(project_members, fields=("id", "member", "role"), many=True).data
+        )
+        global_admins = WorkspaceMember.objects.filter(
+            workspace__slug=slug,
+            member_id=F("workspace__owner_id"),
+            is_active=True,
+            member__is_bot=False,
+        )
+        global_admin_ids = {str(member.member_id) for member in global_admins}
+        listed_member_ids = set()
+        for member_data in members_data:
+            member_id = str(member_data["member"])
+            listed_member_ids.add(member_id)
+            if member_id in global_admin_ids:
+                member_data["role"] = ROLE.ADMIN.value
+                member_data["original_role"] = ROLE.ADMIN.value
+
+        for global_admin in global_admins:
+            if str(global_admin.member_id) in listed_member_ids:
+                continue
+            members_data.append(
+                {
+                    "id": None,
+                    "member": str(global_admin.member_id),
+                    "project": str(project_id),
+                    "role": ROLE.ADMIN.value,
+                    "original_role": ROLE.ADMIN.value,
+                    "created_at": global_admin.created_at,
+                }
+            )
+
+        return Response(members_data, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def retrieve(self, request, slug, project_id, pk):
-        requesting_project_member = ProjectMember.objects.get(
+        is_global_admin = is_ppm_global_admin(user=request.user, workspace_slug=slug)
+        requesting_project_member = ProjectMember.objects.filter(
             project_id=project_id,
             workspace__slug=slug,
             member=request.user,
             is_active=True,
-        )
+        ).first()
 
         project_member = (
             ProjectMember.objects.filter(
@@ -195,7 +227,7 @@ class ProjectMemberViewSet(BaseViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if requesting_project_member.role > ROLE.GUEST.value:
+        if is_global_admin or (requesting_project_member and requesting_project_member.role > ROLE.GUEST.value):
             serializer = ProjectMemberAdminSerializer(project_member)
         else:
             serializer = ProjectMemberRoleSerializer(project_member, fields=("id", "member", "role"))
@@ -210,36 +242,56 @@ class ProjectMemberViewSet(BaseViewSet):
         target_workspace_role = WorkspaceMember.objects.get(
             workspace__slug=slug, member=project_member.member, is_active=True
         ).role
-        # Fetch the requester's workspace role to decide if they may bypass project-role checks
-        requester_workspace_role = WorkspaceMember.objects.get(
-            workspace__slug=slug, member=request.user, is_active=True
-        ).role
-        is_workspace_admin = requester_workspace_role == ROLE.ADMIN.value
+        is_global_admin = is_ppm_global_admin(user=request.user, workspace_slug=slug)
+        target_is_global_admin = is_ppm_global_admin(user=project_member.member, workspace_slug=slug)
+
+        requester_is_project_lead = ProjectMember.objects.filter(
+            project_id=project_id,
+            workspace__slug=slug,
+            member=request.user,
+            role=ROLE.ADMIN.value,
+            is_active=True,
+        ).exists()
+        if (
+            target_is_global_admin
+            and ("role" in request.data or "is_active" in request.data)
+            and (is_global_admin or requester_is_project_lead)
+        ):
+            return Response(
+                {"error": "Global administrator access is inherited and cannot be changed inside a project."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Check if the user is not editing their own role if they are not an admin
-        if request.user.id == project_member.member_id and not is_workspace_admin:
+        if request.user.id == project_member.member_id and not is_global_admin:
             return Response(
                 {"error": "You cannot update your own role"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         # Check while updating user roles
-        requested_project_member = ProjectMember.objects.get(
+        requested_project_member = ProjectMember.objects.filter(
             project_id=project_id,
             workspace__slug=slug,
             member=request.user,
             is_active=True,
-        )
+        ).first()
+
+        if not is_global_admin and requested_project_member is None:
+            return Response(
+                {"error": "You do not have permission to update project members"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         if "role" in request.data:
             # Only Admins can modify roles
-            if requested_project_member.role < ROLE.ADMIN.value and not is_workspace_admin:
+            if not is_global_admin and requested_project_member.role < ROLE.ADMIN.value:
                 return Response(
                     {"error": "You do not have permission to update roles"},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
             # Cannot modify a member whose role is equal to or higher than your own
-            if project_member.role >= requested_project_member.role and not is_workspace_admin:
+            if not is_global_admin and project_member.role >= requested_project_member.role:
                 return Response(
                     {"error": "You cannot update the role of a member with a role equal to or higher than your own"},
                     status=status.HTTP_403_FORBIDDEN,
@@ -248,7 +300,7 @@ class ProjectMemberViewSet(BaseViewSet):
             new_role = int(request.data.get("role"))
 
             # Cannot assign a role equal to or higher than your own
-            if new_role >= requested_project_member.role and not is_workspace_admin:
+            if not is_global_admin and new_role >= requested_project_member.role:
                 return Response(
                     {"error": "You cannot assign a role equal to or higher than your own"},
                     status=status.HTTP_403_FORBIDDEN,
@@ -265,16 +317,16 @@ class ProjectMemberViewSet(BaseViewSet):
         # covered by the role block above, so without this check a GUEST could PATCH
         # {"is_active": false} while omitting "role" to deactivate any member — including
         # admins — and take over the project. Mirror the role block and destroy(): only a
-        # project admin (or workspace admin) may (de)activate a member, and never one whose
+        # project lead (or global administrator) may (de)activate a member, and never one whose
         # role is equal to or higher than the requester's own.
         if "is_active" in request.data:
-            if requested_project_member.role < ROLE.ADMIN.value and not is_workspace_admin:
+            if not is_global_admin and requested_project_member.role < ROLE.ADMIN.value:
                 return Response(
                     {"error": "You do not have permission to update member status"},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            if project_member.role >= requested_project_member.role and not is_workspace_admin:
+            if not is_global_admin and project_member.role >= requested_project_member.role:
                 return Response(
                     {"error": "You cannot update the status of a member with a role equal to or higher than your own"},
                     status=status.HTTP_403_FORBIDDEN,
@@ -296,21 +348,33 @@ class ProjectMemberViewSet(BaseViewSet):
             member__is_bot=False,
             is_active=True,
         )
-        # check requesting user role
-        requesting_project_member = ProjectMember.objects.get(
+        target_is_global_admin = is_ppm_global_admin(user=project_member.member, workspace_slug=slug)
+        if target_is_global_admin:
+            return Response(
+                {"error": "The global administrator cannot be removed from individual projects."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        is_global_admin = is_ppm_global_admin(user=request.user, workspace_slug=slug)
+        requesting_project_member = ProjectMember.objects.filter(
             workspace__slug=slug,
             member=request.user,
             project_id=project_id,
             is_active=True,
-        )
+        ).first()
+        if not is_global_admin and requesting_project_member is None:
+            return Response(
+                {"error": "You do not have permission to remove project members"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         # User cannot remove himself
-        if str(project_member.id) == str(requesting_project_member.id):
+        if requesting_project_member and str(project_member.id) == str(requesting_project_member.id):
             return Response(
                 {"error": "You cannot remove yourself from the workspace. Please use leave workspace"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         # User cannot deactivate higher role
-        if requesting_project_member.role < project_member.role:
+        if not is_global_admin and requesting_project_member.role < project_member.role:
             return Response(
                 {"error": "You cannot remove a user having role higher than you"},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -322,6 +386,12 @@ class ProjectMemberViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def leave(self, request, slug, project_id):
+        if is_ppm_global_admin(user=request.user, workspace_slug=slug):
+            return Response(
+                {"error": "The global administrator automatically has access to every project."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         project_member = ProjectMember.objects.get(
             workspace__slug=slug,
             project_id=project_id,
@@ -351,12 +421,28 @@ class ProjectMemberViewSet(BaseViewSet):
 
 class ProjectMemberUserEndpoint(BaseAPIView):
     def get(self, request, slug, project_id):
-        project_member = ProjectMember.objects.get(
+        project_member = ProjectMember.objects.filter(
             project_id=project_id,
             workspace__slug=slug,
             member=request.user,
             is_active=True,
-        )
+        ).first()
+        if project_member is None:
+            if not is_ppm_global_admin(user=request.user, workspace_slug=slug):
+                return Response(
+                    {"error": "You do not have access to this project."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            return Response(
+                {
+                    "id": None,
+                    "member": str(request.user.id),
+                    "role": ROLE.ADMIN.value,
+                    "original_role": None,
+                    "created_at": None,
+                },
+                status=status.HTTP_200_OK,
+            )
         serializer = ProjectMemberSerializer(project_member)
 
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -367,6 +453,13 @@ class UserProjectRolesEndpoint(BaseAPIView):
     use_read_replica = True
 
     def get(self, request, slug):
+        if is_ppm_global_admin(user=request.user, workspace_slug=slug):
+            project_roles = {
+                str(project_id): ROLE.ADMIN.value
+                for project_id in Project.objects.filter(workspace__slug=slug).values_list("id", flat=True)
+            }
+            return Response(project_roles, status=status.HTTP_200_OK)
+
         project_members = ProjectMember.objects.filter(
             workspace__slug=slug,
             member_id=request.user.id,
