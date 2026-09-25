@@ -3,9 +3,7 @@ import type { TPpmCanvasBoard, TPpmCanvasSyncStatus } from "@ppm/canvas";
 
 export const MAX_OPEN_CANVAS_BOARDS = 8;
 
-// Below this width the rail starts (and snaps back to) collapsed so it does not eat canvas space
-// on laptop-size viewports. Independent of canvas.css's 980px overlay breakpoint, which still
-// governs when an expanded rail floats over the canvas instead of taking its own column.
+// Below this width an expanded rail overlays the canvas instead of taking its own column.
 export const CANVAS_RAIL_COLLAPSE_QUERY = "(max-width: 1279px)";
 
 export type TPpmCanvasBoardTabScope = {
@@ -161,7 +159,7 @@ function compareBoards(first: TPpmCanvasBoard, second: TPpmCanvasBoard) {
 }
 
 // UX1.1: commands a read-only viewer may run. v2 adds zoom reset and the read-only semantic links list (R12).
-const READ_ONLY_COMMANDS_V1: readonly string[] = ["select", "fit-view", "zoom-in", "zoom-out"];
+const READ_ONLY_COMMANDS_V1: readonly string[] = ["select", "open-tasks", "fit-view", "zoom-in", "zoom-out"];
 const READ_ONLY_COMMANDS_V2: readonly string[] = [...READ_ONLY_COMMANDS_V1, "zoom-reset", "semantic-edges"];
 
 export function isCanvasCommandAllowedReadOnly(command: string, designV2: boolean): boolean {

@@ -15,7 +15,7 @@ class PpmProjectAccess(str, Enum):
 
 def is_ppm_global_admin(*, user, workspace_id=None, workspace_slug=None):
     """Return whether the user has the protected platform-wide PPM role."""
-    if not user or not user.is_authenticated:
+    if not user or not user.is_authenticated or not user.is_active:
         return False
     if not getattr(settings, "PPM_GLOBAL_ADMIN_ENABLED", True):
         return False
@@ -24,7 +24,7 @@ def is_ppm_global_admin(*, user, workspace_id=None, workspace_slug=None):
 
 def get_ppm_project_access(*, user, workspace_id, project_id):
     """Resolve project capabilities from Plane membership only."""
-    if not user or not user.is_authenticated:
+    if not user or not user.is_authenticated or not user.is_active:
         return PpmProjectAccess.DENY
 
     project_exists = Project.objects.filter(

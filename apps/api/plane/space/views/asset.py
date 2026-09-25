@@ -19,6 +19,7 @@ from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.db.models import DeployBoard, FileAsset
 from plane.settings.storage import S3Storage
 from plane.utils.path_validator import sanitize_filename
+from plane.utils.asset_upload import upload_confirmation_error
 
 # Module imports
 from .base import BaseAPIView
@@ -65,15 +66,17 @@ class EntityAssetEndpoint(BaseAPIView):
         # same-origin XSS when Spaces assets are served on the application's origin.
         storage = S3Storage(request=request)
         asset_mime_type = (asset.attributes.get("type") or "").split(";")[0].strip().lower()
-        disposition = (
-            "attachment" if asset_mime_type in settings.SCRIPT_CAPABLE_MIME_TYPES else "inline"
-        )
+        disposition = "attachment" if asset_mime_type in settings.SCRIPT_CAPABLE_MIME_TYPES else "inline"
         # Generate a presigned URL to share an S3 object
         signed_url = storage.generate_presigned_url(
             object_name=asset.asset.name,
             disposition=disposition,
         )
         # Redirect to the signed URL
+        if not signed_url:
+            return Response(
+                {"error": "File storage is temporarily unavailable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
         return HttpResponseRedirect(signed_url)
 
     def post(self, request, anchor):
@@ -144,6 +147,9 @@ class EntityAssetEndpoint(BaseAPIView):
         storage = S3Storage(request=request)
         # Generate a presigned URL to share an S3 object
         presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        if presigned_url is None:
+            asset.delete()
+            return Response({"error": "Upload storage is unavailable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         # Return the presigned URL
         return Response(
             {
@@ -163,6 +169,8 @@ class EntityAssetEndpoint(BaseAPIView):
 
         # get the asset id — scope to project to prevent cross-project IDOR
         asset = FileAsset.objects.get(id=pk, workspace=deploy_board.workspace, project_id=deploy_board.project_id)
+        if (upload_error := upload_confirmation_error(asset)) is not None:
+            return upload_error
         # get the storage metadata
         asset.is_uploaded = True
         # get the storage metadata

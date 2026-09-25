@@ -13,7 +13,7 @@ from plane.db.models import (
     WorkspaceMember,
     WorkspaceMemberInvite,
 )
-from plane.ppm_core.permissions import PpmProjectAccess, get_ppm_project_access
+from plane.ppm_core.permissions import PpmProjectAccess, get_ppm_project_access, is_ppm_global_admin
 from plane.ppm_canvas.models import PpmGlobalAdmin
 
 
@@ -96,6 +96,28 @@ def test_protected_global_admin_inherits_every_project_without_project_membershi
     assert me_response.status_code == status.HTTP_200_OK
     assert me_response.data["id"] is None
     assert me_response.data["role"] == 20
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_disabled_account_does_not_inherit_protected_global_access(session_client, workspace, create_user):
+    admin = User.objects.create_user(email="disabled-global@example.com", username="disabled-global")
+    PpmGlobalAdmin.objects.create(user=admin, reason="Contract test bootstrap")
+    project = Project.objects.create(
+        name="Disabled admin target",
+        identifier="DAT",
+        workspace=workspace,
+        created_by=create_user,
+    )
+    admin.is_active = False
+    admin.save(update_fields=["is_active"])
+
+    assert is_ppm_global_admin(user=admin) is False
+    assert get_ppm_project_access(user=admin, workspace_id=workspace.id, project_id=project.id) == PpmProjectAccess.DENY
+
+    session_client.force_authenticate(user=admin)
+    response = session_client.get(f"/api/workspaces/{workspace.slug}/projects/{project.id}/")
+    assert response.status_code == status.HTTP_403_FORBIDDEN
 
 
 @pytest.mark.contract

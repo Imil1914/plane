@@ -45,6 +45,8 @@ from plane.utils.openapi import (
     asset_docs,
 )
 from plane.utils.exception_logger import log_exception
+from plane.utils.asset_upload import upload_confirmation_error
+from plane.ppm_core.permissions import PpmProjectAccess, get_ppm_project_access
 
 
 class UserAssetEndpoint(BaseAPIView):
@@ -165,6 +167,9 @@ class UserAssetEndpoint(BaseAPIView):
         storage = S3Storage(request=request)
         # Generate a presigned URL to share an S3 object
         presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        if presigned_url is None:
+            asset.delete()
+            return Response({"error": "Upload storage is unavailable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         # Return the presigned URL
         return Response(
             {
@@ -210,6 +215,8 @@ class UserAssetEndpoint(BaseAPIView):
         """
         # get the asset id
         asset = FileAsset.objects.get(id=asset_id, user_id=request.user.id)
+        if (upload_error := upload_confirmation_error(asset)) is not None:
+            return upload_error
         # get the storage metadata
         asset.is_uploaded = True
         # get the storage metadata
@@ -338,6 +345,9 @@ class UserServerAssetEndpoint(BaseAPIView):
         storage = S3Storage(request=request, is_server=True)
         # Generate a presigned URL to share an S3 object
         presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        if presigned_url is None:
+            asset.delete()
+            return Response({"error": "Upload storage is unavailable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         # Return the presigned URL
         return Response(
             {
@@ -366,6 +376,8 @@ class UserServerAssetEndpoint(BaseAPIView):
         """
         # get the asset id
         asset = FileAsset.objects.get(id=asset_id, user_id=request.user.id)
+        if (upload_error := upload_confirmation_error(asset)) is not None:
+            return upload_error
         # get the storage metadata
         asset.is_uploaded = True
         # get the storage metadata
@@ -413,6 +425,13 @@ class GenericAssetEndpoint(BaseAPIView):
 
     use_read_replica = True
 
+    @staticmethod
+    def has_project_asset_access(request, workspace_id, project_id, *, write):
+        if project_id is None:
+            return True
+        access = get_ppm_project_access(user=request.user, workspace_id=workspace_id, project_id=project_id)
+        return access == PpmProjectAccess.EDIT if write else access != PpmProjectAccess.DENY
+
     @asset_docs(
         operation_id="get_generic_asset",
         summary="Get presigned URL for asset download",
@@ -436,6 +455,8 @@ class GenericAssetEndpoint(BaseAPIView):
 
             # Get the asset
             asset = FileAsset.objects.get(id=asset_id, workspace_id=workspace.id, is_deleted=False)
+            if not self.has_project_asset_access(request, workspace.id, asset.project_id, write=False):
+                return Response({"error": "Project is not accessible"}, status=status.HTTP_403_FORBIDDEN)
 
             # Check if the asset exists and is uploaded
             if not asset.is_uploaded:
@@ -450,14 +471,17 @@ class GenericAssetEndpoint(BaseAPIView):
             # (default MinIO self-hosted setup).
             storage = S3Storage(request=request, is_server=True)
             asset_mime_type = (asset.attributes.get("type") or "").split(";")[0].strip().lower()
-            disposition = (
-                "attachment" if asset_mime_type in settings.SCRIPT_CAPABLE_MIME_TYPES else "inline"
-            )
+            disposition = "attachment" if asset_mime_type in settings.SCRIPT_CAPABLE_MIME_TYPES else "inline"
             presigned_url = storage.generate_presigned_url(
                 object_name=asset.asset.name,
                 filename=asset.attributes.get("name"),
                 disposition=disposition,
             )
+            if not presigned_url:
+                return Response(
+                    {"error": "File storage is temporarily unavailable."},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
 
             return Response(
                 {
@@ -541,6 +565,13 @@ class GenericAssetEndpoint(BaseAPIView):
 
         # Get the workspace
         workspace = Workspace.objects.get(slug=slug)
+        if project_id:
+            try:
+                project_id = uuid.UUID(str(project_id))
+            except (TypeError, ValueError, AttributeError):
+                return Response({"error": "Invalid project ID"}, status=status.HTTP_400_BAD_REQUEST)
+            if not self.has_project_asset_access(request, workspace.id, project_id, write=True):
+                return Response({"error": "Project is not accessible"}, status=status.HTTP_403_FORBIDDEN)
 
         # asset key
         asset_key = f"{workspace.id}/{uuid.uuid4().hex}-{name}"
@@ -555,6 +586,8 @@ class GenericAssetEndpoint(BaseAPIView):
             ).first()
 
             if existing_asset:
+                if not self.has_project_asset_access(request, workspace.id, existing_asset.project_id, write=False):
+                    return Response({"error": "Asset already exists"}, status=status.HTTP_409_CONFLICT)
                 return Response(
                     {
                         "message": "Asset with same external id and source already exists",
@@ -580,6 +613,10 @@ class GenericAssetEndpoint(BaseAPIView):
         # Get the presigned URL
         storage = S3Storage(request=request, is_server=True)
         presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+
+        if presigned_url is None:
+            asset.delete()
+            return Response({"error": "Upload storage is unavailable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
         return Response(
             {
@@ -619,9 +656,17 @@ class GenericAssetEndpoint(BaseAPIView):
         """
         try:
             asset = FileAsset.objects.get(id=asset_id, workspace__slug=slug, is_deleted=False)
+            if not self.has_project_asset_access(request, asset.workspace_id, asset.project_id, write=True):
+                return Response({"error": "Project is not accessible"}, status=status.HTTP_403_FORBIDDEN)
+            serializer = GenericAssetUpdateSerializer(data=request.data, partial=True)
+            if not serializer.is_valid():
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            is_uploaded = serializer.validated_data.get("is_uploaded", asset.is_uploaded)
+            if is_uploaded and (upload_error := upload_confirmation_error(asset)) is not None:
+                return upload_error
 
             # Update is_uploaded status
-            asset.is_uploaded = request.data.get("is_uploaded", asset.is_uploaded)
+            asset.is_uploaded = is_uploaded
 
             # Update storage metadata if not present
             if not asset.storage_metadata:

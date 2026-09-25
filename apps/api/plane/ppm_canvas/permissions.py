@@ -12,7 +12,7 @@ class PpmCanvasAccess(str, Enum):
 
 
 def get_ppm_canvas_access(*, user, workspace_id, project_id):
-    if not user or not user.is_authenticated:
+    if not user or not user.is_authenticated or not user.is_active:
         return PpmCanvasAccess.DENY
 
     project_exists = Project.objects.filter(

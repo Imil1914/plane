@@ -142,6 +142,7 @@ type TPpmWorkItemProjectionContextValue = {
   onCreateFromView: (request: TPpmWorkItemViewCreateRequest) => Promise<TPpmWorkItemProjection>;
   onExportView: (format: "csv" | "markdown", query: TPpmWorkItemsViewQuery) => Promise<void>;
   onLoadView: (query: TPpmWorkItemsViewQuery) => Promise<TPpmWorkItemsViewResponse>;
+  onOpenTasks: () => void;
   onRemove: (shape: TPpmCanvasShape, binding: TPpmCanvasBinding | TPpmCanvasContentBinding) => void;
   onReplaceVaultFile: (shape: TPpmCanvasShape, binding: TPpmCanvasContentBinding, file: File) => void;
   onUpdate: (
@@ -174,6 +175,7 @@ export const PpmWorkItemProjectionContext = createContext<TPpmWorkItemProjection
   onCreateFromView: () => Promise.reject(new Error("Work items view is unavailable.")),
   onExportView: () => Promise.reject(new Error("Work items view export is unavailable.")),
   onLoadView: () => Promise.reject(new Error("Work items view is unavailable.")),
+  onOpenTasks: () => undefined,
   onRemove: () => undefined,
   onReplaceVaultFile: () => undefined,
   onUpdate: () => undefined,
@@ -824,21 +826,31 @@ function ChecklistEditor({
   return (
     <div className="ppm-canvas-checklist">
       {node.items.map((item) => (
-        <label key={item.id}>
-          <input
-            type="checkbox"
-            checked={item.checked}
+        <div key={item.id} className="ppm-canvas-checklist__item">
+          {/* tldraw intercepts native checkbox clicks inside shapes; this button preserves checkbox semantics. */}
+          <button
+            type="button"
+            // oxlint-disable-next-line jsx_a11y/prefer-tag-over-role
+            role="checkbox"
+            className="ppm-canvas-checklist__toggle"
+            aria-label={item.text || ppmT("canvas.checklist_item")}
+            aria-checked={item.checked}
             disabled={readonly}
-            onChange={(event) =>
+            onClick={(event) => {
+              event.stopPropagation();
               updateNode(editor, shape, node, {
                 items: node.items.map((current) =>
-                  current.id === item.id ? { ...current, checked: event.currentTarget.checked } : current
+                  current.id === item.id ? { ...current, checked: !item.checked } : current
                 ),
-              })
-            }
+              });
+            }}
+            onKeyDown={stopEventPropagation}
             onPointerDown={stopEventPropagation}
-          />
+          >
+            {item.checked ? "✓" : ""}
+          </button>
           <input
+            aria-label={ppmT("canvas.checklist_item")}
             value={item.text}
             disabled={readonly}
             maxLength={1_000}
@@ -856,41 +868,29 @@ function ChecklistEditor({
             <button
               type="button"
               aria-label={ppmT("canvas.node_remove")}
-              onClick={stopEventPropagation}
-              onKeyDown={(event) =>
-                runCanvasKeyboardAction(event, () =>
-                  updateNode(editor, shape, node, { items: node.items.filter((current) => current.id !== item.id) })
-                )
-              }
-              onPointerDown={(event) =>
-                runCanvasPointerAction(event, () =>
-                  updateNode(editor, shape, node, { items: node.items.filter((current) => current.id !== item.id) })
-                )
-              }
+              onClick={(event) => {
+                event.stopPropagation();
+                updateNode(editor, shape, node, { items: node.items.filter((current) => current.id !== item.id) });
+              }}
+              onKeyDown={stopEventPropagation}
+              onPointerDown={stopEventPropagation}
             >
               <Trash2 aria-hidden="true" />
             </button>
           )}
-        </label>
+        </div>
       ))}
       {!readonly && (
         <button
           type="button"
-          onClick={stopEventPropagation}
-          onKeyDown={(event) =>
-            runCanvasKeyboardAction(event, () =>
-              updateNode(editor, shape, node, {
-                items: [...node.items, { id: crypto.randomUUID(), text: "", checked: false }],
-              })
-            )
-          }
-          onPointerDown={(event) =>
-            runCanvasPointerAction(event, () =>
-              updateNode(editor, shape, node, {
-                items: [...node.items, { id: crypto.randomUUID(), text: "", checked: false }],
-              })
-            )
-          }
+          onClick={(event) => {
+            event.stopPropagation();
+            updateNode(editor, shape, node, {
+              items: [...node.items, { id: crypto.randomUUID(), text: "", checked: false }],
+            });
+          }}
+          onKeyDown={stopEventPropagation}
+          onPointerDown={stopEventPropagation}
         >
           <Plus aria-hidden="true" />
           {ppmT("canvas.checklist_add_item")}
@@ -898,6 +898,20 @@ function ChecklistEditor({
       )}
     </div>
   );
+}
+
+function onTableCellKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+  event.stopPropagation();
+  if (event.key !== "Tab") return;
+  const cells = [
+    ...(event.currentTarget.closest("table")?.querySelectorAll<HTMLInputElement>("[data-table-cell]") ?? []),
+  ];
+  const current = cells.indexOf(event.currentTarget);
+  const next = cells[current + (event.shiftKey ? -1 : 1)];
+  if (!next) return;
+  event.preventDefault();
+  next.focus();
+  next.select();
 }
 
 function TableEditor({
@@ -920,6 +934,7 @@ function TableEditor({
             {node.columns.map((column) => (
               <th key={column.id}>
                 <input
+                  aria-label={column.label || ppmT("canvas.table_add_column")}
                   disabled={readonly}
                   maxLength={160}
                   value={column.label}
@@ -933,16 +948,40 @@ function TableEditor({
                   onKeyDown={stopEventPropagation}
                   onPointerDown={stopEventPropagation}
                 />
+                {!readonly && node.columns.length > 1 && (
+                  <button
+                    type="button"
+                    aria-label={ppmT("canvas.table_remove_column")}
+                    title={ppmT("canvas.table_remove_column")}
+                    onPointerDown={stopEventPropagation}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      updateNode(editor, shape, node, {
+                        columns: node.columns.filter((current) => current.id !== column.id),
+                        rows: node.rows.map((row) => {
+                          const cells = { ...row.cells };
+                          delete cells[column.id];
+                          return { ...row, cells };
+                        }),
+                      });
+                    }}
+                  >
+                    <Trash2 aria-hidden="true" />
+                  </button>
+                )}
               </th>
             ))}
+            {!readonly && <th aria-hidden="true" />}
           </tr>
         </thead>
         <tbody>
-          {node.rows.map((row) => (
+          {node.rows.map((row, rowIndex) => (
             <tr key={row.id}>
               {node.columns.map((column) => (
                 <td key={column.id}>
                   <input
+                    data-table-cell
+                    aria-label={`${column.label}, ${rowIndex + 1}`}
                     disabled={readonly}
                     maxLength={5_000}
                     value={row.cells[column.id] ?? ""}
@@ -955,11 +994,27 @@ function TableEditor({
                         ),
                       })
                     }
-                    onKeyDown={stopEventPropagation}
+                    onKeyDown={onTableCellKeyDown}
                     onPointerDown={stopEventPropagation}
                   />
                 </td>
               ))}
+              {!readonly && (
+                <td className="ppm-canvas-table__row-action">
+                  <button
+                    type="button"
+                    aria-label={ppmT("canvas.table_remove_row")}
+                    title={ppmT("canvas.table_remove_row")}
+                    onPointerDown={stopEventPropagation}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      updateNode(editor, shape, node, { rows: node.rows.filter((current) => current.id !== row.id) });
+                    }}
+                  >
+                    <Trash2 aria-hidden="true" />
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -968,54 +1023,34 @@ function TableEditor({
         <div className="ppm-canvas-table__actions">
           <button
             type="button"
-            onClick={stopEventPropagation}
-            onKeyDown={(event) =>
-              runCanvasKeyboardAction(event, () =>
-                updateNode(editor, shape, node, {
-                  rows: [
-                    ...node.rows,
-                    {
-                      id: crypto.randomUUID(),
-                      cells: Object.fromEntries(node.columns.map((column) => [column.id, ""])),
-                    },
-                  ],
-                })
-              )
-            }
-            onPointerDown={(event) =>
-              runCanvasPointerAction(event, () =>
-                updateNode(editor, shape, node, {
-                  rows: [
-                    ...node.rows,
-                    {
-                      id: crypto.randomUUID(),
-                      cells: Object.fromEntries(node.columns.map((column) => [column.id, ""])),
-                    },
-                  ],
-                })
-              )
-            }
+            onClick={(event) => {
+              event.stopPropagation();
+              updateNode(editor, shape, node, {
+                rows: [
+                  ...node.rows,
+                  {
+                    id: crypto.randomUUID(),
+                    cells: Object.fromEntries(node.columns.map((column) => [column.id, ""])),
+                  },
+                ],
+              });
+            }}
+            onKeyDown={stopEventPropagation}
+            onPointerDown={stopEventPropagation}
           >
             <Plus aria-hidden="true" /> {ppmT("canvas.table_add_row")}
           </button>
           {node.columns.length < 20 && (
             <button
               type="button"
-              onClick={stopEventPropagation}
-              onKeyDown={(event) =>
-                runCanvasKeyboardAction(event, () =>
-                  updateNode(editor, shape, node, {
-                    columns: [...node.columns, { id: crypto.randomUUID(), label: ppmT("canvas.table_add_column") }],
-                  })
-                )
-              }
-              onPointerDown={(event) =>
-                runCanvasPointerAction(event, () =>
-                  updateNode(editor, shape, node, {
-                    columns: [...node.columns, { id: crypto.randomUUID(), label: ppmT("canvas.table_add_column") }],
-                  })
-                )
-              }
+              onClick={(event) => {
+                event.stopPropagation();
+                updateNode(editor, shape, node, {
+                  columns: [...node.columns, { id: crypto.randomUUID(), label: ppmT("canvas.table_add_column") }],
+                });
+              }}
+              onKeyDown={stopEventPropagation}
+              onPointerDown={stopEventPropagation}
             >
               <Plus aria-hidden="true" /> {ppmT("canvas.table_add_column")}
             </button>
@@ -1532,6 +1567,7 @@ function WorkItemsViewNode({
   const editor = useEditor();
   const projectionContext = useContext(PpmWorkItemProjectionContext);
   const readonly = editor.getInstanceState().isReadonly;
+  const compact = usePpmCanvasGrammarV2();
   const [response, setResponse] = useState<TPpmWorkItemsViewResponse>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -1543,6 +1579,15 @@ function WorkItemsViewNode({
     () => ({ ...node.filters, sort: node.sort, limit: 100 }),
     [node.filters, node.sort]
   );
+
+  useEffect(() => {
+    if (!compact || !projectionContext.canEdit || (shape.props.w <= 420 && shape.props.h <= 220)) return;
+    editor.updateShape<TPpmCanvasShape>({
+      id: shape.id,
+      type: shape.type,
+      props: { w: 360, h: 160 },
+    });
+  }, [compact, editor, projectionContext.canEdit, shape.id, shape.props.h, shape.props.w, shape.type]);
 
   useEffect(() => setSearchDraft(node.filters.query), [node.filters.query]);
 
@@ -1653,6 +1698,21 @@ function WorkItemsViewNode({
   };
 
   const groups = groupWorkItems(node.group_by, response, ppmT);
+
+  if (compact) {
+    return (
+      <div className="ppm-work-items-view ppm-work-items-view--compact" onPointerDown={stopEventPropagation}>
+        <span>{ppmT("canvas.tasks_panel")}</span>
+        <strong>{node.title}</strong>
+        <small>
+          {response?.summary.total ?? 0} {ppmT("canvas.work_items_view_total")}
+        </small>
+        <button type="button" onClick={projectionContext.onOpenTasks}>
+          {ppmT("canvas.open_backlog")}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -2205,6 +2265,7 @@ function WorkItemProjectionCard({
   const error = projectionContext.errorsByShapeId.get(shape.id);
   const grammarV2 = usePpmCanvasGrammarV2();
   const { currentLocale } = useTranslation();
+  const [copiedLink, setCopiedLink] = useState(false);
 
   if (!binding || binding.entity_type !== "work_item") {
     return (
@@ -2368,6 +2429,28 @@ function WorkItemProjectionCard({
               {ppmT("canvas.open_work_item")}
             </a>
           )
+        )}
+        {identity.source_url && (
+          <button
+            type="button"
+            className="ppm-work-item-card__copy"
+            aria-label={ppmT(copiedLink ? "canvas.task_link_copied" : "canvas.copy_task_link")}
+            title={ppmT(copiedLink ? "canvas.task_link_copied" : "canvas.copy_task_link")}
+            onClick={async (event) => {
+              event.stopPropagation();
+              try {
+                if (!identity.source_url) return;
+                await navigator.clipboard.writeText(new URL(identity.source_url, window.location.origin).toString());
+                setCopiedLink(true);
+                window.setTimeout(() => setCopiedLink(false), 2400);
+              } catch {
+                setCopiedLink(false);
+              }
+            }}
+            onPointerDown={stopEventPropagation}
+          >
+            <Copy aria-hidden="true" />
+          </button>
         )}
         {projectionContext.canEdit && (
           <button

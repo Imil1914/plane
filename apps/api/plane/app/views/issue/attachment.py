@@ -29,6 +29,7 @@ from plane.utils.path_validator import sanitize_filename
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.utils.host import base_host
 from plane.utils.issue_access import user_can_view_issue
+from plane.utils.asset_upload import upload_confirmation_error
 
 
 def require_visible_issue(view_func):
@@ -156,6 +157,10 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
         # Generate a presigned URL to share an S3 object
         presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
 
+        if presigned_url is None:
+            asset.delete()
+            return Response({"error": "Upload storage is unavailable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
         # Return the presigned URL
         return Response(
             {
@@ -209,6 +214,10 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
                 disposition="attachment",
                 filename=asset.attributes.get("name"),
             )
+            if not presigned_url:
+                return Response(
+                    {"error": "File storage is temporarily unavailable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE
+                )
             return HttpResponseRedirect(presigned_url)
 
         # Get all the attachments
@@ -227,6 +236,8 @@ class IssueAttachmentV2Endpoint(BaseAPIView):
     @require_visible_issue
     def patch(self, request, slug, project_id, issue_id, pk):
         issue_attachment = FileAsset.objects.get(pk=pk, workspace__slug=slug, project_id=project_id, issue_id=issue_id)
+        if (upload_error := upload_confirmation_error(issue_attachment)) is not None:
+            return upload_error
         serializer = IssueAttachmentSerializer(issue_attachment)
 
         # Send this activity only if the attachment is not uploaded before

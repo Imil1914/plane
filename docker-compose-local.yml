@@ -24,7 +24,7 @@ services:
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
 
   plane-minio:
-    image: minio/minio
+    image: ${PPM_LOCAL_MINIO_IMAGE:-minio/minio}
     restart: unless-stopped
     networks:
       - dev_env

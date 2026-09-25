@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import math
 import time
@@ -10,7 +11,7 @@ from django.utils import timezone
 from plane.db.models import User
 from plane.ppm_core.permissions import is_ppm_global_admin
 
-from .models import PpmCanvasBoard, PpmCanvasStatus, PpmGlobalAdmin, PpmGlobalAdminAudit
+from .models import PpmCanvasBoard, PpmCanvasStatus, PpmCanvasVersion, PpmGlobalAdmin, PpmGlobalAdminAudit
 from .permissions import PpmCanvasAccess, get_ppm_canvas_access
 from .realtime import canvas_presence_group_name
 
@@ -20,14 +21,17 @@ logger = logging.getLogger("plane.api")
 PPM_PRESENCE_PROTOCOL_VERSION = 1
 PPM_PRESENCE_CURSOR_MAX_ABS = 1_000_000
 PPM_PRESENCE_CURSOR_MIN_INTERVAL_SECONDS = 1 / 30
+PPM_PRESENCE_ACCESS_CHECK_INTERVAL_SECONDS = 15
 
 
 class PpmCanvasPresenceConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
         self.room_group_name = None
+        self.access_monitor_task = None
         self.connection_id = str(uuid.uuid4())
         self.participant = None
         self.last_cursor_broadcast_at = 0.0
+        self.last_announced_board_version = 0
 
         user = self.scope.get("user")
         if not user or not user.is_authenticated:
@@ -58,9 +62,13 @@ class PpmCanvasPresenceConsumer(AsyncJsonWebsocketConsumer):
         board_version = await self._current_board_version()
         if board_version is None:
             await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+            self.room_group_name = None
+            self.participant = None
             await self.close(code=4403)
             return
+        self.last_announced_board_version = max(self.last_announced_board_version, board_version)
         await self.accept()
+        self.access_monitor_task = asyncio.create_task(self._monitor_access())
         await self.send_json(
             {
                 "type": "presence.ready",
@@ -84,33 +92,48 @@ class PpmCanvasPresenceConsumer(AsyncJsonWebsocketConsumer):
         )
 
     async def disconnect(self, close_code):
-        if not self.room_group_name or not self.participant:
+        if self.access_monitor_task is not None:
+            self.access_monitor_task.cancel()
+        await self._leave_room()
+
+    async def _leave_room(self):
+        room_group_name = self.room_group_name
+        participant = self.participant
+        self.room_group_name = None
+        if not room_group_name or not participant:
             return
-        await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+        await self.channel_layer.group_discard(room_group_name, self.channel_name)
         await self.channel_layer.group_send(
-            self.room_group_name,
+            room_group_name,
             {
                 "type": "presence.left",
                 "connection_id": self.connection_id,
-                "user_id": self.participant["user_id"],
+                "user_id": participant["user_id"],
             },
         )
 
     async def receive_json(self, content, **kwargs):
+        if self.room_group_name is None:
+            return
         if not isinstance(content, dict):
             await self._send_protocol_error("INVALID_MESSAGE", "Сообщение realtime должно быть объектом.")
             return
 
         message_type = content.get("type")
         if message_type == "presence.heartbeat":
-            if not await self._access_is_still_valid():
-                await self.send_json({"type": "presence.revoked"})
-                await self.close(code=4403)
+            access_is_valid = await self._access_is_still_valid()
+            if self.room_group_name is None:
+                return
+            if not access_is_valid:
+                await self._revoke_access()
                 return
             # Redis expires group membership independently from the WebSocket.
             # Refresh it on every heartbeat so a healthy long-lived board keeps
             # receiving cursor and snapshot-version events.
             await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+            missed_change = await self._missed_board_change(self.last_announced_board_version)
+            if missed_change is not None:
+                await self.canvas_board_changed(missed_change)
             await self.send_json(
                 {
                     "type": "presence.heartbeat_ack",
@@ -143,10 +166,46 @@ class PpmCanvasPresenceConsumer(AsyncJsonWebsocketConsumer):
 
         await self._send_protocol_error("UNSUPPORTED_MESSAGE", "Этот тип realtime-сообщения не поддерживается.")
 
+    async def _monitor_access(self):
+        try:
+            while True:
+                await asyncio.sleep(PPM_PRESENCE_ACCESS_CHECK_INTERVAL_SECONDS)
+                access_is_valid = await self._access_is_still_valid()
+                if self.room_group_name is None:
+                    return
+                if not access_is_valid:
+                    await self._revoke_access()
+                    return
+        except asyncio.CancelledError:
+            return
+        except Exception:
+            logger.exception("PPM Canvas presence access check failed")
+            await self._leave_room()
+            await self.close(code=1011)
+
+    async def _revoke_access(self):
+        if self.room_group_name is None:
+            return
+        await self._leave_room()
+        await self.send_json({"type": "presence.revoked"})
+        await self.close(code=4403)
+
+    async def _may_receive_presence_event(self):
+        if self.room_group_name is None:
+            return False
+        if not await self._access_is_still_valid():
+            await self._revoke_access()
+            return False
+        return self.room_group_name is not None
+
     async def presence_joined(self, event):
+        if not await self._may_receive_presence_event():
+            return
         await self.send_json({"type": "presence.joined", "participant": event["participant"]})
 
     async def presence_left(self, event):
+        if not await self._may_receive_presence_event():
+            return
         await self.send_json(
             {
                 "type": "presence.left",
@@ -156,6 +215,8 @@ class PpmCanvasPresenceConsumer(AsyncJsonWebsocketConsumer):
         )
 
     async def presence_sync_request(self, event):
+        if not await self._may_receive_presence_event():
+            return
         request_connection_id = event.get("request_connection_id")
         if not request_connection_id or request_connection_id == self.connection_id:
             return
@@ -169,12 +230,14 @@ class PpmCanvasPresenceConsumer(AsyncJsonWebsocketConsumer):
         )
 
     async def presence_sync_response(self, event):
-        if event.get("target_connection_id") != self.connection_id:
+        if self.room_group_name is None or event.get("target_connection_id") != self.connection_id:
+            return
+        if not await self._may_receive_presence_event():
             return
         await self.send_json({"type": "presence.snapshot", "participant": event["participant"]})
 
     async def presence_cursor_moved(self, event):
-        if event.get("connection_id") == self.connection_id:
+        if self.room_group_name is None or event.get("connection_id") == self.connection_id:
             return
         await self.send_json(
             {
@@ -187,6 +250,16 @@ class PpmCanvasPresenceConsumer(AsyncJsonWebsocketConsumer):
         )
 
     async def canvas_board_changed(self, event):
+        if self.room_group_name is None:
+            return
+        # The role may have changed since the last heartbeat. Never reveal a
+        # new board version to a stale connection before checking current access.
+        access_is_valid = await self._access_is_still_valid()
+        if self.room_group_name is None:
+            return
+        if not access_is_valid:
+            await self._revoke_access()
+            return
         await self.send_json(
             {
                 "type": "canvas.board.changed",
@@ -198,6 +271,7 @@ class PpmCanvasPresenceConsumer(AsyncJsonWebsocketConsumer):
                 "client_operation_id": event["client_operation_id"],
             }
         )
+        self.last_announced_board_version = max(self.last_announced_board_version, event["version"])
 
     async def _send_protocol_error(self, code, message):
         await self.send_json({"type": "presence.error", "error": {"code": code, "message": message}})
@@ -278,6 +352,32 @@ class PpmCanvasPresenceConsumer(AsyncJsonWebsocketConsumer):
             .values_list("current_version", flat=True)
             .first()
         )
+
+    @database_sync_to_async
+    def _missed_board_change(self, last_announced_version):
+        latest = (
+            PpmCanvasVersion.objects.filter(
+                board_id=self.board_id,
+                board__workspace_id=self.workspace_id,
+                board__project_id=self.project_id,
+                board__status=PpmCanvasStatus.ACTIVE,
+                board__canvas__status=PpmCanvasStatus.ACTIVE,
+                version__gt=last_announced_version,
+            )
+            .order_by("-version")
+            .values("version", "content_hash", "created_at", "created_by", "client_operation_id")
+            .first()
+        )
+        if latest is None:
+            return None
+        return {
+            "board_id": str(self.board_id),
+            "version": latest["version"],
+            "content_hash": latest["content_hash"],
+            "saved_at": latest["created_at"].isoformat(),
+            "saved_by": str(latest["created_by"]),
+            "client_operation_id": str(latest["client_operation_id"]),
+        }
 
     @database_sync_to_async
     def _access_is_still_valid(self):

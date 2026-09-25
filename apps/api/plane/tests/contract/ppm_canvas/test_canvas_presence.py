@@ -1,5 +1,6 @@
 import json
 import uuid
+from unittest.mock import patch
 
 import pytest
 from asgiref.sync import async_to_sync
@@ -260,6 +261,25 @@ def test_presence_denies_non_member_and_cross_project_board(presence_project):
 
 
 @override_settings(CHANNEL_LAYERS=IN_MEMORY_CHANNEL_LAYER)
+def test_presence_denies_disabled_account_even_with_project_membership(presence_project):
+    member = presence_project["member"]
+    member.is_active = False
+    member.save(update_fields=["is_active"])
+
+    async def scenario():
+        client, result = await connect_client(
+            user=member,
+            workspace=presence_project["workspace"],
+            project=presence_project["project"],
+            board=presence_project["board"],
+        )
+        assert result == {"type": "websocket.close", "code": 4403}
+        await client.wait(timeout=1)
+
+    async_to_sync(scenario)()
+
+
+@override_settings(CHANNEL_LAYERS=IN_MEMORY_CHANNEL_LAYER)
 def test_global_admin_presence_cross_workspace_is_audited_and_revoked(presence_project):
     global_admin = make_user("global-admin")
     registry = PpmGlobalAdmin.objects.create(user=global_admin, reason="AF1.2 realtime audit gate")
@@ -310,8 +330,7 @@ def test_global_admin_presence_cross_workspace_is_audited_and_revoked(presence_p
     )
     assert len(events) == 2
     assert {
-        (event["workspace_id"], event["project_id"], event["method"], event["metadata"]["board_id"])
-        for event in events
+        (event["workspace_id"], event["project_id"], event["method"], event["metadata"]["board_id"]) for event in events
     } == {
         (
             presence_project["workspace"].id,
@@ -350,6 +369,50 @@ def test_presence_guest_is_read_only_and_heartbeat_revokes_removed_member(presen
 
 
 @override_settings(CHANNEL_LAYERS=IN_MEMORY_CHANNEL_LAYER)
+def test_presence_server_revokes_removed_member_without_client_heartbeat(presence_project, monkeypatch):
+    monkeypatch.setattr("plane.ppm_canvas.consumers.PPM_PRESENCE_ACCESS_CHECK_INTERVAL_SECONDS", 0.05)
+
+    async def scenario():
+        owner, owner_accepted = await connect_client(
+            user=presence_project["owner"],
+            workspace=presence_project["workspace"],
+            project=presence_project["project"],
+            board=presence_project["board"],
+        )
+        assert owner_accepted["type"] == "websocket.accept"
+        await receive_until(owner, lambda item: item.get("type") == "presence.ready")
+
+        guest, accepted = await connect_client(
+            user=presence_project["guest"],
+            workspace=presence_project["workspace"],
+            project=presence_project["project"],
+            board=presence_project["board"],
+        )
+        assert accepted["type"] == "websocket.accept"
+        guest_ready, _ = await receive_until(guest, lambda item: item.get("type") == "presence.ready")
+        assert guest_ready["self"]["access"] == "read"
+
+        await database_sync_to_async(ProjectMember.objects.filter(member=presence_project["guest"]).update)(
+            is_active=False
+        )
+        revoked, _ = await receive_until(guest, lambda item: item.get("type") == "presence.revoked")
+        assert revoked["type"] == "presence.revoked"
+        assert await guest.receive_output(timeout=1) == {"type": "websocket.close", "code": 4403}
+        await guest.wait(timeout=1)
+
+        left, _ = await receive_until(
+            owner,
+            lambda item: item.get("type") == "presence.left"
+            and item.get("connection_id") == guest_ready["self"]["connection_id"],
+        )
+        assert left["user_id"] == str(presence_project["guest"].id)
+        await owner.send_input({"type": "websocket.disconnect", "code": 1000})
+        await owner.wait(timeout=1)
+
+    async_to_sync(scenario)()
+
+
+@override_settings(CHANNEL_LAYERS=IN_MEMORY_CHANNEL_LAYER)
 def test_presence_role_downgrade_invalidates_editor_socket(presence_project):
     async def scenario():
         member, accepted = await connect_client(
@@ -379,6 +442,143 @@ def test_presence_role_downgrade_invalidates_editor_socket(presence_project):
         assert (await receive_json(read_only))["self"]["access"] == "read"
         await read_only.send_input({"type": "websocket.disconnect", "code": 1000})
         await read_only.wait(timeout=1)
+
+    async_to_sync(scenario)()
+
+
+@pytest.mark.parametrize("membership_change", [{"is_active": False}, {"role": 5}])
+@override_settings(CHANNEL_LAYERS=IN_MEMORY_CHANNEL_LAYER)
+def test_new_participant_revokes_stale_socket_before_disclosing_presence(
+    presence_project, monkeypatch, membership_change
+):
+    monkeypatch.setattr("plane.ppm_canvas.consumers.PPM_PRESENCE_ACCESS_CHECK_INTERVAL_SECONDS", 3600)
+
+    async def scenario():
+        member, accepted = await connect_client(
+            user=presence_project["member"],
+            workspace=presence_project["workspace"],
+            project=presence_project["project"],
+            board=presence_project["board"],
+        )
+        assert accepted["type"] == "websocket.accept"
+        await receive_until(
+            member,
+            lambda item: item.get("type") == "presence.joined"
+            and item.get("participant", {}).get("user_id") == str(presence_project["member"].id),
+        )
+
+        await database_sync_to_async(ProjectMember.objects.filter(member=presence_project["member"]).update)(
+            **membership_change
+        )
+        owner, owner_accepted = await connect_client(
+            user=presence_project["owner"],
+            workspace=presence_project["workspace"],
+            project=presence_project["project"],
+            board=presence_project["board"],
+        )
+        assert owner_accepted["type"] == "websocket.accept"
+        first_sensitive_event, seen = await receive_until(
+            member,
+            lambda item: item.get("type") in {"presence.revoked", "presence.joined", "presence.snapshot"},
+        )
+        assert first_sensitive_event["type"] == "presence.revoked"
+        assert all(item.get("participant", {}).get("user_id") != str(presence_project["owner"].id) for item in seen)
+        assert await member.receive_output(timeout=1) == {"type": "websocket.close", "code": 4403}
+        await member.wait(timeout=1)
+
+        await owner.send_input({"type": "websocket.disconnect", "code": 1000})
+        await owner.wait(timeout=1)
+
+    async_to_sync(scenario)()
+
+
+@pytest.mark.parametrize("event_type", ["presence.left", "presence.sync.request", "presence.sync.response"])
+@override_settings(CHANNEL_LAYERS=IN_MEMORY_CHANNEL_LAYER)
+def test_presence_sync_events_revoke_stale_socket(presence_project, monkeypatch, event_type):
+    monkeypatch.setattr("plane.ppm_canvas.consumers.PPM_PRESENCE_ACCESS_CHECK_INTERVAL_SECONDS", 3600)
+
+    async def scenario():
+        member, accepted = await connect_client(
+            user=presence_project["member"],
+            workspace=presence_project["workspace"],
+            project=presence_project["project"],
+            board=presence_project["board"],
+        )
+        assert accepted["type"] == "websocket.accept"
+        ready = await receive_json(member)
+        await receive_until(member, lambda item: item.get("type") == "presence.joined")
+
+        await database_sync_to_async(ProjectMember.objects.filter(member=presence_project["member"]).update)(
+            is_active=False
+        )
+        event = {
+            "presence.left": {
+                "type": event_type,
+                "connection_id": str(uuid.uuid4()),
+                "user_id": str(presence_project["owner"].id),
+            },
+            "presence.sync.request": {"type": event_type, "request_connection_id": str(uuid.uuid4())},
+            "presence.sync.response": {
+                "type": event_type,
+                "target_connection_id": ready["self"]["connection_id"],
+                "participant": {"user_id": str(presence_project["owner"].id), "display_name": "Owner user"},
+            },
+        }[event_type]
+        await get_channel_layer().group_send(
+            canvas_presence_group_name(
+                project_id=presence_project["project"].id,
+                board_id=presence_project["board"].id,
+            ),
+            event,
+        )
+        first_event = await receive_json(member)
+        assert first_event["type"] == "presence.revoked"
+        assert await member.receive_output(timeout=1) == {"type": "websocket.close", "code": 4403}
+        await member.wait(timeout=1)
+
+    async_to_sync(scenario)()
+
+
+@pytest.mark.parametrize("membership_change", [{"is_active": False}, {"role": 5}])
+@override_settings(CHANNEL_LAYERS=IN_MEMORY_CHANNEL_LAYER)
+def test_board_change_revokes_stale_socket_before_disclosing_update(presence_project, monkeypatch, membership_change):
+    monkeypatch.setattr("plane.ppm_canvas.consumers.PPM_PRESENCE_ACCESS_CHECK_INTERVAL_SECONDS", 3600)
+
+    async def scenario():
+        member, accepted = await connect_client(
+            user=presence_project["member"],
+            workspace=presence_project["workspace"],
+            project=presence_project["project"],
+            board=presence_project["board"],
+        )
+        assert accepted["type"] == "websocket.accept"
+        await receive_until(member, lambda item: item.get("type") == "presence.ready")
+
+        await database_sync_to_async(ProjectMember.objects.filter(member=presence_project["member"]).update)(
+            **membership_change
+        )
+        await get_channel_layer().group_send(
+            canvas_presence_group_name(
+                project_id=presence_project["project"].id,
+                board_id=presence_project["board"].id,
+            ),
+            {
+                "type": "canvas.board.changed",
+                "board_id": str(presence_project["board"].id),
+                "version": 1,
+                "content_hash": "a" * 64,
+                "saved_at": "2026-09-25T12:00:00+00:00",
+                "saved_by": str(presence_project["owner"].id),
+                "client_operation_id": str(uuid.uuid4()),
+            },
+        )
+        first_sensitive_event, _ = await receive_until(
+            member,
+            lambda item: item.get("type") in {"presence.revoked", "canvas.board.changed"},
+        )
+        assert first_sensitive_event["type"] == "presence.revoked"
+        assert await member.receive_output(timeout=1) == {"type": "websocket.close", "code": 4403}
+        await member.wait(timeout=1)
 
     async_to_sync(scenario)()
 
@@ -511,6 +711,124 @@ def test_presence_forwards_board_change_without_snapshot_payload(presence_projec
             "saved_by": str(presence_project["owner"].id),
             "client_operation_id": str(operation_id),
         }
+
+        await member.send_input({"type": "websocket.disconnect", "code": 1000})
+        await member.wait(timeout=1)
+
+    async_to_sync(scenario)()
+
+
+@pytest.mark.parametrize("legacy_endpoint", [False, True])
+@pytest.mark.parametrize("failure_stage", ["channel_layer", "group_send"])
+def test_canvas_save_remains_confirmed_when_realtime_broadcast_fails(
+    presence_project, caplog, legacy_endpoint, failure_stage
+):
+    workspace = presence_project["workspace"]
+    project = presence_project["project"]
+    board = presence_project["board"]
+    root_url = f"/api/ppm/v1/workspaces/{workspace.id}/projects/{project.id}/canvas/"
+    snapshot_url = root_url if legacy_endpoint else f"{root_url}boards/{board.id}/snapshot/"
+    client = APIClient()
+    client.force_authenticate(user=presence_project["owner"])
+    operation_id = uuid.uuid4()
+    payload = {
+        "schema_version": 2,
+        "base_version": 0,
+        "snapshot": {
+            "document": {
+                "store": {"shape:durable": {"id": "shape:durable", "typeName": "shape", "type": "ppm-canvas-node"}}
+            },
+            "session": {},
+        },
+        "client_operation_id": str(operation_id),
+    }
+    provider_secret = "secret-that-must-not-appear"
+
+    class FailingLayer:
+        async def group_send(self, _group, _message):
+            raise RuntimeError(provider_secret)
+
+    layer_patch = (
+        patch("plane.ppm_canvas.realtime.get_channel_layer", side_effect=RuntimeError(provider_secret))
+        if failure_stage == "channel_layer"
+        else patch("plane.ppm_canvas.realtime.get_channel_layer", return_value=FailingLayer())
+    )
+
+    with layer_patch:
+        saved = client.put(snapshot_url, payload, format="json")
+        replay = client.put(snapshot_url, payload, format="json")
+
+    reloaded = client.get(f"{root_url}boards/{board.id}/")
+    assert saved.status_code == 200
+    assert saved.data["version"] == 1
+    assert replay.status_code == 200
+    assert replay.data["idempotent_replay"] is True
+    assert reloaded.status_code == 200
+    assert reloaded.data["version"] == 1
+    assert "shape:durable" in reloaded.data["snapshot"]["document"]["store"]
+    assert "PPM Canvas realtime broadcast failed after save" in caplog.text
+    assert provider_secret not in caplog.text
+
+
+@override_settings(CHANNEL_LAYERS=IN_MEMORY_CHANNEL_LAYER)
+def test_heartbeat_recovers_board_change_missed_during_realtime_outage(presence_project):
+    workspace = presence_project["workspace"]
+    project = presence_project["project"]
+    board = presence_project["board"]
+    operation_id = uuid.uuid4()
+
+    @database_sync_to_async
+    def save_without_broadcast():
+        client = APIClient()
+        client.force_authenticate(user=presence_project["owner"])
+        with patch("plane.ppm_canvas.realtime.get_channel_layer", side_effect=RuntimeError("Redis unavailable")):
+            response = client.put(
+                f"/api/ppm/v1/workspaces/{workspace.id}/projects/{project.id}/canvas/boards/{board.id}/snapshot/",
+                {
+                    "schema_version": 2,
+                    "base_version": 0,
+                    "snapshot": {
+                        "document": {
+                            "store": {
+                                "shape:recovered": {
+                                    "id": "shape:recovered",
+                                    "typeName": "shape",
+                                    "type": "ppm-canvas-node",
+                                }
+                            }
+                        },
+                        "session": {},
+                    },
+                    "client_operation_id": str(operation_id),
+                },
+                format="json",
+            )
+        return response.status_code, response.data
+
+    async def scenario():
+        member, accepted = await connect_client(
+            user=presence_project["member"], workspace=workspace, project=project, board=board
+        )
+        assert accepted["type"] == "websocket.accept"
+        ready, _ = await receive_until(member, lambda item: item.get("type") == "presence.ready")
+        assert ready["board_version"] == 0
+
+        code, saved = await save_without_broadcast()
+        assert code == 200
+        assert saved["version"] == 1
+
+        await member.send_input({"type": "websocket.receive", "text": json.dumps({"type": "presence.heartbeat"})})
+        recovered, _ = await receive_until(member, lambda item: item.get("type") == "canvas.board.changed")
+        assert recovered["version"] == 1
+        assert recovered["board_id"] == str(board.id)
+        assert recovered["content_hash"] == saved["content_hash"]
+        assert recovered["client_operation_id"] == str(operation_id)
+        assert "snapshot" not in recovered
+
+        await receive_until(member, lambda item: item.get("type") == "presence.heartbeat_ack")
+        await member.send_input({"type": "websocket.receive", "text": json.dumps({"type": "presence.heartbeat"})})
+        followup = await receive_json(member)
+        assert followup["type"] == "presence.heartbeat_ack"
 
         await member.send_input({"type": "websocket.disconnect", "code": 1000})
         await member.wait(timeout=1)

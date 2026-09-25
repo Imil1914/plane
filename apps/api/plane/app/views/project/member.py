@@ -3,9 +3,12 @@
 # See the LICENSE file for details.
 
 # Third Party imports
+from uuid import UUID
+
+from django.conf import settings
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import F, Min
+from django.db.models import Min
 
 # Module imports
 from .base import BaseViewSet, BaseAPIView
@@ -22,6 +25,7 @@ from plane.db.models import Project, ProjectMember, ProjectUserProperty, Workspa
 from plane.bgtasks.project_add_user_email_task import project_add_user_email
 from plane.utils.host import base_host
 from plane.app.permissions.base import allow_permission, ROLE
+from plane.ppm_canvas.models import PpmGlobalAdmin
 from plane.ppm_core.permissions import is_ppm_global_admin
 
 
@@ -53,11 +57,25 @@ class ProjectMemberViewSet(BaseViewSet):
         project = Project.objects.get(pk=project_id, workspace__slug=slug)
 
         # Check if the members array is empty
-        if not len(members):
+        if not isinstance(members, list) or not members:
             return Response(
                 {"error": "At least one member is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        normalized_members = []
+        for member in members:
+            if not isinstance(member, dict):
+                return Response({"error": "Invalid project member"}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                member_id = str(UUID(str(member.get("member_id"))))
+            except (TypeError, ValueError, AttributeError):
+                return Response({"error": "Invalid member_id"}, status=status.HTTP_400_BAD_REQUEST)
+            role = member.get("role", ROLE.GUEST.value)
+            if not isinstance(role, int) or role not in (ROLE.ADMIN.value, ROLE.MEMBER.value, ROLE.GUEST.value):
+                return Response({"error": "Invalid project role"}, status=status.HTTP_400_BAD_REQUEST)
+            normalized_members.append({"member_id": member_id, "role": role})
+        members = normalized_members
 
         # Initialize the bulk arrays
         bulk_project_members = []
@@ -68,14 +86,24 @@ class ProjectMemberViewSet(BaseViewSet):
 
         # check the workspace role of the new user
         for member in member_roles:
-            if str(member) == str(project.workspace.owner_id):
+            if (
+                getattr(settings, "PPM_GLOBAL_ADMIN_ENABLED", True)
+                and PpmGlobalAdmin.objects.filter(user_id=member, revoked_at__isnull=True).exists()
+            ):
                 return Response(
                     {"error": "The global administrator already has inherited access to every project."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            workspace_member_role = WorkspaceMember.objects.get(
-                workspace__slug=slug, member=member, is_active=True
-            ).role
+            workspace_member_role = (
+                WorkspaceMember.objects.filter(workspace__slug=slug, member_id=member, is_active=True)
+                .values_list("role", flat=True)
+                .first()
+            )
+            if workspace_member_role is None:
+                return Response(
+                    {"error": "The user is not an active workspace member"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             if workspace_member_role in [5] and member_roles.get(member) in [15, 20]:
                 return Response(
                     {"error": "You cannot add a user with role higher than the workspace role"},
@@ -168,13 +196,12 @@ class ProjectMemberViewSet(BaseViewSet):
         members_data = list(
             ProjectMemberRoleSerializer(project_members, fields=("id", "member", "role"), many=True).data
         )
-        global_admins = WorkspaceMember.objects.filter(
-            workspace__slug=slug,
-            member_id=F("workspace__owner_id"),
-            is_active=True,
-            member__is_bot=False,
+        global_admins = (
+            PpmGlobalAdmin.objects.filter(revoked_at__isnull=True, user__is_active=True, user__is_bot=False)
+            if getattr(settings, "PPM_GLOBAL_ADMIN_ENABLED", True)
+            else PpmGlobalAdmin.objects.none()
         )
-        global_admin_ids = {str(member.member_id) for member in global_admins}
+        global_admin_ids = {str(member.user_id) for member in global_admins}
         listed_member_ids = set()
         for member_data in members_data:
             member_id = str(member_data["member"])
@@ -184,12 +211,12 @@ class ProjectMemberViewSet(BaseViewSet):
                 member_data["original_role"] = ROLE.ADMIN.value
 
         for global_admin in global_admins:
-            if str(global_admin.member_id) in listed_member_ids:
+            if str(global_admin.user_id) in listed_member_ids:
                 continue
             members_data.append(
                 {
                     "id": None,
-                    "member": str(global_admin.member_id),
+                    "member": str(global_admin.user_id),
                     "project": str(project_id),
                     "role": ROLE.ADMIN.value,
                     "original_role": ROLE.ADMIN.value,
@@ -297,7 +324,13 @@ class ProjectMemberViewSet(BaseViewSet):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            new_role = int(request.data.get("role"))
+            new_role = request.data.get("role")
+            if not isinstance(new_role, int) or new_role not in (
+                ROLE.ADMIN.value,
+                ROLE.MEMBER.value,
+                ROLE.GUEST.value,
+            ):
+                return Response({"error": "Invalid project role"}, status=status.HTTP_400_BAD_REQUEST)
 
             # Cannot assign a role equal to or higher than your own
             if not is_global_admin and new_role >= requested_project_member.role:

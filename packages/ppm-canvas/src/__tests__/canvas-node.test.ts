@@ -916,6 +916,18 @@ describe("PPM Canvas node schema", () => {
     expect(duplicate.items[0]?.id).not.toBe(withItem.items[0]?.id);
   });
 
+  it("starts checklists and tables with editable content", () => {
+    const checklist = createPpmCanvasNode({ authorId: "user-1", kind: "checklist", now: NOW, title: "Список" });
+    const table = createPpmCanvasNode({ authorId: "user-1", kind: "table", now: NOW, title: "Таблица" });
+    if (checklist.kind !== "checklist" || table.kind !== "table") throw new Error("Expected structured nodes.");
+
+    expect(checklist.items).toHaveLength(1);
+    expect(checklist.items[0]).toMatchObject({ text: "", checked: false });
+    expect(table.columns).toHaveLength(2);
+    expect(table.rows).toHaveLength(2);
+    expect(table.rows.every((row) => table.columns.every((column) => column.id in row.cells))).toBe(true);
+  });
+
   it("round-trips a safe board export and rejects a foreign payload", () => {
     const exported = createPpmCanvasBoardExport({ document: { store: {} } }, NOW);
     expect(parsePpmCanvasBoardExport(JSON.stringify(exported))).toMatchObject({

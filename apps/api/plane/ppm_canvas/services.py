@@ -1476,7 +1476,16 @@ def save_canvas_snapshot(
     normalized_binding_changes = _normalize_binding_changes(binding_changes)
     binding_changes_fingerprint = _operation_fingerprint(normalized_binding_changes)
     with transaction.atomic():
-        locked_board = PpmCanvasBoard.objects.select_for_update().select_related("canvas").get(pk=board.pk)
+        # Board lifecycle operations lock the canvas before its boards. Keep the
+        # same order here so a concurrent archive cannot deadlock a save.
+        locked_canvas = PpmProjectCanvas.objects.select_for_update().get(pk=board.canvas_id)
+        locked_board = PpmCanvasBoard.objects.select_for_update().get(pk=board.pk, canvas=locked_canvas)
+        if locked_canvas.status != PpmCanvasStatus.ACTIVE or locked_board.status != PpmCanvasStatus.ACTIVE:
+            raise PpmCanvasConflict(
+                code="CANVAS_BOARD_ARCHIVED",
+                message="Доска находится в архиве и не принимает изменения.",
+                details={"board_id": str(locked_board.id)},
+            )
         existing = PpmCanvasVersion.objects.filter(
             board=locked_board,
             client_operation_id=client_operation_id,
@@ -1508,7 +1517,7 @@ def save_canvas_snapshot(
         )
 
         saved_version = PpmCanvasVersion.objects.create(
-            canvas=locked_board.canvas,
+            canvas=locked_canvas,
             board=locked_board,
             version=locked_board.current_version + 1,
             schema_version=schema_version,
@@ -1530,8 +1539,8 @@ def save_canvas_snapshot(
         locked_board.updated_by = user_id
         locked_board.updated_at = timezone.now()
         locked_board.save(update_fields=["current_version", "updated_by", "updated_at"])
-        if locked_board.canvas.default_board_id == locked_board.id:
-            PpmProjectCanvas.objects.filter(id=locked_board.canvas_id).update(
+        if locked_canvas.default_board_id == locked_board.id:
+            PpmProjectCanvas.objects.filter(id=locked_canvas.id).update(
                 current_version=saved_version.version,
                 updated_at=timezone.now(),
             )

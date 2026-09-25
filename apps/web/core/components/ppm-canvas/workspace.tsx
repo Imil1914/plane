@@ -10,30 +10,20 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import {
-  AlignCenterHorizontal,
-  AlignCenterVertical,
-  AlignEndHorizontal,
-  AlignEndVertical,
-  AlignStartHorizontal,
-  AlignStartVertical,
   Archive,
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   BrainCircuit,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   CircleDot,
-  Columns3,
-  Code2,
+  Circle,
   Copy,
+  Diamond,
   FileText,
   Focus,
   Frame,
-  GitFork,
-  Group,
-  LayoutGrid,
-  Link,
   ListChecks,
   ListPlus,
   LoaderCircle,
@@ -41,23 +31,22 @@ import {
   Menu,
   Minus,
   MousePointer2,
-  Network,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PenTool,
   Pencil,
-  Presentation,
   Plus,
   Search,
+  Square,
   StickyNote,
   Table2,
-  Workflow,
+  Type,
   Redo2,
   Undo2,
   X,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react";
 import { isPpmProjectAskEnabled } from "@ppm/canvas";
 import type { TPpmCanvasBoard, TPpmCanvasCapabilities, TPpmCanvasSyncStatus } from "@ppm/canvas";
-import { PPM_BRAND } from "@ppm/brand";
 import { useTranslation } from "@plane/i18n";
 import { formatPpmTimeAgo } from "@/helpers/ppm-time-ago.helper";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
@@ -65,7 +54,6 @@ import { usePpmDesignV2 } from "@/lib/ppm-design";
 import { PpmCanvasService, PpmCanvasServiceError } from "@/services/ppm-canvas.service";
 import type { TPpmBrainAnswerRun } from "@/services/ppm-brain.service";
 import {
-  CANVAS_RAIL_COLLAPSE_QUERY,
   canvasBoardTabsKey,
   closeBoardTab,
   filterCanvasCommands,
@@ -150,10 +138,17 @@ export default function PpmCanvasWorkspace({
   const [error, setError] = useState<string>();
   const [actionError, setActionError] = useState<string>();
   const [boardMenuOpen, setBoardMenuOpen] = useState(false);
+  const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [railExpanded, setRailExpanded] = useState(
-    () => typeof window === "undefined" || !window.matchMedia(CANVAS_RAIL_COLLAPSE_QUERY).matches
-  );
+  const [railExpanded, setRailExpanded] = useState(() => {
+    try {
+      return typeof window !== "undefined" && window.localStorage.getItem("ppm-canvas-rail-expanded") === "true";
+    } catch {
+      return false;
+    }
+  });
+  const [railTooltip, setRailTooltip] = useState<{ label: string; top: number }>();
+  const [boardLinkCopied, setBoardLinkCopied] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [brainPanelOpen, setBrainPanelOpen] = useState(false);
   const brainPanelDraftRef = useRef(false);
@@ -179,13 +174,22 @@ export default function PpmCanvasWorkspace({
   }, []);
 
   useEffect(() => {
-    const narrowViewport = window.matchMedia(CANVAS_RAIL_COLLAPSE_QUERY);
-    const collapseRailOnNarrowViewport = () => {
-      if (narrowViewport.matches) setRailExpanded(false);
-    };
-    narrowViewport.addEventListener("change", collapseRailOnNarrowViewport);
-    return () => narrowViewport.removeEventListener("change", collapseRailOnNarrowViewport);
-  }, []);
+    try {
+      window.localStorage.setItem("ppm-canvas-rail-expanded", String(railExpanded));
+    } catch {
+      // The panel remains usable if browser storage is unavailable.
+    }
+    setRailTooltip(undefined);
+  }, [railExpanded]);
+
+  const showRailTooltip = (target: EventTarget | null) => {
+    if (railExpanded || !(target instanceof Element)) return;
+    const button = target.closest<HTMLElement>("[data-tooltip]");
+    const workspace = workspaceRef.current;
+    if (!button || !workspace) return;
+    const top = button.getBoundingClientRect().top - workspace.getBoundingClientRect().top;
+    setRailTooltip({ label: button.dataset.tooltip ?? "", top });
+  };
 
   const returnFocus = (target: HTMLElement | null) => {
     requestAnimationFrame(() => (target?.isConnected ? target : boardSwitcherButtonRef.current)?.focus());
@@ -226,12 +230,17 @@ export default function PpmCanvasWorkspace({
         if (activeBoards.length === 0) throw new Error("Canvas has no active board.");
         const validIds = new Set(activeBoards.map((board) => board.board_id));
         const savedTabs = readCanvasBoardTabs(getBoardTabStorage(), boardTabScope, validIds, response.default_board_id);
+        const requestedBoardId = new URL(window.location.href).searchParams.get("board");
+        const linkedBoardId = requestedBoardId && validIds.has(requestedBoardId) ? requestedBoardId : undefined;
         setOpenBoardIds((current) => {
           const restored = current.filter((id) => validIds.has(id));
           const next = restored.length > 0 ? restored : savedTabs.openBoardIds;
-          return next.filter((id) => validIds.has(id));
+          const valid = next.filter((id) => validIds.has(id));
+          return linkedBoardId ? openBoardTab(valid, linkedBoardId) : valid;
         });
-        setActiveBoardId((current) => (current && validIds.has(current) ? current : savedTabs.activeBoardId));
+        setActiveBoardId(
+          (current) => linkedBoardId ?? (current && validIds.has(current) ? current : savedTabs.activeBoardId)
+        );
         setLoadedBoardTabScopeKey(boardTabScopeKey);
         setError(undefined);
       } catch (reason) {
@@ -263,6 +272,11 @@ export default function PpmCanvasWorkspace({
   useEffect(() => {
     if (loading || loadedBoardTabScopeKey !== boardTabScopeKey || !activeBoardId || openBoardIds.length === 0) return;
     writeCanvasBoardTabs(getBoardTabStorage(), boardTabScope, { activeBoardId, openBoardIds });
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("board") !== activeBoardId) {
+      url.searchParams.set("board", activeBoardId);
+      window.history.replaceState(window.history.state, "", url);
+    }
   }, [activeBoardId, boardTabScope, boardTabScopeKey, loadedBoardTabScopeKey, loading, openBoardIds]);
 
   useEffect(() => {
@@ -288,6 +302,7 @@ export default function PpmCanvasWorkspace({
         return;
       }
       if (event.key === "Escape") {
+        setShapeMenuOpen(false);
         if (boardMenuOpen) requestAnimationFrame(() => boardSwitcherButtonRef.current?.focus());
         setBoardMenuOpen(false);
         if (commandPaletteOpen) closeCommandPalette();
@@ -303,15 +318,10 @@ export default function PpmCanvasWorkspace({
         event.stopImmediatePropagation();
         runCanvasCommand("add-note");
       }
-      if (event.shiftKey && event.code === "KeyG") {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        runCanvasCommand("add-group");
-      }
       if (event.shiftKey && event.code === "KeyT") {
         event.preventDefault();
         event.stopImmediatePropagation();
-        runCanvasCommand("add-work-item");
+        runCanvasCommand("open-tasks");
       }
     };
     window.addEventListener("keydown", onKeyDown, true);
@@ -335,6 +345,19 @@ export default function PpmCanvasWorkspace({
     if (!activeBoardId) return;
     if (!activeBoardEditReady && !isCanvasCommandAllowedReadOnly(command, designV2)) return;
     dispatchPpmCanvasCommand({ boardId: activeBoardId, command });
+  };
+
+  const copyBoardLink = async () => {
+    if (!activeBoardId) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("board", activeBoardId);
+    try {
+      await navigator.clipboard.writeText(url.toString());
+      setBoardLinkCopied(true);
+      window.setTimeout(() => setBoardLinkCopied(false), 2400);
+    } catch {
+      setActionError(ppmT("canvas.board_action_error"));
+    }
   };
 
   const handleEditabilityChange = useCallback((boardId: string, editable: boolean) => {
@@ -556,8 +579,41 @@ export default function PpmCanvasWorkspace({
   const commands = useMemo<TPpmCanvasCommandItem<TPpmCanvasCommand>[]>(
     () => [
       { command: "select", id: "select", keywords: ["cursor"], label: ppmT("canvas.select") },
+      { command: "open-tasks", id: "open-tasks", keywords: ["tasks", "backlog"], label: ppmT("canvas.tasks_panel") },
       ...(activeBoardEditReady
         ? [
+            {
+              command: "draw-rectangle" as const,
+              id: "draw-rectangle",
+              keywords: ["shape", "box"],
+              label: ppmT("canvas.tool_rectangle"),
+            },
+            {
+              command: "draw-ellipse" as const,
+              id: "draw-ellipse",
+              keywords: ["shape", "circle"],
+              label: ppmT("canvas.tool_ellipse"),
+            },
+            {
+              command: "draw-diamond" as const,
+              id: "draw-diamond",
+              keywords: ["shape", "decision"],
+              label: ppmT("canvas.tool_diamond"),
+            },
+            { command: "draw-line" as const, id: "draw-line", keywords: ["line"], label: ppmT("canvas.tool_line") },
+            { command: "draw-pen" as const, id: "draw-pen", keywords: ["draw", "pen"], label: ppmT("canvas.tool_pen") },
+            {
+              command: "draw-text" as const,
+              id: "draw-text",
+              keywords: ["text", "write"],
+              label: ppmT("canvas.tool_text"),
+            },
+            {
+              command: "draw-connection" as const,
+              id: "draw-connection",
+              keywords: ["arrow", "connection"],
+              label: ppmT("canvas.draw_connection"),
+            },
             { command: "add-note" as const, id: "add-note", keywords: ["note"], label: ppmT("canvas.add_note") },
             {
               command: "add-document" as const,
@@ -577,78 +633,8 @@ export default function PpmCanvasWorkspace({
               keywords: ["table", "grid"],
               label: ppmT("canvas.add_table"),
             },
-            {
-              command: "add-code" as const,
-              id: "add-code",
-              keywords: ["code", "snippet"],
-              label: ppmT("canvas.add_code"),
-            },
-            {
-              command: "add-group" as const,
-              id: "add-group",
-              keywords: ["group", "frame"],
-              label: ppmT("canvas.add_group"),
-            },
-            {
-              command: "add-frame" as const,
-              id: "add-frame",
-              keywords: ["frame", "section"],
-              label: ppmT("canvas.add_frame"),
-            },
-            {
-              command: "add-board-link" as const,
-              id: "add-board-link",
-              keywords: ["board", "link"],
-              label: ppmT("canvas.add_board_link"),
-            },
-            {
-              command: "add-work-item" as const,
-              id: "add-work-item",
-              keywords: ["task", "issue"],
-              label: ppmT("canvas.add_work_item"),
-            },
-            {
-              command: "add-work-items-view" as const,
-              id: "add-work-items-view",
-              keywords: ["kanban", "backlog", "board", "tasks"],
-              label: ppmT("canvas.add_work_items_view"),
-            },
-            {
-              command: "add-diagram" as const,
-              id: "add-diagram",
-              keywords: ["diagram", "mermaid", "scheme"],
-              label: ppmT("canvas.add_diagram"),
-            },
-            {
-              command: "add-deck" as const,
-              id: "add-deck",
-              keywords: ["presentation", "slides", "deck"],
-              label: ppmT("canvas.add_deck"),
-            },
-            {
-              command: "draw-connection" as const,
-              id: "draw-connection",
-              keywords: ["arrow", "link"],
-              label: ppmT("canvas.draw_connection"),
-            },
-            {
-              command: "semantic-edges" as const,
-              id: "semantic-edges",
-              keywords: ["meaning", "relation"],
-              label: ppmT("canvas.semantic_edges"),
-            },
             { command: "undo" as const, id: "undo", keywords: ["history"], label: ppmT("canvas.undo") },
             { command: "redo" as const, id: "redo", keywords: ["history"], label: ppmT("canvas.redo") },
-          ]
-        : []),
-      ...(designV2 && !activeBoardEditReady
-        ? [
-            {
-              command: "semantic-edges" as const,
-              id: "semantic-edges",
-              keywords: ["meaning", "relation"],
-              label: ppmT("canvas.semantic_edges"),
-            },
           ]
         : []),
       { command: "fit-view", id: "fit-view", keywords: ["camera"], label: ppmT("canvas.fit_view") },
@@ -701,7 +687,7 @@ export default function PpmCanvasWorkspace({
           ]
         : []),
     ],
-    [activeBoardEditReady, designV2, ppmT]
+    [activeBoardEditReady, ppmT]
   );
 
   if (loading) return <WorkspaceState icon={LoaderCircle} spinning text={ppmT("canvas.loading_description")} />;
@@ -742,6 +728,15 @@ export default function PpmCanvasWorkspace({
           <ChevronRight aria-hidden="true" />
           <strong>{activeBoard.name}</strong>
           <ChevronDown aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="ppm-canvas-board-copy"
+          aria-label={ppmT(boardLinkCopied ? "canvas.board_link_copied" : "canvas.copy_board_link")}
+          title={ppmT(boardLinkCopied ? "canvas.board_link_copied" : "canvas.copy_board_link")}
+          onClick={() => void copyBoardLink()}
+        >
+          <Copy aria-hidden="true" />
         </button>
         <div
           className="ppm-canvas-tabs"
@@ -824,35 +819,67 @@ export default function PpmCanvasWorkspace({
         </button>
       </header>
 
-      <aside className="ppm-canvas-rail" aria-label={ppmT("canvas.toolbar")}>
+      <aside
+        className="ppm-canvas-rail"
+        aria-label={ppmT("canvas.toolbar")}
+        onMouseOver={(event) => showRailTooltip(event.target)}
+        onFocus={(event) => showRailTooltip(event.target)}
+        onMouseLeave={() => setRailTooltip(undefined)}
+        onBlurCapture={() => setRailTooltip(undefined)}
+      >
         <button
           type="button"
           className="ppm-canvas-rail__brand"
-          title={ppmT(railExpanded ? "canvas.collapse_panel" : "canvas.expand_panel")}
+          data-tooltip={ppmT(railExpanded ? "canvas.collapse_panel" : "canvas.expand_panel")}
           aria-label={ppmT(railExpanded ? "canvas.collapse_panel" : "canvas.expand_panel")}
+          aria-expanded={railExpanded}
           onClick={() => setRailExpanded((current) => !current)}
         >
-          <img src={PPM_BRAND.assets.mark} alt="" aria-hidden="true" />
-          {railExpanded && <strong>PPM</strong>}
-          {railExpanded ? <ChevronLeft aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
+          {railExpanded ? <PanelLeftClose aria-hidden="true" /> : <PanelLeftOpen aria-hidden="true" />}
+          {railExpanded && <strong>{ppmT("canvas.collapse_panel")}</strong>}
         </button>
-        <RailSectionLabel expanded={railExpanded} label={ppmT("canvas.navigation")} />
         <RailButton
           pressed={activeTool === "select"}
           expanded={railExpanded}
-          icon={LayoutGrid}
-          label={ppmT("canvas.canvas")}
+          icon={MousePointer2}
+          label={ppmT("canvas.select")}
           onClick={() => runCanvasCommand("select")}
         />
-        <RailButton
-          expanded={railExpanded}
-          icon={Menu}
-          label={ppmT("canvas.boards")}
-          onClick={() => setBoardMenuOpen((current) => !current)}
-        />
-        <RailSectionLabel expanded={railExpanded} label={ppmT("canvas.nodes")} />
         {capabilities.edit && (
           <>
+            <RailSectionLabel expanded={railExpanded} label={ppmT("canvas.nodes")} />
+            <RailButton
+              disabled={!activeBoardEditReady}
+              expanded={railExpanded}
+              icon={Square}
+              label={ppmT("canvas.shapes")}
+              pressed={shapeMenuOpen}
+              onClick={() => setShapeMenuOpen((current) => !current)}
+            />
+            <RailButton
+              disabled={!activeBoardEditReady}
+              expanded={railExpanded}
+              icon={PenTool}
+              label={ppmT("canvas.tool_pen")}
+              pressed={activeTool === "draw"}
+              onClick={() => runCanvasCommand("draw-pen")}
+            />
+            <RailButton
+              disabled={!activeBoardEditReady}
+              expanded={railExpanded}
+              icon={Type}
+              label={ppmT("canvas.tool_text")}
+              pressed={activeTool === "text"}
+              onClick={() => runCanvasCommand("draw-text")}
+            />
+            <RailButton
+              disabled={!activeBoardEditReady}
+              expanded={railExpanded}
+              icon={ArrowRight}
+              label={ppmT("canvas.draw_connection")}
+              pressed={activeTool === "arrow"}
+              onClick={() => runCanvasCommand("draw-connection")}
+            />
             <RailButton
               disabled={!activeBoardEditReady}
               expanded={railExpanded}
@@ -885,80 +912,6 @@ export default function PpmCanvasWorkspace({
             <RailButton
               disabled={!activeBoardEditReady}
               expanded={railExpanded}
-              icon={Code2}
-              label={ppmT("canvas.add_code")}
-              onClick={() => runCanvasCommand("add-code")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={Group}
-              label={ppmT("canvas.add_group")}
-              shortcut="⇧G"
-              onClick={() => runCanvasCommand("add-group")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={Frame}
-              label={ppmT("canvas.add_frame")}
-              onClick={() => runCanvasCommand("add-frame")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={Link}
-              label={ppmT("canvas.add_board_link")}
-              onClick={() => runCanvasCommand("add-board-link")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={ListPlus}
-              label={ppmT("canvas.add_work_item")}
-              shortcut="⇧T"
-              onClick={() => runCanvasCommand("add-work-item")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={Columns3}
-              label={ppmT("canvas.add_work_items_view")}
-              onClick={() => runCanvasCommand("add-work-items-view")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={Workflow}
-              label={ppmT("canvas.add_diagram")}
-              onClick={() => runCanvasCommand("add-diagram")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={Presentation}
-              label={ppmT("canvas.add_deck")}
-              onClick={() => runCanvasCommand("add-deck")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={GitFork}
-              label={ppmT("canvas.draw_connection")}
-              pressed={activeTool === "arrow"}
-              onClick={() => runCanvasCommand("draw-connection")}
-            />
-            <RailButton
-              // v2: the read-only list stays reachable when the board is read-only, in conflict or being restored.
-              disabled={!activeBoardEditReady && !isCanvasCommandAllowedReadOnly("semantic-edges", designV2)}
-              expanded={railExpanded}
-              icon={Network}
-              label={ppmT("canvas.semantic_edges")}
-              onClick={() => runCanvasCommand("semantic-edges")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
               icon={Undo2}
               label={ppmT("canvas.undo")}
               onClick={() => runCanvasCommand("undo")}
@@ -972,92 +925,51 @@ export default function PpmCanvasWorkspace({
             />
           </>
         )}
-        {designV2 && !capabilities.edit && (
-          <RailButton
-            expanded={railExpanded}
-            icon={Network}
-            label={ppmT("canvas.semantic_edges")}
-            onClick={() => runCanvasCommand("semantic-edges")}
-          />
-        )}
-        {(!designV2 || (railExpanded && capabilities.edit)) && (
-          <RailSectionLabel expanded={railExpanded} label={ppmT("canvas.view")} />
-        )}
-        {!designV2 && (
-          <>
-            <RailButton
-              expanded={railExpanded}
-              icon={Focus}
-              label={ppmT("canvas.fit_view")}
-              onClick={() => runCanvasCommand("fit-view")}
-            />
-            <RailButton
-              expanded={railExpanded}
-              icon={ZoomIn}
-              label={ppmT("canvas.zoom_in")}
-              onClick={() => runCanvasCommand("zoom-in")}
-            />
-            <RailButton
-              expanded={railExpanded}
-              icon={ZoomOut}
-              label={ppmT("canvas.zoom_out")}
-              onClick={() => runCanvasCommand("zoom-out")}
-            />
-          </>
-        )}
-        {railExpanded && capabilities.edit && (
-          <div className="ppm-canvas-rail__align" aria-label={ppmT("canvas.align")}>
-            <button
-              disabled={!activeBoardEditReady}
-              type="button"
-              title={ppmT("canvas.align_left")}
-              onClick={() => runCanvasCommand("align-left")}
-            >
-              <AlignStartVertical aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              title={ppmT("canvas.align_center_horizontal")}
-              onClick={() => runCanvasCommand("align-center-horizontal")}
-              disabled={!activeBoardEditReady}
-            >
-              <AlignCenterVertical aria-hidden="true" />
-            </button>
-            <button
-              disabled={!activeBoardEditReady}
-              type="button"
-              title={ppmT("canvas.align_right")}
-              onClick={() => runCanvasCommand("align-right")}
-            >
-              <AlignEndVertical aria-hidden="true" />
-            </button>
-            <button
-              disabled={!activeBoardEditReady}
-              type="button"
-              title={ppmT("canvas.align_top")}
-              onClick={() => runCanvasCommand("align-top")}
-            >
-              <AlignStartHorizontal aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              title={ppmT("canvas.align_center_vertical")}
-              onClick={() => runCanvasCommand("align-center-vertical")}
-              disabled={!activeBoardEditReady}
-            >
-              <AlignCenterHorizontal aria-hidden="true" />
-            </button>
-            <button
-              disabled={!activeBoardEditReady}
-              type="button"
-              title={ppmT("canvas.align_bottom")}
-              onClick={() => runCanvasCommand("align-bottom")}
-            >
-              <AlignEndHorizontal aria-hidden="true" />
-            </button>
-          </div>
-        )}
+        <RailSectionLabel expanded={railExpanded} label={ppmT("canvas.navigation")} />
+        <RailButton
+          expanded={railExpanded}
+          icon={ListPlus}
+          label={ppmT("canvas.tasks_panel")}
+          shortcut="⇧T"
+          onClick={() => runCanvasCommand("open-tasks")}
+        />
+        <RailButton
+          expanded={railExpanded}
+          icon={Menu}
+          label={ppmT("canvas.boards")}
+          onClick={() => setBoardMenuOpen((current) => !current)}
+        />
       </aside>
+      {railTooltip && !railExpanded && (
+        <span className="ppm-canvas-rail-tooltip" role="tooltip" style={{ top: railTooltip.top }}>
+          {railTooltip.label}
+        </span>
+      )}
+      {shapeMenuOpen && activeBoardEditReady && (
+        <div className="ppm-canvas-shape-menu" role="menu" aria-label={ppmT("canvas.shapes")}>
+          {(
+            [
+              ["draw-rectangle", Square, "canvas.tool_rectangle"],
+              ["draw-ellipse", Circle, "canvas.tool_ellipse"],
+              ["draw-diamond", Diamond, "canvas.tool_diamond"],
+              ["draw-line", Minus, "canvas.tool_line"],
+            ] as const
+          ).map(([command, Icon, label]) => (
+            <button
+              key={command}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                runCanvasCommand(command);
+                setShapeMenuOpen(false);
+              }}
+            >
+              <Icon aria-hidden="true" />
+              {ppmT(label)}
+            </button>
+          ))}
+        </div>
+      )}
 
       <main className="ppm-canvas-workspace__content">
         {openBoardIds.map((boardId) => (
@@ -1563,10 +1475,11 @@ function RailButton({
     <button
       type="button"
       className="ppm-canvas-rail-button"
+      aria-label={label}
       aria-pressed={pressed}
       data-active={pressed || undefined}
+      data-tooltip={shortcut ? `${label} · ${shortcut}` : label}
       disabled={disabled}
-      title={label}
       onClick={onClick}
     >
       <Icon aria-hidden="true" />

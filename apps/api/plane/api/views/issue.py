@@ -31,6 +31,7 @@ from django.conf import settings
 # Third party imports
 from rest_framework import status
 from rest_framework.response import Response
+from plane.utils.asset_upload import upload_confirmation_error
 
 # drf-spectacular imports
 from drf_spectacular.utils import (
@@ -1973,6 +1974,9 @@ class IssueAttachmentListCreateAPIEndpoint(BaseAPIView):
         storage = S3Storage(request=request)
         # Generate a presigned URL to share an S3 object
         presigned_url = storage.generate_presigned_post(object_name=asset_key, file_type=type, file_size=size_limit)
+        if presigned_url is None:
+            asset.delete()
+            return Response({"error": "Upload storage is unavailable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         # Return the presigned URL
         return Response(
             {
@@ -2163,6 +2167,10 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
             disposition="attachment",
             filename=asset.attributes.get("name"),
         )
+        if not presigned_url:
+            return Response(
+                {"error": "File storage is temporarily unavailable."}, status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
         return HttpResponseRedirect(presigned_url)
 
     @issue_attachment_docs(
@@ -2220,6 +2228,8 @@ class IssueAttachmentDetailAPIEndpoint(BaseAPIView):
             issue_id=issue_id,
             entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
         )
+        if (upload_error := upload_confirmation_error(issue_attachment)) is not None:
+            return upload_error
         serializer = IssueAttachmentSerializer(issue_attachment)
 
         # Send this activity only if the attachment is not uploaded before

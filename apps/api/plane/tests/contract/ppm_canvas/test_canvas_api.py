@@ -5,7 +5,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from rest_framework import status
 
-from plane.ppm_canvas.models import PpmCanvasBoard, PpmCanvasVersion, PpmProjectCanvas
+from plane.ppm_canvas.models import PpmCanvasBoard, PpmCanvasVersion, PpmGlobalAdmin, PpmProjectCanvas
 from plane.ppm_canvas.schema import canvas_snapshot_hash
 from plane.tests.factories import (
     ProjectFactory,
@@ -227,6 +227,23 @@ def test_permission_matrix_for_active_project_members(api_client, role, expected
     assert read.status_code == status.HTTP_200_OK
     assert read.data["access"] == expected_access
     assert write.status_code == (status.HTTP_200_OK if expected_access == "edit" else status.HTTP_403_FORBIDDEN)
+
+
+@pytest.mark.parametrize("protected_global_admin", [False, True])
+def test_disabled_account_cannot_read_or_write_canvas(api_client, canvas_project, protected_global_admin):
+    user, workspace, project = canvas_project
+    if protected_global_admin:
+        PpmGlobalAdmin.objects.create(user=user, reason="Contract test bootstrap")
+    user.is_active = False
+    user.save(update_fields=["is_active"])
+    authenticate(api_client, user)
+
+    read = api_client.get(canvas_url(workspace, project))
+    write = api_client.put(canvas_url(workspace, project), save_payload(), format="json")
+
+    assert read.status_code == status.HTTP_403_FORBIDDEN
+    assert write.status_code == status.HTTP_403_FORBIDDEN
+    assert not PpmProjectCanvas.objects.filter(workspace_id=workspace.id, project_id=project.id).exists()
 
 
 def test_unauthenticated_and_outsider_are_denied(api_client, canvas_project):

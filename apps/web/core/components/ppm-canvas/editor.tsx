@@ -19,6 +19,7 @@ import {
   BrainCircuit,
   Check,
   ChevronDown,
+  Copy,
   Download,
   FileArchive,
   Frame,
@@ -30,8 +31,10 @@ import {
   X,
 } from "lucide-react";
 import {
+  Box,
   Tldraw,
   createShapeId,
+  GeoShapeGeoStyle,
   useEditor,
   useValue,
   type Editor,
@@ -82,10 +85,8 @@ import {
   type TPpmWorkItemsViewResponse,
 } from "@ppm/canvas";
 import type { TPpmTranslationKey } from "@ppm/brand";
-import { useTranslation } from "@plane/i18n";
 import { EFileAssetType } from "@plane/types";
 import { resolveGeneralTheme } from "@plane/utils";
-import { formatPpmTimeAgo } from "@/helpers/ppm-time-ago.helper";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { usePpmDesignV2 } from "@/lib/ppm-design";
 import { PpmCanvasService, PpmCanvasServiceError } from "@/services/ppm-canvas.service";
@@ -209,7 +210,6 @@ const HIDDEN_TLDRAW_UI: TLComponents = {
 export default function PpmCanvasEditor({
   authorId,
   boardId,
-  boards,
   canEdit,
   onEditabilityChange,
   onOpenBoard,
@@ -261,6 +261,7 @@ export default function PpmCanvasEditor({
   const [desktopImportReport, setDesktopImportReport] = useState<TPpmDesktopImportReport>();
   // Lives here, not in CanvasControls: the tldraw overlay remounts whenever the components memo changes.
   const [boardInfoOpen, setBoardInfoOpen] = useState(false);
+  const [tasksPanelOpen, setTasksPanelOpen] = useState(false);
   const boardInfoFocusRef = useRef(false);
   // Same reason: "Semantic links" must survive autosave and edge updates, which rebuild the overlay.
   const [semanticPanelOpen, setSemanticPanelOpen] = useState(false);
@@ -1304,22 +1305,26 @@ export default function PpmCanvasEditor({
         },
       });
       const id = binding.shape_id as TLShapeId;
-      const center = activeEditor.getViewportPageBounds().center;
-      const nodeIndex = activeEditor
-        .getCurrentPageShapes()
-        .filter((shape) => shape.type === PPM_CANVAS_SHAPE_TYPE).length;
-      const offset = (nodeIndex % 5) * 36;
+      const position = findFreeNodePosition(activeEditor, node.visual.width, node.visual.height);
       queuedBindingActivationsRef.current.add(binding.binding_id);
       try {
         activeEditor.createShape<TPpmCanvasShape>({
           id,
           type: PPM_CANVAS_SHAPE_TYPE,
-          x: center.x - node.visual.width / 2 + offset,
-          y: center.y - node.visual.height / 2 + offset,
+          x: position.x,
+          y: position.y,
           props: { h: node.visual.height, node: serializePpmCanvasNode(node), w: node.visual.width },
         });
         setBindingsByShapeId((current) => new Map(current).set(binding.shape_id, binding));
         activeEditor.select(id).setCurrentTool("select");
+        if (!position.inViewport)
+          activeEditor.zoomToBounds(
+            Box.Common([
+              activeEditor.getViewportPageBounds(),
+              new Box(position.x, position.y, node.visual.width, node.visual.height),
+            ]),
+            { immediate: true, targetZoom: 1 }
+          );
         scheduleSaveRef.current();
       } catch (error) {
         queuedBindingActivationsRef.current.delete(binding.binding_id);
@@ -2050,7 +2055,6 @@ export default function PpmCanvasEditor({
           boardInfoFocusRef={boardInfoFocusRef}
           // A pending import preview lives inside "Board" and must stay reachable until confirmed or cancelled.
           boardInfoOpen={boardInfoOpen || Boolean(desktopImport)}
-          boards={boards}
           canEdit={effectiveCanEdit}
           copiedLocal={copiedLocal}
           designV2={designV2}
@@ -2087,6 +2091,9 @@ export default function PpmCanvasEditor({
           onSelectionChange={onSelectionChange}
           onSearchWorkItems={searchWorkItems}
           onToggleBoardInfo={toggleBoardInfo}
+          onOpenTasksPanel={() => setTasksPanelOpen(true)}
+          onCloseTasksPanel={() => setTasksPanelOpen(false)}
+          tasksPanelOpen={tasksPanelOpen}
           onToolChange={onToolChange}
           statusPlacement={statusPlacement}
           syncStatus={syncStatus}
@@ -2104,7 +2111,6 @@ export default function PpmCanvasEditor({
       authorId,
       boardId,
       boardInfoOpen,
-      boards,
       bindWorkItem,
       closeSemanticPanel,
       copiedLocal,
@@ -2149,6 +2155,7 @@ export default function PpmCanvasEditor({
       statusPlacement,
       syncStatus,
       toggleBoardInfo,
+      tasksPanelOpen,
     ]
   );
 
@@ -2172,6 +2179,7 @@ export default function PpmCanvasEditor({
         patch: Omit<TPpmWorkItemPatchRequest, "source_version">
       ) => void updateWorkItemProjection(shapeId, binding, patch),
       onUpdateSource: updateWorkItemSource,
+      onOpenTasks: () => setTasksPanelOpen(true),
       options: workItemOptions,
       pendingWorkItemIds,
     }),
@@ -2343,7 +2351,6 @@ function CanvasControls({
   boardId,
   boardInfoFocusRef,
   boardInfoOpen,
-  boards,
   canEdit,
   copiedLocal,
   designV2,
@@ -2378,6 +2385,9 @@ function CanvasControls({
   onSelectionChange,
   onSearchWorkItems,
   onToggleBoardInfo,
+  onOpenTasksPanel,
+  onCloseTasksPanel,
+  tasksPanelOpen,
   onToolChange,
   onOpenSemanticPanel,
   onCloseSemanticPanel,
@@ -2395,7 +2405,6 @@ function CanvasControls({
   boardId: string;
   boardInfoFocusRef: { current: boolean };
   boardInfoOpen: boolean;
-  boards: TPpmCanvasBoard[];
   canEdit: boolean;
   copiedLocal: boolean;
   designV2: boolean;
@@ -2435,6 +2444,9 @@ function CanvasControls({
   onSelectionChange?: (boardId: string, shapeIds: string[]) => void;
   onSearchWorkItems: (query: string, cursor?: string) => Promise<TPpmProjectionSearchResponse>;
   onToggleBoardInfo: () => void;
+  onOpenTasksPanel: () => void;
+  onCloseTasksPanel: () => void;
+  tasksPanelOpen: boolean;
   onToolChange?: (boardId: string, toolId: string) => void;
   onOpenSemanticPanel: () => void;
   onCloseSemanticPanel: () => void;
@@ -2451,8 +2463,6 @@ function CanvasControls({
   const editor = useEditor();
   const ppmT = usePpmTranslation();
   const projectionContext = useContext(PpmWorkItemProjectionContext);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [boardPickerOpen, setBoardPickerOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const boardInfoToggleRef = useRef<HTMLButtonElement>(null);
   const nodes = useValue(
@@ -2463,6 +2473,7 @@ function CanvasControls({
         .map((shape) => ({ parsed: parseSerializedPpmCanvasNode(shape.props.node), shape })),
     [editor]
   );
+  const shapeCount = useValue("ppm canvas shape count", () => editor.getCurrentPageShapes().length, [editor]);
   const selectedShapeIds = useValue("ppm canvas selected shapes", () => editor.getSelectedShapeIds(), [editor]);
   const toolId = useValue("ppm canvas tool", () => editor.getCurrentToolId(), [editor]);
   const orchestratorRunVersions = useMemo(
@@ -2515,29 +2526,26 @@ function CanvasControls({
         case "add-table":
           if (canEdit) createNode(editor, authorId, "table", ppmT("canvas.table_title"));
           break;
-        case "add-code":
-          if (canEdit) createNode(editor, authorId, "code", ppmT("canvas.code_title"));
+        case "draw-rectangle":
+        case "draw-ellipse":
+        case "draw-diamond":
+          if (canEdit) {
+            const geo = detail.command.slice(5) as "rectangle" | "ellipse" | "diamond";
+            editor.setStyleForNextShapes(GeoShapeGeoStyle, geo);
+            editor.setCurrentTool("geo");
+          }
           break;
-        case "add-group":
-          if (canEdit) createNode(editor, authorId, "group", ppmT("canvas.group_title"));
+        case "draw-line":
+          if (canEdit) editor.setCurrentTool("line");
           break;
-        case "add-frame":
-          if (canEdit) createNode(editor, authorId, "frame", ppmT("canvas.frame_title"));
+        case "draw-pen":
+          if (canEdit) editor.setCurrentTool("draw");
           break;
-        case "add-board-link":
-          if (canEdit) setBoardPickerOpen(true);
+        case "draw-text":
+          if (canEdit) editor.setCurrentTool("text");
           break;
-        case "add-work-item":
-          if (canEdit) setPickerOpen(true);
-          break;
-        case "add-work-items-view":
-          if (canEdit) createNode(editor, authorId, "work_items_view", ppmT("canvas.work_items_view_title"));
-          break;
-        case "add-diagram":
-          if (canEdit) createNode(editor, authorId, "diagram", ppmT("canvas.diagram_title"));
-          break;
-        case "add-deck":
-          if (canEdit) createNode(editor, authorId, "deck", ppmT("canvas.deck_title"));
+        case "open-tasks":
+          onOpenTasksPanel();
           break;
         case "add-agent-answer":
           if (canEdit && detail.agentAnswer) createAgentAnswerNodes(editor, authorId, detail.agentAnswer);
@@ -2590,7 +2598,7 @@ function CanvasControls({
     };
     window.addEventListener(PPM_CANVAS_COMMAND_EVENT, onCommand);
     return () => window.removeEventListener(PPM_CANVAS_COMMAND_EVENT, onCommand);
-  }, [authorId, boardId, canEdit, editor, onOpenSemanticPanel, ppmT, semanticPanelOpen]);
+  }, [authorId, boardId, canEdit, editor, onOpenSemanticPanel, onOpenTasksPanel, ppmT, semanticPanelOpen]);
 
   const statusLabelKey: TPpmTranslationKey = recoveryMode
     ? "canvas.recovery_title"
@@ -2789,28 +2797,19 @@ function CanvasControls({
 
   return (
     <>
-      {pickerOpen && canEdit && (
+      {tasksPanelOpen && (
         <WorkItemPicker
+          addDisabled={!canEdit}
+          createDisabled={!canEdit}
           onAdd={async (source) => {
             await onBindWorkItem(source);
-            setPickerOpen(false);
           }}
-          onClose={() => setPickerOpen(false)}
+          onClose={onCloseTasksPanel}
           onCreate={async (name) => {
             await onCreateWorkItem(name);
-            setPickerOpen(false);
           }}
           onSearch={onSearchWorkItems}
-        />
-      )}
-      {boardPickerOpen && canEdit && (
-        <BoardLinkPicker
-          boards={boards.filter((board) => board.status === "active" && board.board_id !== boardId)}
-          onAdd={(board) => {
-            createNode(editor, authorId, "board_link", board.name, board.board_id);
-            setBoardPickerOpen(false);
-          }}
-          onClose={() => setBoardPickerOpen(false)}
+          title={ppmT("canvas.tasks_panel")}
         />
       )}
       {semanticPanelOpen && (
@@ -2903,7 +2902,7 @@ function CanvasControls({
                 <Frame aria-hidden="true" />
                 <span>
                   {ppmT("canvas.board_info")} ·{" "}
-                  {ppmT("canvas.board_info_objects").replace("{count}", String(nodes.length))}
+                  {ppmT("canvas.board_info_objects").replace("{count}", String(shapeCount))}
                 </span>
                 <ChevronDown aria-hidden="true" />
               </button>
@@ -2930,7 +2929,7 @@ function CanvasControls({
         </>
       )}
 
-      {nodes.length === 0 && (
+      {shapeCount === 0 && (
         <div className="ppm-canvas-empty">
           <BrainCircuit aria-hidden="true" />
           <strong>{ppmT("canvas.empty_title")}</strong>
@@ -3005,6 +3004,7 @@ function FileDropDialog({
 }
 
 function WorkItemPicker({
+  addDisabled = false,
   createDisabled = false,
   onAdd,
   onClose,
@@ -3012,6 +3012,7 @@ function WorkItemPicker({
   onSearch,
   title,
 }: {
+  addDisabled?: boolean;
   createDisabled?: boolean;
   onAdd: (source: TPpmWorkItemProjection) => Promise<void>;
   onClose: () => void;
@@ -3026,6 +3027,7 @@ function WorkItemPicker({
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string>();
   const [error, setError] = useState(false);
+  const [copiedTaskId, setCopiedTaskId] = useState<string>();
 
   useEffect(() => {
     let active = true;
@@ -3054,6 +3056,7 @@ function WorkItemPicker({
     setError(false);
     try {
       await onAdd(source);
+      setActionId(undefined);
     } catch {
       setError(true);
       setActionId(undefined);
@@ -3067,6 +3070,8 @@ function WorkItemPicker({
     setError(false);
     try {
       await onCreate(name);
+      setActionId(undefined);
+      setQuery("");
     } catch {
       setError(true);
       setActionId(undefined);
@@ -3109,20 +3114,41 @@ function WorkItemPicker({
       </label>
       <div className="ppm-work-item-picker__results">
         {results.map((source) => (
-          <button
-            type="button"
-            disabled={Boolean(actionId)}
-            key={source.identity.entity_id}
-            onClick={() => void add(source)}
-          >
-            <span>
-              <strong>{source.display.title}</strong>
-              <small>
-                {source.identity.identifier} · {source.display.state?.name ?? ppmT("canvas.work_item_no_state")}
-              </small>
-            </span>
-            <Plus aria-hidden="true" />
-          </button>
+          <div className="ppm-work-item-picker__row" key={source.identity.entity_id}>
+            <button type="button" disabled={addDisabled || Boolean(actionId)} onClick={() => void add(source)}>
+              <span>
+                <strong>{source.display.title}</strong>
+                <small>
+                  {source.identity.identifier} · {source.display.state?.name ?? ppmT("canvas.work_item_no_state")}
+                </small>
+              </span>
+              <Plus aria-hidden="true" />
+            </button>
+            {source.identity.source_url && (
+              <button
+                type="button"
+                className="ppm-work-item-picker__copy"
+                aria-label={ppmT(
+                  copiedTaskId === source.identity.entity_id ? "canvas.task_link_copied" : "canvas.copy_task_link"
+                )}
+                title={ppmT(
+                  copiedTaskId === source.identity.entity_id ? "canvas.task_link_copied" : "canvas.copy_task_link"
+                )}
+                onClick={async () => {
+                  try {
+                    const sourceUrl = source.identity.source_url;
+                    if (!sourceUrl) return;
+                    await navigator.clipboard.writeText(new URL(sourceUrl, window.location.origin).toString());
+                    setCopiedTaskId(source.identity.entity_id);
+                  } catch {
+                    setError(true);
+                  }
+                }}
+              >
+                <Copy aria-hidden="true" />
+              </button>
+            )}
+          </div>
         ))}
         {!loading && results.length === 0 && <p>{ppmT("canvas.work_item_empty_search")}</p>}
         {loading && <p>{ppmT("canvas.work_item_searching")}</p>}
@@ -3144,46 +3170,6 @@ function WorkItemPicker({
         </button>
       )}
       {error && <p className="ppm-work-item-picker__error">{ppmT("canvas.work_item_action_error")}</p>}
-    </section>
-  );
-}
-
-function BoardLinkPicker({
-  boards,
-  onAdd,
-  onClose,
-}: {
-  boards: TPpmCanvasBoard[];
-  onAdd: (board: TPpmCanvasBoard) => void;
-  onClose: () => void;
-}) {
-  const ppmT = usePpmTranslation();
-  const { currentLocale } = useTranslation();
-  return (
-    <section className="ppm-work-item-picker ppm-board-link-picker" aria-label={ppmT("canvas.add_board_link")}>
-      <header>
-        <div>
-          <strong>{ppmT("canvas.add_board_link")}</strong>
-          <span>{ppmT("canvas.boards_description")}</span>
-        </div>
-        <button type="button" aria-label={ppmT("canvas.close_picker")} onClick={onClose}>
-          <X aria-hidden="true" />
-        </button>
-      </header>
-      <div className="ppm-work-item-picker__results">
-        {boards.map((board) => (
-          <button type="button" key={board.board_id} onClick={() => onAdd(board)}>
-            <span>
-              <strong>{board.name}</strong>
-              <small>
-                {ppmT("canvas.board_updated")} {formatPpmTimeAgo(board.updated_at, currentLocale)}
-              </small>
-            </span>
-            <Plus aria-hidden="true" />
-          </button>
-        ))}
-        {boards.length === 0 && <p>{ppmT("canvas.boards_empty_search")}</p>}
-      </div>
     </section>
   );
 }
@@ -3492,15 +3478,13 @@ function createNode(
   targetBoardId?: string
 ) {
   const node = createPpmCanvasNode({ authorId, kind, targetBoardId, title });
-  const center = editor.getViewportPageBounds().center;
-  const nodeIndex = editor.getCurrentPageShapes().filter((shape) => shape.type === PPM_CANVAS_SHAPE_TYPE).length;
-  const offset = (nodeIndex % 5) * 36;
+  const position = findFreeNodePosition(editor, node.visual.width, node.visual.height);
   const id = createShapeId();
   editor.createShape<TPpmCanvasShape>({
     id,
     type: PPM_CANVAS_SHAPE_TYPE,
-    x: center.x - node.visual.width / 2 + offset,
-    y: center.y - node.visual.height / 2 + offset,
+    x: position.x,
+    y: position.y,
     props: {
       h: node.visual.height,
       node: serializePpmCanvasNode(node),
@@ -3509,6 +3493,85 @@ function createNode(
   });
   if (kind === "group") editor.sendToBack([id]);
   editor.select(id).setCurrentTool("select");
+  if (!position.inViewport)
+    editor.zoomToBounds(
+      Box.Common([
+        editor.getViewportPageBounds(),
+        new Box(position.x, position.y, node.visual.width, node.visual.height),
+      ]),
+      { immediate: true, targetZoom: 1 }
+    );
+}
+
+function findFreeNodePosition(editor: Editor, width: number, height: number) {
+  const viewport = editor.getViewportPageBounds();
+  const center = viewport.center;
+  const occupied = editor
+    .getCurrentPageShapes()
+    .filter((shape) => !["arrow", "line", "draw"].includes(shape.type))
+    .map((shape) => editor.getShapePageBounds(shape))
+    .filter((bounds): bounds is NonNullable<typeof bounds> => Boolean(bounds));
+  const gap = 20;
+  const visible = occupied.filter(
+    (bounds) =>
+      bounds.x < viewport.x + viewport.w &&
+      bounds.x + bounds.w > viewport.x &&
+      bounds.y < viewport.y + viewport.h &&
+      bounds.y + bounds.h > viewport.y
+  );
+  const candidates: { x: number; y: number; inViewport: boolean; score: number }[] = [];
+  const addCandidate = (x: number, y: number) => {
+    if (
+      occupied.some(
+        (bounds) =>
+          x < bounds.x + bounds.w + gap &&
+          x + width + gap > bounds.x &&
+          y < bounds.y + bounds.h + gap &&
+          y + height + gap > bounds.y
+      )
+    )
+      return;
+    const inViewport =
+      x >= viewport.x + gap &&
+      y >= viewport.y + gap &&
+      x + width <= viewport.x + viewport.w - gap &&
+      y + height <= viewport.y + viewport.h - gap;
+    const local = [...visible, { x, y, w: width, h: height }];
+    const minX = Math.min(...local.map((bounds) => bounds.x));
+    const minY = Math.min(...local.map((bounds) => bounds.y));
+    const maxX = Math.max(...local.map((bounds) => bounds.x + bounds.w));
+    const maxY = Math.max(...local.map((bounds) => bounds.y + bounds.h));
+    const fit = Math.min(1, viewport.w / (maxX - minX + gap * 2), viewport.h / (maxY - minY + gap * 2));
+    const distance = Math.hypot(x + width / 2 - center.x, y + height / 2 - center.y);
+    candidates.push({ x, y, inViewport, score: (inViewport ? 2 : 0) + fit - distance / 100_000 });
+  };
+
+  addCandidate(center.x - width / 2, center.y - height / 2);
+  for (const bounds of visible) {
+    for (const y of [bounds.y, bounds.y + (bounds.h - height) / 2, bounds.y + bounds.h - height]) {
+      addCandidate(bounds.x - width - gap, y);
+      addCandidate(bounds.x + bounds.w + gap, y);
+    }
+    for (const x of [bounds.x, bounds.x + (bounds.w - width) / 2, bounds.x + bounds.w - width]) {
+      addCandidate(x, bounds.y - height - gap);
+      addCandidate(x, bounds.y + bounds.h + gap);
+    }
+  }
+
+  if (candidates.length === 0) {
+    for (let radius = 1; radius <= 16 && candidates.length === 0; radius++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+          addCandidate(center.x - width / 2 + dx * 128, center.y - height / 2 + dy * 128);
+        }
+      }
+    }
+  }
+
+  let best = candidates[0];
+  for (const candidate of candidates) if (!best || candidate.score > best.score) best = candidate;
+  return best ?? { x: center.x - width / 2, y: center.y - height / 2, inViewport: true };
 }
 
 function createAgentAnswerNodes(

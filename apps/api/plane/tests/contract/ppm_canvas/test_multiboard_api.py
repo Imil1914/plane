@@ -9,12 +9,14 @@ from rest_framework import status
 from plane.db.models import Issue, State
 from plane.ppm_canvas.models import (
     PpmCanvasBinding,
+    PpmCanvasBoard,
     PpmCanvasSemanticEdge,
     PpmCanvasVersion,
     PpmGlobalAdmin,
     PpmGlobalAdminAudit,
     PpmGlobalAdminRoleAudit,
 )
+from plane.ppm_canvas.services import PpmCanvasConflict, save_canvas_snapshot
 from plane.tests.factories import (
     ProjectFactory,
     ProjectMemberFactory,
@@ -247,6 +249,36 @@ def test_lifecycle_is_idempotent_and_last_board_cannot_be_archived(api_client, m
     assert last_board.data["error"]["code"] == "CANVAS_LAST_BOARD"
     assert restored.data["status"] == "active"
     assert restore_replay.data["idempotent_replay"] is True
+
+
+def test_stale_save_cannot_create_version_after_board_is_archived(api_client, multiboard_project):
+    lead, workspace, project, _ = multiboard_project
+    api_client.force_authenticate(user=lead)
+    api_client.get(boards_url(workspace, project))
+    created = create_board(api_client, workspace, project, "Черновая доска")
+    assert created.status_code == status.HTTP_201_CREATED
+    board = PpmCanvasBoard.objects.get(id=created.data["board_id"])
+
+    archived = api_client.post(
+        f"{board_url(workspace, project, board.id)}archive/",
+        {"client_operation_id": str(uuid.uuid4())},
+        format="json",
+    )
+    assert archived.status_code == status.HTTP_200_OK
+
+    with pytest.raises(PpmCanvasConflict) as error:
+        save_canvas_snapshot(
+            board=board,
+            user_id=lead.id,
+            request_id=uuid.uuid4(),
+            base_version=0,
+            schema_version=2,
+            snapshot=snapshot("shape:late"),
+            client_operation_id=uuid.uuid4(),
+        )
+
+    assert error.value.code == "CANVAS_BOARD_ARCHIVED"
+    assert PpmCanvasVersion.objects.filter(board=board).count() == 0
 
 
 def test_reorder_requires_every_active_board_and_replays(api_client, multiboard_project):

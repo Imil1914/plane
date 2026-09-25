@@ -1243,11 +1243,18 @@ export function createPpmCanvasNode({
   const payload: Record<string, unknown> = { ...common };
   if (kind === "note" || kind === "document" || kind === "group" || kind === "frame") payload.body = body;
   if (kind === "document") payload.format = "markdown";
-  if (kind === "checklist") payload.items = [];
+  if (kind === "checklist") payload.items = [{ id: createPortableId(), text: "", checked: false }];
   if (kind === "table") {
     const firstColumnId = createPortableId();
-    payload.columns = [{ id: firstColumnId, label: "Столбец" }];
-    payload.rows = [];
+    const secondColumnId = createPortableId();
+    payload.columns = [
+      { id: firstColumnId, label: "Столбец 1" },
+      { id: secondColumnId, label: "Столбец 2" },
+    ];
+    payload.rows = [
+      { id: createPortableId(), cells: { [firstColumnId]: "", [secondColumnId]: "" } },
+      { id: createPortableId(), cells: { [firstColumnId]: "", [secondColumnId]: "" } },
+    ];
   }
   if (kind === "code") {
     payload.code = body;

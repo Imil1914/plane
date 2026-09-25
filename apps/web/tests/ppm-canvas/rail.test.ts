@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CANVAS_RAIL_COLLAPSE_QUERY } from "@/components/ppm-canvas/board-workspace-state";
 
 describe("canvas rail", () => {
-  it("collapses below the 1280px breakpoint used by the rail's own collapsed-column CSS", () => {
+  it("uses the 1280px breakpoint for the expanded rail overlay", () => {
     expect(CANVAS_RAIL_COLLAPSE_QUERY).toBe("(max-width: 1279px)");
   });
 

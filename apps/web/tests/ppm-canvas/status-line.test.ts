@@ -92,6 +92,8 @@ describe("canvas status line (UX1.1 C1)", () => {
     expect(isCanvasCommandAllowedReadOnly("zoom-reset", true)).toBe(true);
     expect(isCanvasCommandAllowedReadOnly("zoom-reset", false)).toBe(false);
     expect(isCanvasCommandAllowedReadOnly("add-note", true)).toBe(false);
+    expect(isCanvasCommandAllowedReadOnly("open-tasks", true)).toBe(true);
+    expect(isCanvasCommandAllowedReadOnly("draw-rectangle", true)).toBe(false);
   });
 
   it("publishes zoom per board and skips unchanged values", () => {

@@ -18,6 +18,15 @@ import pytest
 from rest_framework import status
 
 from plane.db.models import FileAsset, User, Workspace, WorkspaceMember
+from plane.ppm_canvas.models import PpmGlobalAdmin
+from plane.tests.factories import ProjectFactory, ProjectMemberFactory
+
+
+def use_isolated_api_token(api_key_client, api_token):
+    """Keep these multi-request cases out of the shared 60/min test token."""
+    api_token.token = f"generic-asset-{uuid4().hex}"
+    api_token.save(update_fields=["token"])
+    api_key_client.credentials(HTTP_X_API_KEY=api_token.token)
 
 
 @pytest.fixture
@@ -136,8 +145,125 @@ class TestGenericAssetCrossWorkspaceIDOR:
         )
         url = self.detail_url(workspace.slug, asset.id)
 
-        response = api_key_client.patch(url, {"is_uploaded": True}, format="json")
+        with mock.patch("plane.utils.asset_upload.S3Storage") as storage:
+            storage.return_value.s3_client.head_object.return_value = {"ContentLength": asset.size}
+            response = api_key_client.patch(url, {"is_uploaded": True}, format="json")
 
         assert response.status_code == status.HTTP_204_NO_CONTENT, f"Got {response.status_code}: {response.data!r}"
         asset.refresh_from_db()
         assert asset.is_uploaded is True
+
+    @pytest.mark.django_db
+    def test_workspace_member_cannot_access_another_projects_asset(
+        self, api_key_client, api_token, workspace, create_user
+    ):
+        use_isolated_api_token(api_key_client, api_token)
+        project = ProjectFactory(workspace=workspace, identifier="DEN")
+        asset = FileAsset.objects.create(
+            attributes={"name": "private.png", "type": "image/png", "size": 16},
+            asset=f"{workspace.id}/private.png",
+            size=16,
+            workspace=workspace,
+            project=project,
+            created_by=create_user,
+            entity_type=FileAsset.EntityTypeContext.PROJECT_COVER,
+            is_uploaded=True,
+        )
+        detail = self.detail_url(workspace.slug, asset.id)
+        with mock.patch("plane.api.views.asset.S3Storage") as storage:
+            read = api_key_client.get(detail)
+        write = api_key_client.patch(detail, {"is_uploaded": False}, format="json")
+        upload = api_key_client.post(
+            self.list_url(workspace.slug),
+            {"name": "other.png", "type": "image/png", "size": 16, "project_id": str(project.id)},
+            format="json",
+        )
+
+        assert [read.status_code, write.status_code, upload.status_code] == [403, 403, 403]
+        storage.assert_not_called()
+        asset.refresh_from_db()
+        assert asset.is_uploaded is True
+        assert FileAsset.objects.filter(project=project).count() == 1
+
+    @pytest.mark.django_db
+    def test_project_member_can_upload_and_global_admin_can_read(
+        self, api_key_client, api_token, workspace, create_user
+    ):
+        use_isolated_api_token(api_key_client, api_token)
+        project = ProjectFactory(workspace=workspace, identifier="OWN")
+        membership = ProjectMemberFactory(workspace=workspace, project=project, member=create_user, role=15)
+        with mock.patch("plane.api.views.asset.S3Storage") as storage:
+            storage.return_value.generate_presigned_post.return_value = {"url": "https://storage.test", "fields": {}}
+            created = api_key_client.post(
+                self.list_url(workspace.slug),
+                {"name": "own.png", "type": "image/png", "size": 16, "project_id": str(project.id)},
+                format="json",
+            )
+        assert created.status_code == status.HTTP_200_OK
+        asset = FileAsset.objects.get(id=created.data["asset_id"])
+        assert asset.project_id == project.id
+
+        membership.is_active = False
+        membership.save(update_fields=["is_active"])
+        PpmGlobalAdmin.objects.create(user=create_user, reason="Protected test bootstrap")
+        asset.is_uploaded = True
+        asset.save(update_fields=["is_uploaded"])
+        with mock.patch("plane.api.views.asset.S3Storage") as storage:
+            storage.return_value.generate_presigned_url.return_value = "https://storage.test/download"
+            response = api_key_client.get(self.detail_url(workspace.slug, asset.id))
+        assert response.status_code == status.HTTP_200_OK
+
+        with mock.patch("plane.utils.asset_upload.S3Storage") as storage:
+            storage.return_value.s3_client.head_object.return_value = {"ContentLength": int(asset.size)}
+            updated = api_key_client.patch(
+                self.detail_url(workspace.slug, asset.id), {"is_uploaded": True}, format="json"
+            )
+        assert updated.status_code == status.HTTP_204_NO_CONTENT
+
+    @pytest.mark.django_db
+    def test_project_guest_can_read_but_not_change_asset(self, api_key_client, api_token, workspace, create_user):
+        use_isolated_api_token(api_key_client, api_token)
+        project = ProjectFactory(workspace=workspace, identifier="GST")
+        ProjectMemberFactory(workspace=workspace, project=project, member=create_user, role=5)
+        asset = FileAsset.objects.create(
+            attributes={"name": "view.png", "type": "image/png", "size": 16},
+            asset=f"{workspace.id}/view.png",
+            size=16,
+            workspace=workspace,
+            project=project,
+            created_by=create_user,
+            entity_type=FileAsset.EntityTypeContext.PROJECT_COVER,
+            is_uploaded=True,
+        )
+        with mock.patch("plane.api.views.asset.S3Storage") as storage:
+            storage.return_value.generate_presigned_url.return_value = "https://storage.test/download"
+            read = api_key_client.get(self.detail_url(workspace.slug, asset.id))
+        write = api_key_client.patch(self.detail_url(workspace.slug, asset.id), {"is_uploaded": False}, format="json")
+        upload = api_key_client.post(
+            self.list_url(workspace.slug),
+            {"name": "guest.png", "type": "image/png", "size": 16, "project_id": str(project.id)},
+            format="json",
+        )
+
+        assert [read.status_code, write.status_code, upload.status_code] == [200, 403, 403]
+
+    @pytest.mark.django_db
+    def test_download_signing_failure_is_not_reported_as_success(
+        self, api_key_client, api_token, workspace, create_user
+    ):
+        use_isolated_api_token(api_key_client, api_token)
+        asset = FileAsset.objects.create(
+            attributes={"name": "image.png", "type": "image/png", "size": 16},
+            asset=f"{workspace.id}/image.png",
+            size=16,
+            workspace=workspace,
+            created_by=create_user,
+            entity_type=FileAsset.EntityTypeContext.ISSUE_ATTACHMENT,
+            is_uploaded=True,
+        )
+        with mock.patch("plane.api.views.asset.S3Storage") as storage:
+            storage.return_value.generate_presigned_url.return_value = None
+            response = api_key_client.get(self.detail_url(workspace.slug, asset.id))
+
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        assert "asset_url" not in response.data
