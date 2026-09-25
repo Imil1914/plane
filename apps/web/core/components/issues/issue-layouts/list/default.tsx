@@ -30,6 +30,7 @@ import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { IssueBulkOperationsRoot } from "@/components/issues/bulk-operations";
 // plane web hooks
 import { useBulkOperationStatus } from "@/hooks/use-bulk-operation-status";
+import { usePpmLocalizedGroupColumns } from "@/components/ppm-tasks/use-localized-groups";
 // utils
 import type { GroupDropLocation } from "../utils";
 import { getGroupByColumns, isWorkspaceLevel, isSubGrouped } from "../utils";
@@ -87,12 +88,16 @@ export const List = observer(function List(props: IList) {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const groups = getGroupByColumns({
-    groupBy: group_by as GroupByColumnTypes,
-    includeNone: true,
-    isWorkspaceLevel: isWorkspaceLevel(storeType),
-    isEpic: isEpic,
-  });
+  const groups = usePpmLocalizedGroupColumns(
+    getGroupByColumns({
+      groupBy: group_by as GroupByColumnTypes,
+      includeNone: true,
+      isWorkspaceLevel: isWorkspaceLevel(storeType),
+      isEpic: isEpic,
+    }),
+    group_by,
+    isEpic
+  );
 
   // Enable Auto Scroll for Main Kanban
   useEffect(() => {

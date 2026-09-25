@@ -54,6 +54,7 @@ export const TopNavigationRoot = observer(function TopNavigationRoot() {
 
   return (
     <div
+      data-ppm-topbar=""
       className={cn("z-[27] flex min-h-10 w-full items-center bg-canvas px-3.5 transition-all duration-300", {
         "min-w-0 gap-1": isPpmShell,
         "px-2": !showLabel,
@@ -98,7 +99,7 @@ export const TopNavigationRoot = observer(function TopNavigationRoot() {
                 href: `/${workspaceSlug?.toString()}/notifications/`,
                 icon: (
                   <div className="relative">
-                    <InboxIcon className="size-5" />
+                    <InboxIcon className={isPpmShell ? "ppm-v2:size-4 size-5" : "size-5"} />
                     {totalNotifications > 0 && (
                       <span
                         aria-hidden="true"

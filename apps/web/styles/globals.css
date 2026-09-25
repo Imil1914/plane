@@ -1,5 +1,9 @@
 @import "@plane/tailwind-config/index.css";
 @import "@ppm/brand/tokens.css";
+@import "@ppm/brand/tokens-v2.css";
+@import "./ppm-v2/system.css";
+@import "./ppm-v2/shell.css";
+@import "./ppm-v2/tasks.css";
 @import "@plane/editor/styles";
 @import "@plane/propel/styles/react-day-picker.css";
 @import "./power-k.css";

@@ -9,12 +9,14 @@ import { observer } from "mobx-react";
 import { SUPPORTED_LANGUAGES, useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { CustomSelect } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { TimezoneSelect } from "@/components/global";
 import { StartOfWeekPreference } from "@/components/profile/start-of-week-preference";
 import { SettingsControlItem } from "@/components/settings/control-item";
 // hooks
 import { useUser, useUserProfile } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 export const ProfileSettingsLanguageAndTimezonePreferencesList = observer(
   function ProfileSettingsLanguageAndTimezonePreferencesList() {
@@ -27,19 +29,21 @@ export const ProfileSettingsLanguageAndTimezonePreferencesList = observer(
     const { updateUserProfile } = useUserProfile();
     // translation
     const { t } = useTranslation();
+    const ppmT = usePpmTranslation();
+    const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
     const handleTimezoneChange = async (value: string) => {
       try {
         await updateCurrentUser({ user_timezone: value });
         setToast({
-          title: "Success!",
-          message: "Timezone updated successfully",
+          title: isPpmShell ? ppmT("ux.preferences.success_title") : "Success!",
+          message: isPpmShell ? ppmT("ux.preferences.timezone_updated") : "Timezone updated successfully",
           type: TOAST_TYPE.SUCCESS,
         });
       } catch (_error) {
         setToast({
-          title: "Error!",
-          message: "Failed to update timezone",
+          title: isPpmShell ? ppmT("ux.preferences.error_title") : "Error!",
+          message: isPpmShell ? ppmT("ux.preferences.timezone_failed") : "Failed to update timezone",
           type: TOAST_TYPE.ERROR,
         });
       }
@@ -49,14 +53,14 @@ export const ProfileSettingsLanguageAndTimezonePreferencesList = observer(
       try {
         await updateUserProfile({ language: value });
         setToast({
-          title: "Success!",
-          message: "Language updated successfully",
+          title: isPpmShell ? ppmT("ux.preferences.success_title") : "Success!",
+          message: isPpmShell ? ppmT("ux.preferences.language_updated") : "Language updated successfully",
           type: TOAST_TYPE.SUCCESS,
         });
       } catch (_error) {
         setToast({
-          title: "Error!",
-          message: "Failed to update language",
+          title: isPpmShell ? ppmT("ux.preferences.error_title") : "Error!",
+          message: isPpmShell ? ppmT("ux.preferences.language_failed") : "Failed to update language",
           type: TOAST_TYPE.ERROR,
         });
       }
@@ -81,7 +85,13 @@ export const ProfileSettingsLanguageAndTimezonePreferencesList = observer(
           control={
             <CustomSelect
               value={profile?.language}
-              label={profile?.language ? getLanguageLabel(profile?.language) : "Select a language"}
+              label={
+                profile?.language
+                  ? getLanguageLabel(profile?.language)
+                  : isPpmShell
+                    ? ppmT("ux.preferences.select_language")
+                    : "Select a language"
+              }
               onChange={handleLanguageChange}
               buttonClassName="border border-subtle-1"
               className="rounded-md"
@@ -98,8 +108,10 @@ export const ProfileSettingsLanguageAndTimezonePreferencesList = observer(
         />
         <StartOfWeekPreference
           option={{
-            title: "First day of the week",
-            description: "This will change how all calendars in your app look.",
+            title: isPpmShell ? ppmT("ux.preferences.start_of_week") : "First day of the week",
+            description: isPpmShell
+              ? ppmT("ux.preferences.start_of_week_description")
+              : "This will change how all calendars in your app look.",
           }}
         />
       </div>

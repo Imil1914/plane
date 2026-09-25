@@ -1,0 +1,404 @@
+/*
+ * PPM design v2 («гибрид A+B», UX1.1): token layer.
+ * Values: docs/superpowers/plans/2026-09-24-ux11/drafts/TOKENS.md (source tokens.mjs); deviations are marked "UX1.1 F".
+ * Double gate: data-ppm-brand="enabled" AND data-ppm-design="v2" on <html>. PPM_DESIGN_V2=0 or
+ * localStorage.ppm_design="v1" leaves only tokens.css (wave 0) in effect.
+ * Specificity: role/bridge blocks are (0,1,0) like tokens.css and win by source order (this file is imported after it);
+ * the compact block is (0,2,0) and wins over the comfortable block regardless of order.
+ * Contract: src/__tests__/token-contract-v2.test.ts.
+ */
+
+@layer base {
+  /* ---------------- Constants: fonts, radii, spacing, motion, density «Удобная», typography, canvas geometry ---------------- */
+  :where(html[data-ppm-design="v2"])[data-ppm-brand="enabled"] {
+    --ppm-font-sans: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
+    --ppm-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    --ppm-font-stretch-narrow: 85%;
+
+    --ppm-radius-xs: 0.25rem; /* chips, keys, badges, citation chip */
+    --ppm-radius-sm: 0.375rem; /* buttons, fields, rows */
+    --ppm-radius-md: 0.5rem; /* cards, popovers, menus */
+    --ppm-radius-lg: 0.75rem; /* dialogs, large containers */
+    --ppm-radius-full: 999px;
+    --ppm-space-1: 0.25rem;
+    --ppm-space-2: 0.5rem;
+    --ppm-space-3: 0.75rem;
+    --ppm-space-4: 1rem;
+    --ppm-space-5: 1.25rem;
+    --ppm-space-6: 1.5rem;
+    --ppm-space-8: 2rem;
+    --ppm-motion-fast: 120ms;
+    --ppm-motion-base: 180ms;
+    --ppm-focus-ring: 0 0 0 2px var(--ppm-color-focus-gap), 0 0 0 4px var(--ppm-color-focus);
+
+    /* Density «Удобная» (TOKENS §5) */
+    --ppm-row-height: 2.25rem;
+    --ppm-group-row-height: 2.25rem;
+    --ppm-table-head-height: 2rem;
+    --ppm-sidebar-item-height: 2rem;
+    --ppm-topbar-height: 3rem;
+    --ppm-page-header-height: 3.25rem;
+    --ppm-sprint-strip-height: 3.75rem;
+    --ppm-toolbar-height: 2.75rem;
+    --ppm-control-height: 2rem;
+    --ppm-control-height-sm: 1.75rem;
+    --ppm-page-padding-x: 1.5rem;
+    --ppm-cell-gap: 0.75rem;
+    --ppm-panel-padding: 1.25rem;
+    --ppm-avatar-size: 1.25rem;
+    --ppm-font-size-content: var(--ppm-text-body-size); /* CONTRACTS §2 alias */
+
+    /* Typography «Удобная» (TOKENS §4): size / leading / weight / tracking per role */
+    --ppm-text-display-size: 1.75rem; /* 28px/36px */
+    --ppm-text-display-leading: 2.25rem;
+    --ppm-text-display-weight: 600;
+    --ppm-text-display-tracking: -0.02em;
+    --ppm-text-title-1-size: 1.25rem; /* 20px/28px */
+    --ppm-text-title-1-leading: 1.75rem;
+    --ppm-text-title-1-weight: 600;
+    --ppm-text-title-1-tracking: -0.01em;
+    --ppm-text-title-2-size: 1rem; /* 16px/24px */
+    --ppm-text-title-2-leading: 1.5rem;
+    --ppm-text-title-2-weight: 600;
+    --ppm-text-title-2-tracking: 0;
+    --ppm-text-title-3-size: 0.875rem; /* 14px/20px */
+    --ppm-text-title-3-leading: 1.25rem;
+    --ppm-text-title-3-weight: 600;
+    --ppm-text-title-3-tracking: 0;
+    --ppm-text-body-size: 0.875rem; /* 14px/20px */
+    --ppm-text-body-leading: 1.25rem;
+    --ppm-text-body-weight: 400;
+    --ppm-text-body-tracking: 0;
+    --ppm-text-ui-size: 0.8125rem; /* 13px/20px */
+    --ppm-text-ui-leading: 1.25rem;
+    --ppm-text-ui-weight: 500;
+    --ppm-text-ui-tracking: 0;
+    --ppm-text-meta-size: 0.75rem; /* 12px/16px */
+    --ppm-text-meta-leading: 1rem;
+    --ppm-text-meta-weight: 400;
+    --ppm-text-meta-tracking: 0;
+    --ppm-text-mono-size: 0.75rem; /* 12px/16px */
+    --ppm-text-mono-leading: 1rem;
+    --ppm-text-mono-weight: 400;
+    --ppm-text-mono-tracking: 0;
+    --ppm-text-mono-sm-size: 0.6875rem; /* 11px/16px */
+    --ppm-text-mono-sm-leading: 1rem;
+    --ppm-text-mono-sm-weight: 500;
+    --ppm-text-mono-sm-tracking: 0;
+
+    /* Canvas geometry (TOKENS §11): chrome follows density, board objects do not */
+    --ppm-sidebar-width: 14.5rem;
+    --ppm-sidebar-width-collapsed: 3rem;
+    --ppm-canvas-rail-width: 8.5rem;
+    --ppm-canvas-rail-width-collapsed: 3rem;
+    --ppm-inspector-width: 19rem;
+    --ppm-canvas-overlay-inset: 1rem;
+    --ppm-canvas-status-height: 2rem;
+    --ppm-canvas-grid-step: 16px;
+    --ppm-canvas-card-padding: 0.75rem;
+    --ppm-canvas-card-footer-height: 2.25rem;
+    --ppm-canvas-toolbar-height: 2rem;
+    --ppm-canvas-handle-size: 0.5rem;
+    --ppm-link-width: 1.5px;
+    --ppm-link-width-emphasis: 2px;
+    --ppm-link-width-visual: 1px;
+    --ppm-link-dash: 4 3;
+    --ppm-link-port-radius: 2.5px;
+    --ppm-link-arrow-length: 6px;
+    --ppm-link-arrow-width: 9px;
+    --ppm-link-bar-length: 11px;
+    --ppm-link-bar-thickness: 2px;
+    --ppm-link-chip-height: 1.25rem;
+  }
+
+  /* ---------------- Density «Компактная»: (0,2,0), wins over the block above in any order ---------------- */
+  :where(html[data-ppm-design="v2"])[data-ppm-brand="enabled"][data-ppm-density="compact"] {
+    --ppm-row-height: 2rem;
+    --ppm-group-row-height: 2rem;
+    --ppm-table-head-height: 1.75rem;
+    --ppm-sidebar-item-height: 1.75rem;
+    --ppm-topbar-height: 2.75rem;
+    --ppm-page-header-height: 2.75rem;
+    --ppm-sprint-strip-height: 3.25rem;
+    --ppm-toolbar-height: 2.5rem;
+    --ppm-control-height: 1.75rem;
+    --ppm-control-height-sm: 1.5rem;
+    --ppm-page-padding-x: 1rem;
+    --ppm-cell-gap: 0.5rem;
+    --ppm-panel-padding: 1rem;
+    --ppm-avatar-size: 1.125rem;
+    --ppm-canvas-status-height: 1.75rem;
+    --ppm-text-display-size: 1.5rem; /* 24px/32px */
+    --ppm-text-display-leading: 2rem;
+    --ppm-text-title-1-size: 1.125rem; /* 18px/24px */
+    --ppm-text-title-1-leading: 1.5rem;
+    --ppm-text-title-2-size: 0.9375rem; /* 15px/20px */
+    --ppm-text-title-2-leading: 1.25rem;
+    --ppm-text-title-3-size: 0.8125rem; /* 13px/20px */
+    --ppm-text-title-3-leading: 1.25rem;
+    --ppm-text-body-size: 0.8125rem; /* 13px/20px */
+    --ppm-text-body-leading: 1.25rem;
+    --ppm-text-mono-size: 0.6875rem; /* 11px/16px */
+    --ppm-text-mono-leading: 1rem;
+  }
+
+  /* ---------------- Light «бумага и тушь» (default) ---------------- */
+  :where(html[data-ppm-design="v2"])[data-ppm-brand="enabled"],
+  :where([data-ppm-brand="enabled"][data-ppm-design="v2"]) [data-theme*="light"] {
+    /* Surfaces */
+    --ppm-color-canvas: oklch(0.952 0.007 80); /* #f2efea */
+    --ppm-color-surface-1: oklch(0.986 0.004 80); /* #fcfaf7 */
+    --ppm-color-surface-2: oklch(0.966 0.006 80); /* #f6f3ef */
+    --ppm-color-layer-1: oklch(1 0 0); /* #ffffff */
+    --ppm-color-layer-1-hover: oklch(0.945 0.007 80); /* #efece8 */
+    --ppm-color-layer-1-selected: oklch(0.922 0.008 80); /* #e8e5df */
+    --ppm-color-layer-2: oklch(1 0 0); /* #ffffff */
+    --ppm-color-layer-2-hover: oklch(0.965 0.006 80); /* #f6f3ef */
+    --ppm-color-layer-2-selected: oklch(0.935 0.008 80); /* #ece9e4 */
+    --ppm-color-layer-3: oklch(0.972 0.006 80); /* #f8f5f1 */
+    --ppm-color-layer-3-hover: oklch(0.945 0.007 80); /* #efece8 */
+    --ppm-color-layer-3-selected: oklch(0.922 0.008 80); /* #e8e5df */
+    --ppm-color-layer-disabled: oklch(0.94 0.006 80); /* #edebe7 */
+    --ppm-color-alpha-hover: oklch(0.22 0.008 70 / 5%);
+    --ppm-color-alpha-active: oklch(0.22 0.008 70 / 8%);
+    --ppm-color-alpha-selected: oklch(0.22 0.008 70 / 10%);
+    /* Borders: border is decorative; control/strong/emphasis are meaningful (>= 3:1) */
+    --ppm-color-border: oklch(0.888 0.008 70); /* #ded9d4 */
+    --ppm-color-border-control: oklch(0.6 0.01 70); /* #847f7a */
+    --ppm-color-border-strong: oklch(0.54 0.01 70); /* #736e69 */
+    --ppm-color-border-emphasis: oklch(0.5 0.01 70); /* #67625d */
+    /* Text and icons */
+    --ppm-color-text: oklch(0.22 0.008 70); /* #1d1a17 */
+    --ppm-color-text-secondary: oklch(0.38 0.01 70); /* #46423d */
+    --ppm-color-text-muted: oklch(0.48 0.01 70); /* #615d58 */
+    --ppm-color-text-placeholder: oklch(0.5 0.01 70); /* #67625d */
+    --ppm-color-icon-subtle: oklch(0.56 0.01 70); /* #78746e */
+    --ppm-color-text-disabled: oklch(0.68 0.008 70); /* #9c9793 */
+    /* One accent: cyan 212 (dark) / ink 228 (light). Focus != selection. */
+    --ppm-color-accent: oklch(0.49 0.09 228); /* #126a88 */
+    --ppm-color-accent-hover: oklch(0.44 0.085 228); /* #025b77 */
+    --ppm-color-accent-active: oklch(0.4 0.08 228); /* #004f69 */
+    --ppm-color-accent-text: oklch(0.49 0.09 228); /* #126a88 */
+    --ppm-color-accent-text-hover: oklch(0.44 0.085 228); /* #025b77 */
+    --ppm-color-icon-accent-subtle: oklch(0.55 0.09 228); /* #2b7b9b */
+    --ppm-color-on-accent: oklch(0.99 0.004 80); /* #fdfbf9 */
+    --ppm-color-focus: oklch(0.44 0.085 228); /* #025b77 */
+    --ppm-color-focus-gap: var(--ppm-color-surface-1);
+    --ppm-color-selection: oklch(0.49 0.09 228); /* #126a88 */
+    --ppm-color-selection-bg: oklch(0.938 0.007 197); /* #e5ecec = accent 10% over surface-1 */
+    /* Signal: red only for blockers, conflicts and destructive actions */
+    --ppm-color-danger: oklch(0.52 0.165 27); /* #b53530 */
+    --ppm-color-danger-hover: oklch(0.47 0.155 27); /* #a02a26, UX1.1 F: derived, on-danger >= 4.5:1 */
+    --ppm-color-danger-active: oklch(0.43 0.145 27); /* #8f221f, UX1.1 F: derived, on-danger >= 4.5:1 */
+    --ppm-color-on-danger: oklch(0.99 0.004 80); /* #fdfbf9 */
+    --ppm-color-danger-text: oklch(0.52 0.165 27); /* #b53530 */
+    --ppm-color-danger-line: oklch(0.56 0.17 28); /* #c44037 */
+    --ppm-color-warning: oklch(0.56 0.115 68); /* #a06616 */
+    --ppm-color-success: oklch(0.53 0.115 150); /* #307e46 */
+    /* Task statuses: glyph shape + colour + word */
+    --ppm-status-backlog: var(--ppm-color-icon-subtle);
+    --ppm-status-todo: var(--ppm-color-text-secondary);
+    --ppm-status-progress: oklch(0.6 0.12 70); /* #ad721c */
+    --ppm-status-review: oklch(0.53 0.12 305); /* #7c58a3 */
+    --ppm-status-done: oklch(0.55 0.12 150); /* #33854a */
+    --ppm-status-cancelled: var(--ppm-color-icon-subtle);
+    /* Object types: equal lightness */
+    --ppm-type-task: oklch(0.52 0.08 265); /* #526897 */
+    --ppm-type-doc: oklch(0.52 0.08 330); /* #83587f */
+    --ppm-type-file: oklch(0.52 0.08 95); /* #77682e */
+    --ppm-type-code: oklch(0.52 0.08 40); /* #905845 */
+    --ppm-type-decision: oklch(0.52 0.08 160); /* #3b7759 */
+    /* Team colour: project avatar only */
+    --ppm-project-avatar-bg: oklch(0.91 0.045 135); /* #d5e9cb */
+    --ppm-project-avatar-fg: oklch(0.4 0.08 135); /* #345123 */
+    /* Canvas */
+    --ppm-color-board: oklch(0.975 0.008 80); /* #faf6f1 */
+    --ppm-color-board-grid: oklch(0.87 0.012 80); /* #d8d3cc */
+    --ppm-color-section-tick: oklch(0.56 0.01 70); /* #78746e */
+    --ppm-color-link: oklch(0.48 0.01 70); /* #615d58 */
+    --ppm-color-link-visual: oklch(0.6 0.01 70); /* #847f7a */
+    --ppm-color-link-emphasis: var(--ppm-color-text-secondary);
+    --ppm-color-card-live: var(--ppm-color-surface-1);
+    --ppm-color-card-own: var(--ppm-color-layer-1);
+    --ppm-color-card-found-border: var(--ppm-color-border-control);
+    --ppm-shadow-popover: 0 1px 2px oklch(0.22 0.008 70 / 0.08), 0 8px 24px -4px oklch(0.22 0.008 70 / 0.16);
+    /* Wave-0 canvas node roles re-pointed to the v2 roles (TOKENS §2) */
+    --ppm-node-task: var(--ppm-type-task);
+    --ppm-node-decision: var(--ppm-type-decision);
+    --ppm-node-note: var(--ppm-color-text-secondary);
+    --ppm-node-risk: var(--ppm-color-danger-text);
+    --ppm-node-project: var(--ppm-project-avatar-fg);
+    /* Plane neutral and brand scales (TOKENS §3): Plane paints unbridged places and high-contrast borders through them */
+    --neutral-white: oklch(1 0 0); /* #ffffff */
+    --neutral-100: oklch(0.986 0.004 80); /* #fcfaf7 */
+    --neutral-200: oklch(0.966 0.006 80); /* #f6f3ef */
+    --neutral-300: oklch(0.952 0.007 80); /* #f2efea */
+    --neutral-400: oklch(0.935 0.008 80); /* #ece9e4 */
+    --neutral-500: oklch(0.922 0.008 80); /* #e8e5df */
+    --neutral-600: oklch(0.888 0.008 70); /* #ded9d4 */
+    --neutral-700: oklch(0.68 0.008 70); /* #9c9793 */
+    --neutral-800: oklch(0.6 0.01 70); /* #847f7a */
+    --neutral-900: oklch(0.5 0.01 70); /* #67625d */
+    --neutral-1000: oklch(0.48 0.01 70); /* #615d58 */
+    --neutral-1100: oklch(0.38 0.01 70); /* #46423d */
+    --neutral-1200: oklch(0.22 0.008 70); /* #1d1a17 */
+    --neutral-black: oklch(0.17 0.006 70); /* #110f0d */
+    --brand-100: oklch(0.975 0.012 228); /* #eff9fd */
+    --brand-200: oklch(0.95 0.025 228); /* #def2fc */
+    --brand-300: oklch(0.91 0.045 228); /* #c3e8f9 */
+    --brand-400: oklch(0.84 0.065 228); /* #9ed4ec */
+    --brand-500: oklch(0.72 0.085 228); /* #68afcf */
+    --brand-600: oklch(0.6 0.09 228); /* #3c8baa */
+    --brand-700: oklch(0.49 0.09 228); /* #126a88 */
+    --brand-800: oklch(0.44 0.085 228); /* #025b77 */
+    --brand-900: oklch(0.4 0.08 228); /* #004f69 */
+    --brand-1000: oklch(0.34 0.062 228); /* #083e51 */
+    --brand-1100: oklch(0.28 0.055 228); /* #002e3e */
+    --brand-1200: oklch(0.22 0.04 228); /* #021e29 */
+    --brand-default: var(--ppm-color-accent-text);
+  }
+
+  /* ---------------- Dark «Тихий графит» ---------------- */
+  :where(html[data-ppm-design="v2"])[data-ppm-brand="enabled"]:where([data-theme*="dark"]),
+  :where([data-ppm-brand="enabled"][data-ppm-design="v2"]) [data-theme*="dark"] {
+    /* Surfaces */
+    --ppm-color-canvas: oklch(0.172 0.004 70); /* #11100e */
+    --ppm-color-surface-1: oklch(0.2 0.005 70); /* #181614 */
+    --ppm-color-surface-2: oklch(0.226 0.006 70); /* #1e1c19 */
+    --ppm-color-layer-1: oklch(0.252 0.006 70); /* #24221f */
+    --ppm-color-layer-1-hover: oklch(0.276 0.007 70); /* #2a2724 */
+    --ppm-color-layer-1-selected: oklch(0.302 0.007 70); /* #312e2b */
+    /* layer-2 = layer-1 (TOKENS §1 bridge column); border-control on inputs stays >= 3:1 */
+    --ppm-color-layer-2: oklch(0.252 0.006 70); /* #24221f */
+    --ppm-color-layer-2-hover: oklch(0.302 0.007 70); /* #312e2b */
+    --ppm-color-layer-2-selected: oklch(0.326 0.008 70); /* #373430 */
+    --ppm-color-layer-3: oklch(0.29 0.007 70); /* #2e2b28 */
+    --ppm-color-layer-3-hover: oklch(0.314 0.008 70); /* #34312d */
+    --ppm-color-layer-3-selected: oklch(0.326 0.008 70); /* #373430, TOKENS 0.338 -> 0.326: placeholder text >= 4.5:1 */
+    --ppm-color-layer-disabled: oklch(0.276 0.007 70); /* #2a2724 */
+    --ppm-color-alpha-hover: oklch(0.955 0.004 70 / 6%);
+    --ppm-color-alpha-active: oklch(0.955 0.004 70 / 9%);
+    --ppm-color-alpha-selected: oklch(0.955 0.004 70 / 12%);
+    /* Borders: border is decorative; control/strong/emphasis are meaningful (>= 3:1) */
+    --ppm-color-border: oklch(0.34 0.008 70); /* #3b3734 */
+    --ppm-color-border-control: oklch(0.54 0.008 70); /* #726e6a */
+    --ppm-color-border-strong: oklch(0.6 0.008 70); /* #837f7b */
+    --ppm-color-border-emphasis: oklch(0.66 0.008 70); /* #95918d */
+    /* Text and icons */
+    --ppm-color-text: oklch(0.955 0.004 70); /* #f2f0ed */
+    --ppm-color-text-secondary: oklch(0.84 0.006 70); /* #cdcac6 */
+    --ppm-color-text-muted: oklch(0.73 0.007 70); /* #aba7a3 */
+    --ppm-color-text-placeholder: oklch(0.7 0.007 70); /* #a19e9a */
+    --ppm-color-icon-subtle: oklch(0.63 0.008 70); /* #8c8884 */
+    --ppm-color-text-disabled: oklch(0.52 0.008 70); /* #6c6864 */
+    /* One accent: cyan 212 (dark) / ink 228 (light). Focus != selection. */
+    --ppm-color-accent: oklch(0.8 0.1 212); /* #67cfe3 */
+    --ppm-color-accent-hover: oklch(0.86 0.085 212); /* #8ce0f1 */
+    --ppm-color-accent-active: oklch(0.74 0.1 212); /* #52bccf */
+    --ppm-color-accent-text: oklch(0.8 0.1 212); /* #67cfe3 */
+    --ppm-color-accent-text-hover: oklch(0.86 0.085 212); /* #8ce0f1 */
+    --ppm-color-icon-accent-subtle: oklch(0.86 0.085 212); /* #8ce0f1 */
+    --ppm-color-on-accent: oklch(0.2 0.03 212); /* #031a1e */
+    --ppm-color-focus: oklch(0.86 0.085 212); /* #8ce0f1 */
+    --ppm-color-focus-gap: var(--ppm-color-surface-1);
+    --ppm-color-selection: oklch(0.8 0.1 212); /* #67cfe3 */
+    --ppm-color-selection-bg: oklch(0.298 0.018 202); /* #233031 = accent 14% over surface-1 */
+    /* Signal: red only for blockers, conflicts and destructive actions */
+    --ppm-color-danger: oklch(0.5 0.135 25); /* #a23d3a */
+    --ppm-color-danger-hover: oklch(0.46 0.13 25); /* #933331, UX1.1 F: derived, on-danger >= 4.5:1 */
+    --ppm-color-danger-active: oklch(0.43 0.125 25); /* #872c2a, UX1.1 F: derived, on-danger >= 4.5:1 */
+    --ppm-color-on-danger: oklch(0.955 0.004 70); /* #f2f0ed */
+    --ppm-color-danger-text: oklch(0.74 0.12 25); /* #ed8c84 */
+    --ppm-color-danger-line: oklch(0.68 0.13 25); /* #dd766f */
+    --ppm-color-warning: oklch(0.8 0.11 75); /* #e7b369 */
+    --ppm-color-success: oklch(0.76 0.11 150); /* #7cc58c */
+    /* Task statuses: glyph shape + colour + word */
+    --ppm-status-backlog: var(--ppm-color-icon-subtle);
+    --ppm-status-todo: var(--ppm-color-text-secondary);
+    --ppm-status-progress: oklch(0.8 0.11 75); /* #e7b369 */
+    --ppm-status-review: oklch(0.76 0.1 300); /* #bba3e8 */
+    --ppm-status-done: oklch(0.76 0.11 150); /* #7cc58c */
+    --ppm-status-cancelled: var(--ppm-color-icon-subtle);
+    /* Object types: equal lightness */
+    --ppm-type-task: oklch(0.76 0.07 265); /* #9bb1de */
+    --ppm-type-doc: oklch(0.76 0.07 330); /* #cba1c6 */
+    --ppm-type-file: oklch(0.76 0.07 95); /* #bfb17e */
+    --ppm-type-code: oklch(0.76 0.07 40); /* #d9a390 */
+    --ppm-type-decision: oklch(0.76 0.07 160); /* #8abfa2 */
+    /* Team colour: project avatar only */
+    --ppm-project-avatar-bg: oklch(0.34 0.045 135); /* #2e3d25 */
+    --ppm-project-avatar-fg: oklch(0.86 0.08 135); /* #bbdda9 */
+    /* Canvas */
+    --ppm-color-board: oklch(0.172 0.004 70); /* #11100e */
+    --ppm-color-board-grid: oklch(0.3 0.006 70); /* #302d2b */
+    --ppm-color-section-tick: oklch(0.63 0.008 70); /* #8c8884 */
+    --ppm-color-link: oklch(0.73 0.007 70); /* #aba7a3 */
+    --ppm-color-link-visual: oklch(0.54 0.008 70); /* #726e6a */
+    --ppm-color-link-emphasis: var(--ppm-color-text-secondary);
+    --ppm-color-card-live: var(--ppm-color-surface-1);
+    --ppm-color-card-own: var(--ppm-color-layer-1);
+    --ppm-color-card-found-border: var(--ppm-color-border-control);
+    --ppm-shadow-popover: 0 1px 2px oklch(0 0 0 / 0.4), 0 8px 24px oklch(0 0 0 / 0.45);
+    /* Wave-0 canvas node roles re-pointed to the v2 roles (TOKENS §2) */
+    --ppm-node-task: var(--ppm-type-task);
+    --ppm-node-decision: var(--ppm-type-decision);
+    --ppm-node-note: var(--ppm-color-text-secondary);
+    --ppm-node-risk: var(--ppm-color-danger-text);
+    --ppm-node-project: var(--ppm-project-avatar-fg);
+    /* Plane neutral and brand scales (TOKENS §3): Plane paints unbridged places and high-contrast borders through them */
+    --neutral-black: oklch(0.15 0.003 70); /* #0c0b0a */
+    --neutral-100: oklch(0.172 0.004 70); /* #11100e */
+    --neutral-200: oklch(0.2 0.005 70); /* #181614 */
+    --neutral-300: oklch(0.226 0.006 70); /* #1e1c19 */
+    --neutral-400: oklch(0.252 0.006 70); /* #24221f */
+    --neutral-500: oklch(0.302 0.007 70); /* #312e2b */
+    --neutral-600: oklch(0.34 0.008 70); /* #3b3734 */
+    --neutral-700: oklch(0.52 0.008 70); /* #6c6864 */
+    --neutral-800: oklch(0.6 0.008 70); /* #837f7b */
+    --neutral-900: oklch(0.7 0.007 70); /* #a19e9a */
+    --neutral-1000: oklch(0.73 0.007 70); /* #aba7a3 */
+    --neutral-1100: oklch(0.84 0.006 70); /* #cdcac6 */
+    --neutral-1200: oklch(0.955 0.004 70); /* #f2f0ed */
+    --neutral-white: oklch(0.985 0.003 70); /* #fbfaf8 */
+    --brand-100: oklch(0.27 0.04 212); /* #092c32 */
+    --brand-200: oklch(0.32 0.05 212); /* #0a3942 */
+    --brand-300: oklch(0.4 0.065 212); /* #0d515c */
+    --brand-400: oklch(0.5 0.08 212); /* #196f7e */
+    --brand-500: oklch(0.6 0.09 212); /* #2f8e9f */
+    --brand-600: oklch(0.7 0.1 212); /* #44afc3 */
+    --brand-700: oklch(0.8 0.1 212); /* #67cfe3 */
+    --brand-800: oklch(0.86 0.085 212); /* #8ce0f1 */
+    --brand-900: oklch(0.91 0.06 212); /* #b4edf9 */
+    --brand-1000: oklch(0.94 0.04 212); /* #cef3fb */
+    --brand-1100: oklch(0.965 0.025 212); /* #e1f8fd */
+    --brand-1200: oklch(0.985 0.012 212); /* #f2fcff */
+    --brand-default: var(--ppm-color-accent);
+  }
+
+  /* ---------------- v2 bridge additions (theme-agnostic; the wave-0 bridge in tokens.css stays in force) ---------------- */
+  :where(html[data-ppm-design="v2"])[data-ppm-brand="enabled"],
+  :where([data-ppm-brand="enabled"][data-ppm-design="v2"]) :is([data-theme*="light"], [data-theme*="dark"]) {
+    --bg-accent-subtle: var(--ppm-color-selection-bg);
+    --bg-danger-primary: var(--ppm-color-danger);
+    --bg-danger-primary-hover: var(--ppm-color-danger-hover);
+    --bg-danger-primary-active: var(--ppm-color-danger-active);
+    --bg-danger-primary-selected: var(--ppm-color-danger-active);
+    --txt-on-accent: var(--ppm-color-on-accent);
+    --txt-on-color: var(--ppm-color-on-danger);
+    --txt-danger-primary: var(--ppm-color-danger-text);
+    --txt-warning-primary: var(--ppm-color-warning);
+    --txt-success-primary: var(--ppm-color-success);
+  }
+
+  /* Bright success/warning fills keep dark ink in v2 too: the v2 light on-accent is a light label (tokens.css
+     points --txt-on-color at --txt-on-accent for these fills). */
+  :where([data-ppm-brand="enabled"][data-ppm-design="v2"]) :where(.bg-success-primary, .bg-warning-primary) {
+    --txt-on-color: oklch(0.2 0.03 212); /* #031a1e */
+  }
+
+  /* Borders only outside Plane's high-contrast themes (same rule as tokens.css). */
+  :where(html[data-ppm-design="v2"])[data-ppm-brand="enabled"]:not([data-theme$="-contrast"]),
+  :where([data-ppm-brand="enabled"][data-ppm-design="v2"]) :is([data-theme="light"], [data-theme="dark"]) {
+    --border-danger-strong: var(--ppm-color-danger-line);
+  }
+}

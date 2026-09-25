@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
 import { dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
 import { observer } from "mobx-react";
+import { useParams } from "next/navigation";
 // plane imports
 import { DRAG_ALLOWED_GROUPS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -33,6 +34,10 @@ import { useProjectState } from "@/hooks/store/use-project-state";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 import { useIssuesStore } from "@/hooks/use-issue-layout-store";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
+import { usePpmExpandedCancelledGroups } from "@/components/ppm-tasks/use-cancelled-groups";
+import { isPpmCancelledGroup } from "@/components/ppm-tasks/list-groups";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { usePpmDesignV2 } from "@/lib/ppm-design";
 // local imports
 import { GroupDragOverlay } from "../group-drag-overlay";
 import { ListQuickAddIssueButton, QuickAddIssueRoot } from "../quick-add";
@@ -102,10 +107,21 @@ export const ListGroup = observer(function ListGroup(props: Props) {
 
   const [isDraggingOverColumn, setIsDraggingOverColumn] = useState(false);
   const [dragColumnOrientation, setDragColumnOrientation] = useState<"justify-start" | "justify-end">("justify-start");
-  const isExpanded = !collapsedGroups?.group_by.includes(group.id);
   const groupRef = useRef<HTMLDivElement | null>(null);
   const { t } = useTranslation();
   const projectState = useProjectState();
+  const isDesignV2 = usePpmDesignV2();
+  const ppmT = usePpmTranslation();
+  const { projectId: routerProjectId } = useParams();
+  const projectId = routerProjectId?.toString();
+  const cancelledGroups = usePpmExpandedCancelledGroups(projectId);
+  const isCancelledGroup =
+    isDesignV2 && !!projectId && isPpmCancelledGroup(group_by, group.id, (id) => projectState.getStateById(id)?.group);
+  const isExpanded = isCancelledGroup
+    ? cancelledGroups.isExpanded(group.id)
+    : !collapsedGroups?.group_by.includes(group.id);
+  const handleToggleGroup = (value: string) =>
+    isCancelledGroup ? cancelledGroups.toggle(value) : handleCollapsedGroups(value);
 
   const {
     issues: { getGroupIssueCount, getPaginationData, getIssueLoader },
@@ -232,7 +248,8 @@ export const ListGroup = observer(function ListGroup(props: Props) {
           highlightIssueOnDrop(getIssueBlockId(source.id, destination?.groupId), orderBy !== "sort_order");
 
           if (!isExpanded) {
-            handleCollapsedGroups(group.id);
+            if (isCancelledGroup) cancelledGroups.expand(group.id);
+            else handleCollapsedGroups(group.id);
           }
         },
       })
@@ -264,9 +281,14 @@ export const ListGroup = observer(function ListGroup(props: Props) {
       })}
     >
       <Row
-        className={cn("w-full flex-shrink-0 border-b border-subtle bg-layer-1 py-1 pr-3 hover:bg-layer-1-hover", {
-          "sticky top-0 z-[2]": isExpanded && groupIssueCount > 0,
-        })}
+        className={cn(
+          isDesignV2
+            ? "ppm-task-group-row w-full flex-shrink-0 border-b border-subtle bg-surface-2 pr-3"
+            : "w-full flex-shrink-0 border-b border-subtle bg-layer-1 py-1 pr-3 hover:bg-layer-1-hover",
+          {
+            "sticky top-0 z-[2]": isExpanded && groupIssueCount > 0,
+          }
+        )}
       >
         <HeaderGroupByCard
           groupID={group.id}
@@ -281,7 +303,11 @@ export const ListGroup = observer(function ListGroup(props: Props) {
           }
           addIssuesToView={addIssuesToView}
           selectionHelpers={selectionHelpers}
-          handleCollapsedGroups={handleCollapsedGroups}
+          handleCollapsedGroups={isDesignV2 ? handleToggleGroup : handleCollapsedGroups}
+          isExpanded={isDesignV2 && group_by ? isExpanded : undefined}
+          ppmEmptyHint={
+            isDesignV2 && isCancelledGroup && groupIssueCount === 0 ? ppmT("tasks.group.cancelled_empty") : undefined
+          }
           isEpic={isEpic}
         />
       </Row>

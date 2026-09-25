@@ -11,6 +11,7 @@ import { useParams, usePathname } from "next/navigation";
 import { useSearchParams } from "react-router";
 import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { cn } from "@plane/utils";
 import { isPpmShellEnabled } from "@ppm/brand";
 import { isPpmCanvasEnabled } from "@ppm/canvas";
 // plane ui
@@ -23,9 +24,13 @@ import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { usePpmAdminAccess } from "@/hooks/use-ppm-admin-access";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { usePpmDesignV2 } from "@/lib/ppm-design";
 import { getPpmAdminModeNavigationHref } from "@/helpers/ppm-admin-mode.helper";
 import {
   buildProjectNavigationItems,
+  groupProjectNavigationItems,
+  PPM_NAVIGATION_SECTION_LABEL_KEYS,
+  type TPpmNavigationSection,
   type TProjectNavigationItem,
 } from "@/components/navigation/project-navigation-items";
 
@@ -72,6 +77,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
 
   const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   const isPpmCanvas = isPpmCanvasEnabled(process.env.PPM_CANVAS_ENABLED, isPpmShell);
+  const isDesignV2 = usePpmDesignV2();
 
   // memoized navigation items and adding additional navigation items
   const navigationItemsMemo = useMemo(() => {
@@ -113,39 +119,79 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
 
   if (!project) return null;
 
+  const renderItem = (item: TNavigationItem) => {
+    const shouldShowCount = item.key === "intake" && (project.intake_count ?? 0) > 0;
+    const itemIsActive = !!isActive(item);
+
+    return (
+      <Link
+        key={item.key}
+        href={getPpmAdminModeNavigationHref(item.href, isGlobalAdmin, searchParams.get("ppm_admin_mode"))}
+        aria-current={itemIsActive ? "page" : undefined}
+        className="block rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
+        onClick={handleProjectClick}
+      >
+        <SidebarNavItem isActive={itemIsActive}>
+          <div className="flex w-full items-center justify-between gap-1.5 py-[1px]">
+            <div className="flex items-center gap-1.5">
+              <item.icon className={`size-4 flex-shrink-0 ${item.name === "Intake" ? "stroke-1" : "stroke-[1.5]"}`} />
+              <span className={isPpmShell && isDesignV2 ? "text-13 leading-5 font-medium" : "text-11 font-medium"}>
+                {item.ppmLabelKey ? ppmT(item.ppmLabelKey) : t(item.i18n_key)}
+              </span>
+            </div>
+            {shouldShowCount && <span className="text-11 font-medium text-tertiary">{project.intake_count}</span>}
+          </div>
+        </SidebarNavItem>
+      </Link>
+    );
+  };
+
+  // Wave 0 and upstream: one flat list, markup unchanged.
+  if (!(isPpmShell && isDesignV2))
+    return (
+      <nav aria-label={isPpmShell ? ppmT("navigation.project") : t("project")} className="flex flex-col gap-0.5">
+        {navigationItemsMemo.map((item) => {
+          if (!item.shouldRender) return;
+
+          const hasAccess = allowPermissions(item.access, EUserPermissionsLevel.PROJECT, workspaceSlug, project.id);
+          if (!hasAccess) return null;
+
+          return renderItem(item);
+        })}
+      </nav>
+    );
+
+  // UX1.1 v2: the same items and access rules, grouped «Работа» / «Знания» (spec C, mockup H-Tasks).
+  const runs = groupProjectNavigationItems(
+    navigationItemsMemo.filter(
+      (item) =>
+        item.shouldRender && allowPermissions(item.access, EUserPermissionsLevel.PROJECT, workspaceSlug, project.id)
+    )
+  );
+  const isLabelled = (section?: TPpmNavigationSection) => !!(section && PPM_NAVIGATION_SECTION_LABEL_KEYS[section]);
+
   return (
-    <nav aria-label={isPpmShell ? ppmT("navigation.project") : t("project")} className="flex flex-col gap-0.5">
-      {navigationItemsMemo.map((item) => {
-        if (!item.shouldRender) return;
+    <nav aria-label={ppmT("navigation.project")} className="flex flex-col gap-0.5">
+      {runs.map((run, index) => {
+        const labelKey = run.section ? PPM_NAVIGATION_SECTION_LABEL_KEYS[run.section] : undefined;
+        if (!labelKey)
+          return (
+            <div
+              key={run.key}
+              className={cn("flex flex-col gap-0.5", { "mt-2": index > 0 && isLabelled(runs[index - 1].section) })}
+            >
+              {run.items.map(renderItem)}
+            </div>
+          );
 
-        const hasAccess = allowPermissions(item.access, EUserPermissionsLevel.PROJECT, workspaceSlug, project.id);
-        if (!hasAccess) return null;
-
-        const shouldShowCount = item.key === "intake" && (project.intake_count ?? 0) > 0;
-        const itemIsActive = !!isActive(item);
-
+        const labelId = `ppm-project-nav-${project.id}-${run.section}`;
         return (
-          <Link
-            key={item.key}
-            href={getPpmAdminModeNavigationHref(item.href, isGlobalAdmin, searchParams.get("ppm_admin_mode"))}
-            aria-current={itemIsActive ? "page" : undefined}
-            className="block rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-strong"
-            onClick={handleProjectClick}
-          >
-            <SidebarNavItem isActive={itemIsActive}>
-              <div className="flex w-full items-center justify-between gap-1.5 py-[1px]">
-                <div className="flex items-center gap-1.5">
-                  <item.icon
-                    className={`size-4 flex-shrink-0 ${item.name === "Intake" ? "stroke-1" : "stroke-[1.5]"}`}
-                  />
-                  <span className="text-11 font-medium">
-                    {item.ppmLabelKey ? ppmT(item.ppmLabelKey) : t(item.i18n_key)}
-                  </span>
-                </div>
-                {shouldShowCount && <span className="text-11 font-medium text-tertiary">{project.intake_count}</span>}
-              </div>
-            </SidebarNavItem>
-          </Link>
+          <div key={run.key} role="group" aria-labelledby={labelId} className="flex flex-col gap-0.5">
+            <p id={labelId} className="flex h-7 items-end px-2 pb-1 text-12 leading-4 font-medium text-tertiary">
+              {ppmT(labelKey)}
+            </p>
+            {run.items.map(renderItem)}
+          </div>
         );
       })}
     </nav>

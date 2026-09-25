@@ -1,0 +1,573 @@
+/*
+ * PPM design v2 («гибрид A+B», UX1.1): Tasks lane (T) stylesheet. Owner: lane T. Imported by
+ * apps/web/styles/globals.css WITHOUT a cascade layer; every rule starts with :where(html[data-ppm-design="v2"]).
+ */
+
+/* UX1.1 · линия T («Задачи»). Все правила — под :where(html[data-ppm-design="v2"]), файл подключён без слоя.
+   Здесь нельзя задавать display элементам, которые прячет утилита hidden. */
+
+/* ─── T1 · строки и группы ─── */
+:where(html[data-ppm-design="v2"]) .ppm-task-row {
+  min-height: var(--ppm-row-height, 2.75rem);
+}
+
+@media (min-width: 48rem) {
+  :where(html[data-ppm-design="v2"]) .ppm-task-row.md\:flex-row {
+    padding-block: 0;
+  }
+}
+
+@media (min-width: 64rem) {
+  :where(html[data-ppm-design="v2"]) .ppm-task-row.lg\:flex-row {
+    padding-block: 0;
+  }
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-task-row-placeholder {
+  height: var(--ppm-row-height, 2.75rem);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-task-row[data-ppm-selected="true"] {
+  background-color: var(--ppm-color-selection-bg, var(--bg-accent-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-task-row[data-ppm-peeked="true"] {
+  background-color: var(--ppm-color-selection-bg, var(--bg-accent-subtle));
+  box-shadow: inset 2px 0 0 var(--ppm-color-selection, var(--border-accent-strong));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-task-group-row {
+  display: flex;
+  align-items: center;
+  min-height: var(--ppm-group-row-height, 2.25rem);
+}
+
+/* ─── T2 · шапка: переключатель вида, шкала спринта ───
+   Клавиши «N I» у «Новой задачи» рисует PpmKbdHint (ppm-shell/kbd-hint.tsx, фаза F) — своего .ppm-kbd здесь нет. */
+:where(html[data-ppm-design="v2"]) .ppm-layout-switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--ppm-control-height-sm, 1.75rem);
+  padding: 0 1px;
+  border: 1px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-layout-switch__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: calc(var(--ppm-control-height-sm, 1.75rem) - 4px);
+  padding: 0 8px;
+  border-radius: var(--ppm-radius-xs, 0.25rem);
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-layout-switch__item:hover {
+  background-color: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-layout-switch__item[aria-pressed="true"] {
+  background-color: var(--ppm-color-layer-1-selected, var(--bg-layer-1-selected));
+  color: var(--ppm-color-text, var(--txt-primary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  box-sizing: border-box;
+  height: var(--ppm-sprint-strip-height, 3.75rem);
+  margin: 0.75rem var(--ppm-page-padding-x, 1.5rem) 0;
+  padding: 0 16px 0 12px;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  background-color: var(--ppm-color-surface-1, var(--bg-surface-1));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__name {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-width: 88px;
+  padding: 2px 4px;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  text-decoration: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__name:hover {
+  background-color: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__title,
+:where(html[data-ppm-design="v2"]) .ppm-sprint__day {
+  color: var(--ppm-color-text, var(--txt-primary));
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__day {
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__range,
+:where(html[data-ppm-design="v2"]) .ppm-sprint__left {
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+  line-height: 1rem;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  margin-inline: 8px;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__elapsed {
+  position: absolute;
+  top: 18px;
+  left: 0;
+  height: 7px;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--ppm-color-border-control, var(--border-subtle-1)) 0 1px,
+    transparent 1px 4px
+  );
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__axis {
+  position: absolute;
+  top: 25px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background-color: var(--ppm-color-border-control, var(--border-subtle-1));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__tick {
+  position: absolute;
+  top: 25px;
+  width: 1px;
+  height: 3px;
+  background-color: var(--ppm-color-border-control, var(--border-subtle-1));
+  transform: translateX(-0.5px);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__tick[data-major="true"] {
+  height: 5px;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__label {
+  position: absolute;
+  top: 30px;
+  transform: translateX(-50%);
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-family: var(--ppm-font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+  line-height: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__label[data-today="true"] {
+  color: var(--ppm-color-text, var(--txt-primary));
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__today {
+  position: absolute;
+  top: 14px;
+  width: 2px;
+  height: 17px;
+  border-radius: 1px;
+  background-color: var(--ppm-color-text, var(--txt-primary));
+  transform: translateX(-1px);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__today-label {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  margin-bottom: 1px;
+  transform: translateX(-50%);
+  color: var(--ppm-color-text, var(--txt-primary));
+  font-size: 0.6875rem;
+  line-height: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-sprint__summary {
+  flex: none;
+  min-width: 96px;
+  text-align: right;
+}
+
+/* ─── T3 · «Материалы» и метка блокировки ─── */
+:where(html[data-ppm-design="v2"]) .ppm-task-evidence {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-family: var(--ppm-font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-task-evidence__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-task-evidence__icon {
+  flex: none;
+  color: var(--ppm-color-icon-subtle, var(--txt-icon-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-task-evidence__icon--pr {
+  flex: none;
+  color: var(--ppm-type-code, var(--txt-icon-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-task-blocked {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-left: 6px;
+  color: var(--ppm-color-danger-text, var(--txt-danger-primary));
+  font-family: var(--ppm-font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-task-row:has(.ppm-task-blocked) .ppm-task-title {
+  font-stretch: var(--ppm-font-stretch-narrow, 85%);
+}
+
+/* ─── T4 · колонка куратора ─── */
+:where(html[data-ppm-design="v2"]) .ppm-curator {
+  flex: none;
+  box-sizing: border-box;
+  width: 19rem;
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--ppm-color-border, var(--border-subtle));
+  background-color: var(--ppm-color-surface-1, var(--bg-surface-1));
+  color: var(--ppm-color-text, var(--txt-primary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator--collapsed {
+  width: 2.75rem;
+  gap: 6px;
+  padding-top: 12px;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: var(--ppm-page-header-height, 3.25rem);
+  padding: 0 12px 0 20px;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__heading,
+:where(html[data-ppm-design="v2"]) .ppm-curator__recent-heading {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__recent-heading {
+  padding: 14px 20px 4px;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__icon-button:hover,
+:where(html[data-ppm-design="v2"]) .ppm-curator__item:hover {
+  background-color: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__sections,
+:where(html[data-ppm-design="v2"]) .ppm-curator__recent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0 8px;
+  list-style: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__section-title {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 28px;
+  margin: 0;
+  padding: 0 12px 4px;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__item,
+:where(html[data-ppm-design="v2"]) .ppm-curator__empty-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 12px 8px;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  text-decoration: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__glyph {
+  flex: none;
+  padding-top: 1px;
+  color: var(--ppm-color-icon-subtle, var(--txt-icon-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__glyph[data-kind="blocked"],
+:where(html[data-ppm-design="v2"]) .ppm-curator__glyph[data-kind="overdue"] {
+  color: var(--ppm-color-danger-text, var(--txt-danger-primary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__glyph[data-kind="review"] {
+  color: var(--ppm-status-review, var(--txt-accent-primary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__ok {
+  flex: none;
+  margin-top: 2px;
+  color: var(--ppm-color-success, var(--txt-success-primary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+  line-height: 1rem;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__title,
+:where(html[data-ppm-design="v2"]) .ppm-curator__empty-title {
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  font-stretch: var(--ppm-font-stretch-narrow, 85%);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__empty-title {
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__recent-title {
+  overflow: hidden;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__detail {
+  overflow: hidden;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__code {
+  font-family: var(--ppm-font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  border-radius: 50%;
+  background-color: var(--ppm-color-layer-1-selected, var(--bg-layer-1-selected));
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.6875rem;
+  line-height: 1;
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__empty,
+:where(html[data-ppm-design="v2"]) .ppm-curator__more,
+:where(html[data-ppm-design="v2"]) .ppm-curator__status {
+  margin: 0;
+  padding: 4px 12px 8px;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__empty--recent,
+:where(html[data-ppm-design="v2"]) .ppm-curator__status {
+  padding-inline: 20px;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__retry {
+  margin-top: 6px;
+  padding: 0;
+  color: var(--ppm-color-accent-text, var(--txt-accent-primary));
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__divider {
+  display: block;
+  flex: none;
+  height: 1px;
+  margin: 16px 20px 0;
+  background-color: var(--ppm-color-border, var(--border-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-curator__foot {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 8px;
+  margin: auto 0 0;
+  padding: 12px 20px;
+  border-top: 1px solid var(--ppm-color-border, var(--border-subtle));
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+/* ─── T5 · быстрое добавление и компактная плотность ─── */
+:where(html[data-ppm-design="v2"]) .ppm-task-quick-add {
+  min-height: var(--ppm-row-height, 2.75rem);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-task-quick-add:hover {
+  background-color: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"][data-ppm-density="compact"]) .ppm-sprint {
+  gap: 16px;
+  padding: 0 12px 0 8px;
+}
+
+:where(html[data-ppm-design="v2"][data-ppm-density="compact"]) .ppm-sprint__track {
+  height: 40px;
+}
+
+:where(html[data-ppm-design="v2"][data-ppm-density="compact"]) .ppm-sprint__elapsed {
+  top: 16px;
+}
+
+:where(html[data-ppm-design="v2"][data-ppm-density="compact"]) .ppm-sprint__axis,
+:where(html[data-ppm-design="v2"][data-ppm-density="compact"]) .ppm-sprint__tick {
+  top: 23px;
+}
+
+:where(html[data-ppm-design="v2"][data-ppm-density="compact"]) .ppm-sprint__label {
+  top: 27px;
+}
+
+:where(html[data-ppm-design="v2"][data-ppm-density="compact"]) .ppm-sprint__today {
+  top: 12px;
+}
+
+:where(html[data-ppm-design="v2"][data-ppm-density="compact"]) .ppm-curator__head {
+  padding: 0 12px 0 16px;
+}
+
+:where(html[data-ppm-design="v2"][data-ppm-density="compact"]) .ppm-curator__item {
+  padding: 4px 12px 6px;
+}
+
+:where(html[data-ppm-design="v2"][data-ppm-density="compact"]) .ppm-curator__recent-heading {
+  padding: 12px 16px 4px;
+}
+
+:where(html[data-ppm-design="v2"][data-ppm-density="compact"]) .ppm-curator__foot {
+  padding: 10px 16px;
+}
+
+/* ─── T2 · шкала спринта на узком экране (≤640 px) ───
+   Дорожки дней нет; название и «День N из M · осталось K дней» переносятся без обрезки, полоса растёт по высоте.
+   Блок последний в файле: он перекрывает и отступы «Компактной» плотности выше. */
+@media (max-width: 40rem) {
+  :where(html[data-ppm-design="v2"]) .ppm-sprint {
+    gap: 12px;
+    height: auto;
+    min-height: var(--ppm-sprint-strip-height, 3.75rem);
+    padding-block: 8px;
+  }
+
+  :where(html[data-ppm-design="v2"]) .ppm-sprint__track {
+    display: none;
+  }
+
+  :where(html[data-ppm-design="v2"]) .ppm-sprint__name {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* Сводка держит свою ширину (до половины полосы), длинное название переносится в оставшемся месте. */
+  :where(html[data-ppm-design="v2"]) .ppm-sprint__summary {
+    flex: none;
+    min-width: 0;
+    max-width: 50%;
+  }
+
+  :where(html[data-ppm-design="v2"]) .ppm-sprint__title,
+  :where(html[data-ppm-design="v2"]) .ppm-sprint__range,
+  :where(html[data-ppm-design="v2"]) .ppm-sprint__day,
+  :where(html[data-ppm-design="v2"]) .ppm-sprint__left {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

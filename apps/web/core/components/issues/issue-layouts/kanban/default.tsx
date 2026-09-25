@@ -26,6 +26,7 @@ import { KanbanColumnLoader } from "@/components/ui/loader/layouts/kanban-layout
 // hooks
 import { useKanbanView } from "@/hooks/store/use-kanban-view";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
+import { usePpmLocalizedGroupColumns } from "@/components/ppm-tasks/use-localized-groups";
 // types
 // parent components
 import { useWorkFlowFDragNDrop } from "@/components/workflow";
@@ -106,12 +107,16 @@ export const KanBan = observer(function KanBan(props: IKanBan) {
 
   const { getIsWorkflowWorkItemCreationDisabled } = useWorkFlowFDragNDrop(group_by, sub_group_by);
 
-  const list = getGroupByColumns({
-    groupBy: group_by as GroupByColumnTypes,
-    includeNone: true,
-    isWorkspaceLevel: isWorkspaceLevel(storeType),
-    isEpic: isEpic,
-  });
+  const list = usePpmLocalizedGroupColumns(
+    getGroupByColumns({
+      groupBy: group_by as GroupByColumnTypes,
+      includeNone: true,
+      isWorkspaceLevel: isWorkspaceLevel(storeType),
+      isEpic: isEpic,
+    }),
+    group_by,
+    isEpic
+  );
 
   if (!list) return null;
 

@@ -252,3 +252,26 @@ function buildPlaneNavigationItems(
     },
   ];
 }
+
+// UX1.1: labelled groups of the project navigation (spec C: «Работа», «Знания»); other sections have no label.
+export const PPM_NAVIGATION_SECTION_LABEL_KEYS: Partial<Record<TPpmNavigationSection, TPpmTranslationKey>> = {
+  work: "ux.nav.section_work",
+  knowledge: "ux.nav.section_knowledge",
+};
+
+export type TProjectNavigationRun = {
+  key: string;
+  section?: TPpmNavigationSection;
+  items: TProjectNavigationItem[];
+};
+
+/** Splits already-filtered items into runs of consecutive items of one section, keeping the canonical order. */
+export function groupProjectNavigationItems(items: TProjectNavigationItem[]): TProjectNavigationRun[] {
+  const runs: TProjectNavigationRun[] = [];
+  for (const item of items) {
+    const last = runs[runs.length - 1];
+    if (last && item.ppmSection !== undefined && last.section === item.ppmSection) last.items.push(item);
+    else runs.push({ key: `${item.ppmSection ?? "item"}-${item.key}`, section: item.ppmSection, items: [item] });
+  }
+  return runs;
+}

@@ -37,6 +37,8 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { PpmNewTaskLabel } from "@/components/ppm-tasks/new-task-label";
+import { usePpmDesignV2 } from "@/lib/ppm-design";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 
@@ -52,6 +54,7 @@ export const IssuesHeader = observer(function IssuesHeader() {
   const { t } = useTranslation();
   const ppmT = usePpmTranslation();
   const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const isDesignV2 = usePpmDesignV2();
 
   const { currentProjectDetails, loader } = useProject();
 
@@ -89,17 +92,24 @@ export const IssuesHeader = observer(function IssuesHeader() {
             />
           </Breadcrumbs>
           {issuesCount && issuesCount > 0 ? (
-            <Tooltip
-              isMobile={isMobile}
-              tooltipContent={
-                isPpmShell
-                  ? `${ppmT("work_item.count")} ${issuesCount}`
-                  : `There are ${issuesCount} ${issuesCount > 1 ? "work items" : "work item"} in this project`
-              }
-              position="bottom"
-            >
-              <CountChip count={issuesCount} />
-            </Tooltip>
+            isDesignV2 ? (
+              <span className="font-code text-12 text-tertiary tabular-nums">
+                <span className="sr-only">{ppmT("work_item.count")} </span>
+                {issuesCount}
+              </span>
+            ) : (
+              <Tooltip
+                isMobile={isMobile}
+                tooltipContent={
+                  isPpmShell
+                    ? `${ppmT("work_item.count")} ${issuesCount}`
+                    : `There are ${issuesCount} ${issuesCount > 1 ? "work items" : "work item"} in this project`
+                }
+                position="bottom"
+              >
+                <CountChip count={issuesCount} />
+              </Tooltip>
+            )
           ) : null}
         </div>
         {currentProjectDetails?.anchor ? (
@@ -136,7 +146,11 @@ export const IssuesHeader = observer(function IssuesHeader() {
             data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.WORK_ITEMS}
           >
             <div className="block sm:hidden">{t("issue.label", { count: 1 })}</div>
-            <div className="hidden sm:block">{t("issue.add.label")}</div>
+            {isDesignV2 ? (
+              <PpmNewTaskLabel label={ppmT("tasks.new_task")} keysLabel={ppmT("tasks.new_task_keys")} />
+            ) : (
+              <div className="hidden sm:block">{t("issue.add.label")}</div>
+            )}
           </Button>
         )}
       </Header.RightItem>

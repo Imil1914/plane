@@ -27,6 +27,7 @@ export const WorkspaceContentWrapper = observer(function WorkspaceContentWrapper
         {/* Conditionally render AppRailRoot based on context */}
         {shouldRenderAppRail && <AppRailRoot />}
         <div
+          data-ppm-app-frame="gutter"
           className={cn(
             "relative size-full flex-grow overflow-hidden pr-2 pb-2 pl-2 transition-all duration-300 ease-in-out",
             {

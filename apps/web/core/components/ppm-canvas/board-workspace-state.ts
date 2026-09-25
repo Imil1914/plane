@@ -1,3 +1,4 @@
+import { resolvePpmLocale } from "@ppm/brand";
 import type { TPpmCanvasBoard, TPpmCanvasSyncStatus } from "@ppm/canvas";
 
 export const MAX_OPEN_CANVAS_BOARDS = 8;
@@ -157,4 +158,61 @@ export function filterCanvasCommands<TCommand extends string>(
 
 function compareBoards(first: TPpmCanvasBoard, second: TPpmCanvasBoard) {
   return first.position - second.position || first.created_at.localeCompare(second.created_at);
+}
+
+// UX1.1: commands a read-only viewer may run. v2 adds zoom reset and the read-only semantic links list (R12).
+const READ_ONLY_COMMANDS_V1: readonly string[] = ["select", "fit-view", "zoom-in", "zoom-out"];
+const READ_ONLY_COMMANDS_V2: readonly string[] = [...READ_ONLY_COMMANDS_V1, "zoom-reset", "semantic-edges"];
+
+export function isCanvasCommandAllowedReadOnly(command: string, designV2: boolean): boolean {
+  return (designV2 ? READ_ONLY_COMMANDS_V2 : READ_ONLY_COMMANDS_V1).includes(command);
+}
+
+export type TPpmCanvasStatusParts = {
+  sheet: { index: number; total: number } | null;
+  time: { iso: string; label: string } | null;
+  role: "canvas.read_only_title" | null;
+};
+
+// UX1.1 status line «Лист 2 из 3 · Все изменения сохранены · 12:41». No version (R5); the saved label itself stays
+// a separate element so the exact e2e text «Все изменения сохранены» keeps matching.
+export function formatCanvasStatusParts(input: {
+  activeBoardIds: readonly string[];
+  boardId: string;
+  locale: string;
+  now?: Date;
+  roleKey: "canvas.shared_badge" | "canvas.read_only_title" | null;
+  savedAt: string | null | undefined;
+  statusKey: string;
+}): TPpmCanvasStatusParts {
+  const position = input.activeBoardIds.indexOf(input.boardId);
+  const total = input.activeBoardIds.length;
+  const label =
+    input.statusKey === "canvas.sync_saved" && input.savedAt
+      ? formatCanvasSavedTime(input.savedAt, input.locale, input.now)
+      : null;
+  return {
+    sheet: position >= 0 && total > 1 ? { index: position + 1, total } : null,
+    time: label && input.savedAt ? { iso: input.savedAt, label } : null,
+    role: input.roleKey === "canvas.read_only_title" ? input.roleKey : null,
+  };
+}
+
+// The time follows the UI language (ru* → ru, anything else → en), like the rest of the canvas and «Задачи».
+export function formatCanvasSavedTime(savedAt: string, locale: string, now: Date = new Date()): string | null {
+  const date = new Date(savedAt);
+  if (Number.isNaN(date.getTime())) return null;
+  const sameDay =
+    date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+  return new Intl.DateTimeFormat(
+    resolvePpmLocale(locale),
+    sameDay
+      ? { hour: "2-digit", minute: "2-digit" }
+      : { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }
+  ).format(date);
+}
+
+// «100 %» with U+00A0: the number and the sign never wrap apart (the reset label canvas.zoom_reset_label matches).
+export function formatCanvasZoom(zoom: number): string {
+  return `${Math.round(zoom)}\u00a0%`;
 }

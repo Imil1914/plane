@@ -21,15 +21,48 @@ const extraFiles = [
   "apps/web/core/components/navigation/top-nav-power-k.tsx",
   "apps/web/core/components/workspace/sidebar/project-navigation.tsx",
   "apps/web/core/layouts/auth-layout/project-wrapper.tsx",
+  // UX1.1 F4: profile preferences and the shared state dropdown (F).
+  "apps/web/core/components/appearance/theme-switcher.tsx",
+  "apps/web/core/components/dropdowns/state/base.tsx",
+  "apps/web/core/components/profile/start-of-week-preference.tsx",
+  "apps/web/core/components/settings/profile/content/pages/preferences/default-list.tsx",
+  "apps/web/core/components/settings/profile/content/pages/preferences/language-and-timezone-list.tsx",
+  // UX1.1 lane T: Plane files the Tasks lane edits (plan-T-needs.md N3).
+  "apps/web/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/issues/(list)/layout.tsx",
+  "apps/web/core/components/issues/header.tsx",
+  "apps/web/core/components/issues/issue-layouts/filters/header/layout-selection.tsx",
+  "apps/web/core/components/issues/issue-layouts/kanban/default.tsx",
+  "apps/web/core/components/issues/issue-layouts/list/block-root.tsx",
+  "apps/web/core/components/issues/issue-layouts/list/block.tsx",
+  "apps/web/core/components/issues/issue-layouts/list/default.tsx",
+  "apps/web/core/components/issues/issue-layouts/list/headers/group-by-card.tsx",
+  "apps/web/core/components/issues/issue-layouts/list/list-group.tsx",
+  "apps/web/core/components/issues/issue-layouts/quick-add/button/list.tsx",
+  "apps/web/core/components/issues/issue-layouts/roots/project-layout-root.tsx",
+  // UX1.1 F5: shell files with v2 branches or hooks.
+  "apps/web/app/(all)/[workspaceSlug]/(projects)/layout.tsx",
+  "apps/web/app/(all)/[workspaceSlug]/(settings)/layout.tsx",
+  "apps/web/app/(all)/settings/profile/layout.tsx",
+  "apps/web/core/components/navigation/top-navigation-root.tsx",
+  "apps/web/core/components/sidebar/sidebar-navigation.tsx",
+  "apps/web/core/components/sidebar/sidebar-wrapper.tsx",
+  "apps/web/core/components/workspace/content-wrapper.tsx",
+  "apps/web/core/components/workspace/sidebar/projects-list-item.tsx",
+  "apps/web/core/components/workspace/sidebar/workspace-menu-root.tsx",
 ];
 // Plain (non-Tailwind) CSS that defines PPM classes such as ppm-canvas-*.
 const customCssFiles = [
   "apps/web/core/components/ppm-canvas/canvas.css",
+  "apps/web/core/components/ppm-canvas/canvas-v2.css",
   "apps/web/styles/globals.css",
   "apps/web/styles/power-k.css",
   "apps/web/styles/emoji.css",
+  "apps/web/styles/ppm-v2/system.css",
+  "apps/web/styles/ppm-v2/shell.css",
+  "apps/web/styles/ppm-v2/tasks.css",
   "packages/tailwind-config/index.css",
   "packages/ppm-brand/src/tokens.css",
+  "packages/ppm-brand/src/tokens-v2.css",
 ];
 
 const requireWeb = createRequire(path.join(webRoot, "package.json"));

@@ -1,0 +1,140 @@
+/*
+ * PPM design v2 («гибрид A+B», UX1.1): Tailwind API and global paint rules.
+ * Inert unless <html data-ppm-design="v2"> (set only when data-ppm-brand="enabled"). Every var() has a fallback.
+ */
+
+/* `ppm-v2:` / `ppm-compact:` variants. Specificity equals the base utility; variant rules are emitted after the
+   unprefixed ones, so `h-11 ppm-v2:h-(--ppm-row-height,2.75rem)` keeps wave 0 and switches instantly with the attribute. */
+@custom-variant ppm-v2 (&:where([data-ppm-design="v2"], [data-ppm-design="v2"] *));
+@custom-variant ppm-compact (&:where([data-ppm-design="v2"][data-ppm-density="compact"], [data-ppm-design="v2"][data-ppm-density="compact"] *));
+
+/* Typography roles (TOKENS §4). Deliberately NOT text-*: Plane's cn() (packages/utils/src/common.ts) treats unknown
+   and arbitrary text-* classes as colours and drops them next to text-primary/secondary. Never combine a ppm-text-*
+   class with text-11..14, text-body-*, text-caption-* or font-medium/semibold on the same element. Fallbacks are the
+   «Удобная» values; use these classes only in v2 markup (usePpmDesignV2() branch or the ppm-v2: variant). */
+@utility ppm-text-display {
+  font-size: var(--ppm-text-display-size, 1.75rem);
+  line-height: var(--ppm-text-display-leading, 2.25rem);
+  font-weight: var(--ppm-text-display-weight, 600);
+  letter-spacing: var(--ppm-text-display-tracking, -0.02em);
+}
+@utility ppm-text-title-1 {
+  font-size: var(--ppm-text-title-1-size, 1.25rem);
+  line-height: var(--ppm-text-title-1-leading, 1.75rem);
+  font-weight: var(--ppm-text-title-1-weight, 600);
+  letter-spacing: var(--ppm-text-title-1-tracking, -0.01em);
+}
+@utility ppm-text-title-2 {
+  font-size: var(--ppm-text-title-2-size, 1rem);
+  line-height: var(--ppm-text-title-2-leading, 1.5rem);
+  font-weight: var(--ppm-text-title-2-weight, 600);
+  letter-spacing: var(--ppm-text-title-2-tracking, 0);
+}
+@utility ppm-text-title-3 {
+  font-size: var(--ppm-text-title-3-size, 0.875rem);
+  line-height: var(--ppm-text-title-3-leading, 1.25rem);
+  font-weight: var(--ppm-text-title-3-weight, 600);
+  letter-spacing: var(--ppm-text-title-3-tracking, 0);
+}
+@utility ppm-text-body {
+  font-size: var(--ppm-text-body-size, 0.875rem);
+  line-height: var(--ppm-text-body-leading, 1.25rem);
+  font-weight: var(--ppm-text-body-weight, 400);
+  letter-spacing: var(--ppm-text-body-tracking, 0);
+}
+@utility ppm-text-ui {
+  font-size: var(--ppm-text-ui-size, 0.8125rem);
+  line-height: var(--ppm-text-ui-leading, 1.25rem);
+  font-weight: var(--ppm-text-ui-weight, 500);
+  letter-spacing: var(--ppm-text-ui-tracking, 0);
+}
+@utility ppm-text-meta {
+  font-size: var(--ppm-text-meta-size, 0.75rem);
+  line-height: var(--ppm-text-meta-leading, 1rem);
+  font-weight: var(--ppm-text-meta-weight, 400);
+  letter-spacing: var(--ppm-text-meta-tracking, 0);
+}
+@utility ppm-text-mono {
+  font-family: var(--ppm-font-mono, var(--font-code));
+  font-size: var(--ppm-text-mono-size, 0.75rem);
+  line-height: var(--ppm-text-mono-leading, 1rem);
+  font-weight: var(--ppm-text-mono-weight, 400);
+  letter-spacing: var(--ppm-text-mono-tracking, 0);
+  font-variant-numeric: tabular-nums;
+}
+@utility ppm-text-mono-sm {
+  font-family: var(--ppm-font-mono, var(--font-code));
+  font-size: var(--ppm-text-mono-sm-size, 0.6875rem);
+  line-height: var(--ppm-text-mono-sm-leading, 1rem);
+  font-weight: var(--ppm-text-mono-sm-weight, 500);
+  letter-spacing: var(--ppm-text-mono-sm-tracking, 0);
+  font-variant-numeric: tabular-nums;
+}
+/* «Сначала сужается, потом многоточие»: wdth axis of IBM Plex Sans Variable (loaded from wdth.css). */
+@utility ppm-font-narrow {
+  font-stretch: var(--ppm-font-stretch-narrow, 100%);
+}
+
+@layer utilities {
+  /* R19: meaningful borders are 1 CSS px (Plane draws many at 0.5px = one device pixel on 2x screens). */
+  :where(html[data-ppm-design="v2"]) .border-\[0\.5px\] {
+    border-width: 1px;
+  }
+  :where(html[data-ppm-design="v2"]) .border-t-\[0\.5px\] {
+    border-top-width: 1px;
+  }
+  :where(html[data-ppm-design="v2"]) .border-b-\[0\.5px\] {
+    border-bottom-width: 1px;
+  }
+  :where(html[data-ppm-design="v2"]) .border-r-\[0\.5px\] {
+    border-right-width: 1px;
+  }
+  :where(html[data-ppm-design="v2"]) .border-l-\[0\.5px\] {
+    border-left-width: 1px;
+  }
+  :where(html[data-ppm-design="v2"]) .border-y-\[0\.5px\] {
+    border-block-width: 1px;
+  }
+  :where(html[data-ppm-design="v2"]) .border-x-\[0\.5px\] {
+    border-inline-width: 1px;
+  }
+
+  /* Icons (spec C: thinner, visually 1.5px): an even 1.5 CSS px at every icon size. Set on the drawn elements with
+     non-scaling-stroke (a width on the <svg> is in 24-unit grid units: thicker on big icons). This beats the <svg>'s
+     strokeWidth attribute and stroke-* utilities it would inherit, except explicit hairlines (stroke-1 or
+     strokeWidth={1}), which keep wave 0. Propel icons are filled outlines and stay as they are. */
+  :where(html[data-ppm-design="v2"]) svg.lucide:not(.stroke-1, [stroke-width="1"]) * {
+    stroke-width: 1.5px;
+    vector-effect: non-scaling-stroke;
+  }
+
+  /* Elevation: resting controls and cards are flat; only floating layers cast a shadow (TOKENS §6). Separate rules on
+     purpose: one :is() with the :hover argument would lift both to (0,2,0) and beat the popover rule below. */
+  :where(html[data-ppm-design="v2"]) .shadow-raised-100 {
+    --tw-shadow: 0 0 #0000;
+  }
+  :where(html[data-ppm-design="v2"]) .hover\:shadow-raised-200:hover {
+    --tw-shadow: 0 0 #0000;
+  }
+  :where(html[data-ppm-design="v2"]) :is(.shadow-raised-200, .shadow-overlay-100, .shadow-overlay-200) {
+    --tw-shadow: var(--ppm-shadow-popover, 0 0 #0000);
+  }
+  /* Popovers: every react-popper surface (CustomMenu/Select/SearchSelect, property dropdowns) and the context menu:
+     radius 8 + popover shadow. Same specificity as .shadow-raised-100 above and AFTER it on purpose
+     (filters/header/helpers/dropdown.tsx carries both). */
+  :where(html[data-ppm-design="v2"]) :is([data-popper-placement], [data-context-menu="true"]) {
+    border-radius: var(--ppm-radius-md, 0.5rem);
+    --tw-shadow: var(--ppm-shadow-popover, 0 0 #0000);
+    box-shadow:
+      var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000),
+      var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+  }
+  /* Modals: Headless UI ModalCore panels and the Propel dialog: radius 12 + popover shadow. */
+  :where(html[data-ppm-design="v2"]) :is([id^="headlessui-dialog-panel-"], [data-slot="dialog-content"]) {
+    border-radius: var(--ppm-radius-lg, 0.75rem);
+    --tw-shadow: var(--ppm-shadow-popover, 0 0 #0000);
+    box-shadow:
+      var(--tw-inset-shadow, 0 0 #0000), var(--tw-inset-ring-shadow, 0 0 #0000),
+      var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+  }
+}

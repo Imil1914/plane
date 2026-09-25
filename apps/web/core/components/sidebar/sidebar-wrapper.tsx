@@ -11,12 +11,13 @@ import { useOutsideClickDetector } from "@plane/hooks";
 import { useTranslation } from "@plane/i18n";
 import { PreferencesIcon } from "@plane/propel/icons";
 import { ScrollArea } from "@plane/propel/scrollarea";
-import { isPpmShellEnabled } from "@ppm/brand";
+import { isPpmShellEnabled, PPM_BRAND } from "@ppm/brand";
 // components
 import { CustomizeNavigationDialog } from "@/components/navigation/customize-navigation-dialog";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import useSize from "@/hooks/use-window-size";
+import { usePpmDesignV2 } from "@/lib/ppm-design";
 // plane web components
 import { WorkspaceEditionBadge } from "@/components/workspace/edition-badge";
 import { AppSidebarToggleButton } from "./sidebar-toggle-button";
@@ -36,6 +37,7 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
   const { toggleSidebar, sidebarCollapsed } = useAppTheme();
   const windowSize = useSize();
   const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const isDesignV2 = usePpmDesignV2();
   const { t } = useTranslation();
   // refs
   const ref = useRef<HTMLDivElement>(null);
@@ -59,7 +61,14 @@ export const SidebarWrapper = observer(function SidebarWrapper(props: TSidebarWr
           {/* Workspace switcher and settings */}
 
           <div className="flex items-center justify-between gap-2 px-2">
-            <span className="pt-1 text-16 font-medium text-primary">{title}</span>
+            {isPpmShell && isDesignV2 && title === PPM_BRAND.name ? (
+              <span className="flex items-center gap-2 pt-1">
+                <img alt="" aria-hidden="true" src={PPM_BRAND.assets.mark} className="size-5 shrink-0 rounded-sm" />
+                <span className="text-14 leading-5 font-semibold tracking-[0.06em] text-primary">{title}</span>
+              </span>
+            ) : (
+              <span className="pt-1 text-16 font-medium text-primary">{title}</span>
+            )}
             <div className="flex items-center gap-2">
               {(title === "Projects" || title === "PPM") && (
                 <IconButton

@@ -1,4 +1,7 @@
 import buildManifest from "../build-manifest.json";
+import { UX11_CANVAS_TRANSLATIONS } from "./translations/ux11-canvas";
+import { UX11_SYSTEM_TRANSLATIONS } from "./translations/ux11-system";
+import { UX11_TASKS_TRANSLATIONS } from "./translations/ux11-tasks";
 
 export const PPM_BRAND = {
   name: "PPM",
@@ -817,6 +820,11 @@ export const PPM_TRANSLATIONS = {
     "onboarding.usecase.exploring": "Just exploring",
     "onboarding.size.just_me": "Just myself",
     "onboarding.size.people": "people",
+    // UX1.1 («гибрид A+B»): one module per lane — F system/shell, T tasks, C canvas. Spread last, inside the literal,
+    // so TPpmTranslationKey includes the keys; a duplicate of an existing key is a TS2783 error.
+    ...UX11_SYSTEM_TRANSLATIONS.en,
+    ...UX11_TASKS_TRANSLATIONS.en,
+    ...UX11_CANVAS_TRANSLATIONS.en,
   },
   ru: {
     "global.home": "Главная",
@@ -1622,6 +1630,9 @@ export const PPM_TRANSLATIONS = {
     "onboarding.usecase.exploring": "Познакомиться с возможностями",
     "onboarding.size.just_me": "Только я",
     "onboarding.size.people": "человек",
+    ...UX11_SYSTEM_TRANSLATIONS.ru,
+    ...UX11_TASKS_TRANSLATIONS.ru,
+    ...UX11_CANVAS_TRANSLATIONS.ru,
   },
 } as const;
 
@@ -1701,6 +1712,91 @@ export function isPpmBrandEnabled(value: string | undefined): boolean {
  */
 export function isPpmShellEnabled(value: string | undefined, brandValue?: string): boolean {
   return isPpmBrandEnabled(brandValue) && isPpmBrandEnabled(value);
+}
+
+// ---------------- UX1.1: design v2 («гибрид A+B») and density ----------------
+
+export type TPpmDesign = "v1" | "v2";
+export type TPpmDensity = "comfortable" | "compact";
+
+export const PPM_DESIGN_STORAGE_KEY = "ppm_design";
+export const PPM_DENSITY_STORAGE_KEY = "ppm_density";
+
+/** meta theme-color of the v2 app background (TOKENS §1 --ppm-color-canvas); asserted by token-contract-v2.test.ts. */
+export const PPM_THEME_COLOR_V2 = { light: "#f2efea", dark: "#11100e" } as const;
+
+type TPpmDesignMode = "off" | "preview" | "on";
+
+function getPpmDesignMode(designValue: string | undefined, brandValue: string | undefined): TPpmDesignMode {
+  if (!isPpmBrandEnabled(brandValue)) return "off";
+  const mode = designValue?.trim().toLowerCase() ?? "";
+  if (DISABLED_FLAG_VALUES.has(mode)) return "off";
+  return mode === "preview" ? "preview" : "on";
+}
+
+/**
+ * Wave-1 look («гибрид A+B»). PPM_DESIGN_V2: "0" = wave 0 only; "preview" = wave 0 unless this browser opted in
+ * (localStorage ppm_design="v2"); "1" or unset = v2 unless this browser opted out (ppm_design="v1").
+ * The brand flag wins: PPM_BRAND_ENABLED=0 is always v1.
+ */
+export function resolvePpmDesign(
+  designValue: string | undefined,
+  brandValue: string | undefined,
+  stored: string | null
+): TPpmDesign {
+  const mode = getPpmDesignMode(designValue, brandValue);
+  if (mode === "off") return "v1";
+  if (mode === "preview") return stored === "v2" ? "v2" : "v1";
+  return stored === "v1" ? "v1" : "v2";
+}
+
+/** Density lives only in this browser (R3): "compact" on the exact value, otherwise «Удобная». */
+export function resolvePpmDensity(stored: string | null): TPpmDensity {
+  return stored === "compact" ? "compact" : "comfortable";
+}
+
+/** next-themes' localStorage key (root.tsx keeps the library default): a stored theme is the user's own choice. */
+const NEXT_THEMES_STORAGE_KEY = "theme";
+
+/**
+ * Inline <head> script for root.tsx: sets <html data-ppm-design data-ppm-density> before first paint. Build-time
+ * flags are baked in; only the per-browser choice is read at runtime, with the rules of resolvePpmDesign and
+ * resolvePpmDensity (design-flag.test.ts runs the script over the same table).
+ *
+ * When this browser's design differs from the build default (personal ppm_design="v1" under a v2 build, or "v2"
+ * under preview), the prerendered <head> and next-themes' prerendered default belong to the other design, so the
+ * script also:
+ * - re-colours the already inserted `meta[name="theme-color"]` tags (content only — never adds or removes an
+ *   element, so hydration of the prerendered <head> still matches): v1 → the wave-0 colour, v2 → the v2 canvas
+ *   colour of the current colour scheme;
+ * - unless the user stored a theme, corrects the first `data-theme` write of next-themes' inline script (it runs
+ *   later, in <body>) to the default of this design — v1 dark, v2 system — at the following microtask checkpoint,
+ *   still before first paint. root.tsx gives ThemeProvider the same per-browser default after hydration.
+ */
+export function getPpmAppearanceBootstrapScript(
+  designValue: string | undefined,
+  brandValue: string | undefined
+): string {
+  const mode = getPpmDesignMode(designValue, brandValue);
+  const buildDesign = resolvePpmDesign(designValue, brandValue, null);
+  return (
+    `(function(){var m=${JSON.stringify(mode)},b=${JSON.stringify(buildDesign)},d=null,n=null,t=null;` +
+    `try{d=localStorage.getItem(${JSON.stringify(PPM_DESIGN_STORAGE_KEY)});` +
+    `n=localStorage.getItem(${JSON.stringify(PPM_DENSITY_STORAGE_KEY)});` +
+    `t=localStorage.getItem(${JSON.stringify(NEXT_THEMES_STORAGE_KEY)})}catch(e){}` +
+    `var r=document.documentElement,v=m==="off"?"v1":m==="preview"?(d==="v2"?"v2":"v1"):(d==="v1"?"v1":"v2");` +
+    `r.setAttribute("data-ppm-design",v);` +
+    `r.setAttribute("data-ppm-density",n==="compact"?"compact":"comfortable");` +
+    `if(v===b)return;` +
+    `var k=function(){return matchMedia("(prefers-color-scheme: dark)").matches},` +
+    `c=v==="v1"?${JSON.stringify(PPM_BRAND.themeColor)}:k()?${JSON.stringify(PPM_THEME_COLOR_V2.dark)}:${JSON.stringify(PPM_THEME_COLOR_V2.light)},` +
+    `q=document.querySelectorAll('meta[name="theme-color"]');` +
+    `for(var i=0;i<q.length;i++)q[i].setAttribute("content",c);` +
+    `if(t||typeof MutationObserver!=="function")return;` +
+    `var o=new MutationObserver(function(){o.disconnect();var s=v==="v1"?"dark":k()?"dark":"light";` +
+    `r.setAttribute("data-theme",s);r.style.colorScheme=s});` +
+    `o.observe(r,{attributes:true,attributeFilter:["data-theme"]})})();`
+  );
 }
 
 export function resolvePpmInitialLanguage(storedLanguage: string | null, shellEnabled: boolean): string {

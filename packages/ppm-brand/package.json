@@ -11,6 +11,7 @@
     ".": "./dist/index.mjs",
     "./package.json": "./package.json",
     "./tokens.css": "./src/tokens.css",
+    "./tokens-v2.css": "./src/tokens-v2.css",
     "./i18n-overlay.json": "./src/locales/i18n-overlay.json",
     "./assets/mark.svg": "./assets/mark.svg",
     "./assets/logo.svg": "./assets/logo.svg"

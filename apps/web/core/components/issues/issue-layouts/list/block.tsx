@@ -23,12 +23,16 @@ import { cn, generateWorkItemLink } from "@plane/utils";
 import { MultipleSelectEntityAction } from "@/components/core/multiple-select";
 import { IssueProperties } from "@/components/issues/issue-layouts/properties";
 import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
+import { usePpmTasksData } from "@/components/ppm-tasks/data-context";
+import { withoutPpmMaterialProperties } from "@/components/ppm-tasks/evidence";
+import { PpmTaskBlockedMarker, PpmTaskEvidence } from "@/components/ppm-tasks/task-evidence";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useProject } from "@/hooks/store/use-project";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmDesignV2 } from "@/lib/ppm-design";
 import { calculateIdentifierWidth } from "../utils";
 import type { TRenderQuickActions } from "./list-view-types";
 
@@ -107,6 +111,9 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
   const isDraggingAllowed = canDrag && canEditIssueProperties;
 
   const { isMobile } = usePlatformOS();
+  const isDesignV2 = usePpmDesignV2();
+  const ppmTasksData = usePpmTasksData();
+  const showPpmEvidence = isDesignV2 && !!ppmTasksData;
 
   useEffect(() => {
     const element = issueRef.current;
@@ -135,6 +142,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
   const isIssueActive = selectionHelpers.getIsEntityActive(issue.id);
   const isSubIssue = nestingLevel !== 0;
   const canSelectIssues = canEditIssueProperties && !selectionHelpers.isSelectionDisabled;
+  const isPeekedHere = getIsIssuePeeked(issue.id) && peekIssue?.nestingLevel === nestingLevel;
 
   const marginLeft = `${spacingLeft}px`;
 
@@ -179,17 +187,21 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
       <Row
         ref={issueRef}
         className={cn(
-          "group/list-block relative flex min-h-11 flex-col gap-3 bg-layer-transparent py-3 text-13 transition-colors hover:bg-layer-transparent-hover",
+          isDesignV2
+            ? "ppm-task-row group/list-block relative flex flex-col gap-3 bg-layer-transparent py-1.5 text-13 transition-colors hover:bg-layer-transparent-hover"
+            : "group/list-block relative flex min-h-11 flex-col gap-3 bg-layer-transparent py-3 text-13 transition-colors hover:bg-layer-transparent-hover",
           {
-            "border-accent-strong": getIsIssuePeeked(issue.id) && peekIssue?.nestingLevel === nestingLevel,
+            "border-accent-strong": !isDesignV2 && isPeekedHere,
             "border-strong-1": isIssueActive,
             "last:border-b-transparent": !getIsIssuePeeked(issue.id) && !isIssueActive,
-            "bg-accent-primary/5 hover:bg-accent-primary/10": isIssueSelected,
+            "bg-accent-primary/5 hover:bg-accent-primary/10": !isDesignV2 && isIssueSelected,
             "bg-layer-1": isCurrentBlockDragging,
             "md:flex-row md:items-center": isSidebarCollapsed,
             "lg:flex-row lg:items-center": !isSidebarCollapsed,
           }
         )}
+        data-ppm-peeked={isDesignV2 && isPeekedHere ? "true" : undefined}
+        data-ppm-selected={isDesignV2 && isIssueSelected ? "true" : undefined}
         onDragStart={() => {
           if (!isDraggingAllowed) {
             setToast({
@@ -234,7 +246,10 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
                 </Tooltip>
               )}
               {displayProperties && (displayProperties.key || displayProperties.issue_type) && (
-                <div className="flex-shrink-0" style={{ minWidth: `${keyMinWidth}px` }}>
+                <div
+                  className={isDesignV2 ? "flex-shrink-0 font-code tabular-nums" : "flex-shrink-0"}
+                  style={{ minWidth: `${keyMinWidth}px` }}
+                >
                   {issue.project_id && (
                     <IssueIdentifier
                       issueId={issueId}
@@ -277,8 +292,17 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
               disabled={isCurrentBlockDragging}
               renderByDefault={false}
             >
-              <p className="cursor-pointer truncate text-body-xs-medium text-primary">{issue.name}</p>
+              <p
+                className={
+                  isDesignV2
+                    ? "ppm-task-title ppm-text-body cursor-pointer truncate text-primary"
+                    : "cursor-pointer truncate text-body-xs-medium text-primary"
+                }
+              >
+                {issue.name}
+              </p>
             </Tooltip>
+            {showPpmEvidence && <PpmTaskBlockedMarker issue={issue} issuesMap={issuesMap} />}
           </div>
           {!issue?.tempId && (
             <div
@@ -297,12 +321,15 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
         <div className="flex flex-shrink-0 items-center gap-2">
           {!issue?.tempId ? (
             <>
+              {showPpmEvidence && <PpmTaskEvidence issue={issue} displayProperties={displayProperties} />}
               <IssueProperties
                 className={`relative flex flex-wrap ${isSidebarCollapsed ? "md:flex-shrink-0 md:flex-grow" : "lg:flex-shrink-0 lg:flex-grow"} items-center gap-2 whitespace-nowrap`}
                 issue={issue}
                 isReadOnly={!canEditIssueProperties}
                 updateIssue={updateIssue}
-                displayProperties={displayProperties}
+                displayProperties={
+                  showPpmEvidence ? withoutPpmMaterialProperties(displayProperties) : displayProperties
+                }
                 activeLayout="List"
                 isEpic={isEpic}
               />

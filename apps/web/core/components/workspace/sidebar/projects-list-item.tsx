@@ -296,6 +296,7 @@ export const SidebarProjectsListItem = observer(function SidebarProjectsListItem
         >
           <DropIndicator classNames="absolute top-0" isVisible={instruction === "DRAG_OVER"} />
           <div
+            data-ppm-nav-item=""
             className={cn(
               "group/project-item relative flex w-full items-center rounded-md px-2 py-1.5 text-primary hover:bg-layer-transparent-hover",
               {

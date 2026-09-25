@@ -18,6 +18,7 @@ viteEnv.PPM_CANVAS_ENABLED = process.env.PPM_CANVAS_ENABLED ?? "1";
 viteEnv.PPM_ANTYFLOW_SHELL_ENABLED = process.env.PPM_ANTYFLOW_SHELL_ENABLED ?? "1";
 viteEnv.PPM_SHELL_ENABLED = process.env.PPM_SHELL_ENABLED ?? "1";
 viteEnv.PPM_PROJECT_ASK_ENABLED = process.env.PPM_PROJECT_ASK_ENABLED ?? "0";
+viteEnv.PPM_DESIGN_V2 = process.env.PPM_DESIGN_V2 ?? "1";
 
 export default defineConfig(() => ({
   define: {

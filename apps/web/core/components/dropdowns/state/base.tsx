@@ -23,6 +23,7 @@ import type { TDropdownProps } from "@/components/dropdowns/types";
 import { useDropdown } from "@/hooks/use-dropdown";
 // plane web imports
 import { StateOption } from "@/components/workflow";
+import { getPpmStateDisplayName } from "@/lib/ppm-design";
 
 export type TWorkItemStateDropdownBaseProps = TDropdownProps & {
   alwaysAllowStateChange?: boolean;
@@ -81,7 +82,7 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   // store hooks
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
   const statesList = stateIds.map((stateId) => getStateById(stateId)).filter((state) => !!state);
   const defaultState = statesList?.find((state) => state?.default);
   const stateValue = value ? value : showDefaultState ? defaultState?.id : undefined;
@@ -112,7 +113,7 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
   // derived values
   const options = statesList?.map((state) => ({
     value: state?.id,
-    query: `${state?.name}`,
+    query: `${state?.name} ${getPpmStateDisplayName(state, currentLocale) ?? ""}`,
     content: (
       <div className="flex items-center gap-2">
         <StateGroupIcon
@@ -121,7 +122,7 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
           className={cn("flex-shrink-0", iconSize)}
           percentage={state?.order}
         />
-        <span className="flex-grow truncate text-left">{state?.name}</span>
+        <span className="flex-grow truncate text-left">{getPpmStateDisplayName(state, currentLocale)}</span>
       </div>
     ),
   }));
@@ -169,7 +170,7 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
             className={buttonClassName}
             isActive={isOpen}
             tooltipHeading={t("state")}
-            tooltipContent={selectedState?.name ?? t("state")}
+            tooltipContent={getPpmStateDisplayName(selectedState, currentLocale) ?? t("state")}
             showTooltip={showTooltip}
             variant={buttonVariant}
             renderToolTipByDefault={renderByDefault}
@@ -187,7 +188,9 @@ export const WorkItemStateDropdownBase = observer(function WorkItemStateDropdown
                   />
                 )}
                 {BUTTON_VARIANTS_WITH_TEXT.includes(buttonVariant) && (
-                  <span className="flex-grow truncate text-left">{selectedState?.name ?? t("state")}</span>
+                  <span className="flex-grow truncate text-left">
+                    {getPpmStateDisplayName(selectedState, currentLocale) ?? t("state")}
+                  </span>
                 )}
                 {dropdownArrow && (
                   <ChevronDownIcon

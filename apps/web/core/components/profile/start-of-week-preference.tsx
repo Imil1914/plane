@@ -10,10 +10,12 @@ import { START_OF_THE_WEEK_OPTIONS } from "@plane/constants";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { EStartOfTheWeek } from "@plane/types";
 import { CustomSelect } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { SettingsControlItem } from "@/components/settings/control-item";
 // hooks
 import { useUserProfile } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 const getStartOfWeekLabel = (startOfWeek: EStartOfTheWeek) =>
   START_OF_THE_WEEK_OPTIONS.find((option) => option.value === startOfWeek)?.label;
@@ -23,13 +25,25 @@ export const StartOfWeekPreference = observer(function StartOfWeekPreference(pro
 }) {
   // hooks
   const { data: userProfile, updateUserProfile } = useUserProfile();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
   const handleStartOfWeekChange = async (val: number) => {
     try {
       await updateUserProfile({ start_of_the_week: val });
-      setToast({ type: TOAST_TYPE.SUCCESS, title: "Success", message: "First day of the week updated successfully" });
+      setToast({
+        type: TOAST_TYPE.SUCCESS,
+        title: isPpmShell ? ppmT("ux.preferences.success_title") : "Success",
+        message: isPpmShell
+          ? ppmT("ux.preferences.start_of_week_updated")
+          : "First day of the week updated successfully",
+      });
     } catch (_error) {
-      setToast({ type: TOAST_TYPE.ERROR, title: "Update failed", message: "Please try again later." });
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: isPpmShell ? ppmT("ux.preferences.update_failed_title") : "Update failed",
+        message: isPpmShell ? ppmT("ux.preferences.try_again_later") : "Please try again later.",
+      });
     }
   };
 

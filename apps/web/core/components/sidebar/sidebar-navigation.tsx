@@ -16,6 +16,8 @@ export function SidebarNavItem(props: TSidebarNavItem) {
   const { className, isActive, children } = props;
   return (
     <div
+      data-ppm-nav-item=""
+      data-active={isActive ? "" : undefined}
       className={cn(
         "group relative flex w-full cursor-pointer items-center justify-between gap-1.5 rounded-md px-2 py-1 outline-none",
         {

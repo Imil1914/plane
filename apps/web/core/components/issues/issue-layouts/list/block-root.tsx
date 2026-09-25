@@ -19,6 +19,8 @@ import { EIssueServiceType } from "@plane/types";
 import { DropIndicator } from "@plane/ui";
 import RenderIfVisible from "@/components/core/render-if-visible-HOC";
 import { ListLoaderItemRow } from "@/components/ui/loader/layouts/list-layout-loader";
+import { PpmTaskRowPlaceholder } from "@/components/ppm-tasks/row-placeholder";
+import { usePpmDesignV2 } from "@/lib/ppm-design";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
@@ -76,6 +78,7 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
   const issueBlockRef = useRef<HTMLDivElement | null>(null);
   // hooks
   const { isMobile } = usePlatformOS();
+  const isDesignV2 = usePpmDesignV2();
   // store hooks
   const { subIssues: subIssuesStore } = useIssueDetail(isEpic ? EIssueServiceType.EPICS : EIssueServiceType.ISSUES);
 
@@ -139,7 +142,13 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
         classNames={`relative ${isLastChild && !isExpanded ? "" : "border-b border-b-subtle"}`}
         verticalOffset={100}
         defaultValue={shouldRenderByDefault || (issuesMap[issueId] ? isIssueNew(issuesMap[issueId]) : false)}
-        placeholderChildren={<ListLoaderItemRow shouldAnimate={false} renderForPlaceHolder defaultPropertyCount={4} />}
+        placeholderChildren={
+          isDesignV2 ? (
+            <PpmTaskRowPlaceholder />
+          ) : (
+            <ListLoaderItemRow shouldAnimate={false} renderForPlaceHolder defaultPropertyCount={4} />
+          )
+        }
         shouldRecordHeights={isMobile}
       >
         <IssueBlock

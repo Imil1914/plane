@@ -7,8 +7,13 @@
 import { observer } from "mobx-react";
 // components
 import { ThemeSwitcher } from "@/components/appearance";
+import { PpmDensitySwitcher } from "@/components/ppm-shell/density-switcher";
+// lib
+import { usePpmDesignV2 } from "@/lib/ppm-design";
 
 export const ProfileSettingsDefaultPreferencesList = observer(function ProfileSettingsDefaultPreferencesList() {
+  const isDesignV2 = usePpmDesignV2();
+
   return (
     <div className="flex flex-col gap-y-1">
       <ThemeSwitcher
@@ -18,6 +23,7 @@ export const ProfileSettingsDefaultPreferencesList = observer(function ProfileSe
           description: "select_or_customize_your_interface_color_scheme",
         }}
       />
+      {isDesignV2 && <PpmDensitySwitcher />}
     </div>
   );
 });

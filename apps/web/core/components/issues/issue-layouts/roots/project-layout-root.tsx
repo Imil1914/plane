@@ -15,8 +15,12 @@ import { Spinner } from "@plane/ui";
 import { ProjectLevelWorkItemFiltersHOC } from "@/components/work-item-filters/filters-hoc/project-level";
 import { WorkItemFiltersRow } from "@/components/work-item-filters/filters-row";
 // hooks
+import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
 import { IssuesStoreContext } from "@/hooks/use-issue-layout-store";
+import { usePpmDesignV2 } from "@/lib/ppm-design";
+import { PpmTasksCuratorColumn } from "@/components/ppm-tasks/curator-column";
+import { PpmTasksDataProvider } from "@/components/ppm-tasks/data-context";
 // local imports
 import { IssuePeekOverview } from "../../peek-overview";
 import { CalendarLayout } from "../calendar/roots/project-root";
@@ -42,6 +46,34 @@ function ProjectIssueLayout(props: { activeLayout: EIssueLayoutTypes | undefined
   }
 }
 
+function ProjectIssueLayoutScroller(props: {
+  className: string;
+  activeLayout: EIssueLayoutTypes | undefined;
+  showMutationLoader: boolean;
+}) {
+  return (
+    <div className={props.className}>
+      {/* mutation loader */}
+      {props.showMutationLoader && (
+        <div className="fixed top-[70px] right-[20px] z-50 flex h-[40px] w-[40px] items-center justify-center rounded-sm bg-layer-1">
+          <Spinner className="h-4 w-4" />
+        </div>
+      )}
+      <ProjectIssueLayout activeLayout={props.activeLayout} />
+    </div>
+  );
+}
+
+/**
+ * v2 only: the curator column hides while the peek is open. peekIssue is read here, not in ProjectLayoutRoot, so the
+ * root (and the wave-0 v1 tree) does not re-render on every peek open/close.
+ */
+const PpmTasksCuratorSlot = observer(function PpmTasksCuratorSlot(props: { workspaceSlug: string; projectId: string }) {
+  const { peekIssue } = useIssueDetail();
+  if (peekIssue) return null;
+  return <PpmTasksCuratorColumn workspaceSlug={props.workspaceSlug} projectId={props.projectId} />;
+});
+
 export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
   // router
   const { workspaceSlug: routerWorkspaceSlug, projectId: routerProjectId } = useParams();
@@ -52,6 +84,7 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
   // derived values
   const workItemFilters = projectId ? issuesFilter?.getIssueFilters(projectId) : undefined;
   const activeLayout = workItemFilters?.displayFilters?.layout;
+  const isDesignV2 = usePpmDesignV2();
 
   useSWR(
     workspaceSlug && projectId ? `PROJECT_ISSUES_${workspaceSlug}_${projectId}` : null,
@@ -86,15 +119,30 @@ export const ProjectLayoutRoot = observer(function ProjectLayoutRoot() {
                 }}
               />
             )}
-            <div className="relative h-full w-full overflow-auto bg-surface-1">
-              {/* mutation loader */}
-              {issues?.getIssueLoader() === "mutation" && (
-                <div className="shadow-sm fixed top-[70px] right-[20px] z-50 flex h-[40px] w-[40px] items-center justify-center rounded-sm bg-layer-1">
-                  <Spinner className="h-4 w-4" />
+            {isDesignV2 ? (
+              <PpmTasksDataProvider
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
+                enabled={activeLayout === EIssueLayoutTypes.LIST}
+              >
+                <div className="relative flex h-full w-full overflow-hidden">
+                  <ProjectIssueLayoutScroller
+                    className="relative h-full min-w-0 flex-1 overflow-auto bg-surface-1"
+                    activeLayout={activeLayout}
+                    showMutationLoader={issues?.getIssueLoader() === "mutation"}
+                  />
+                  {activeLayout === EIssueLayoutTypes.LIST && (
+                    <PpmTasksCuratorSlot workspaceSlug={workspaceSlug} projectId={projectId} />
+                  )}
                 </div>
-              )}
-              <ProjectIssueLayout activeLayout={activeLayout} />
-            </div>
+              </PpmTasksDataProvider>
+            ) : (
+              <ProjectIssueLayoutScroller
+                className="relative h-full w-full overflow-auto bg-surface-1"
+                activeLayout={activeLayout}
+                showMutationLoader={issues?.getIssueLoader() === "mutation"}
+              />
+            )}
             {/* peek overview */}
             <IssuePeekOverview />
           </div>

@@ -16,6 +16,7 @@ import { isPpmShellEnabled } from "@ppm/brand";
 import type { TPowerKCommandConfig, TPowerKContext } from "@/components/power-k/core/types";
 import { ProjectsAppPowerKCommandsList } from "@/components/power-k/ui/modal/commands-list";
 import { PowerKModalFooter } from "@/components/power-k/ui/modal/footer";
+import { getPpmCommandShortcutLabel, PpmKbdHint } from "@/components/ppm-shell/kbd-hint";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { usePowerK } from "@/hooks/store/use-power-k";
 import { useUser } from "@/hooks/store/user";
@@ -42,6 +43,7 @@ export const TopNavPowerK = observer(() => {
   const { activeContext, setActivePage, activePage, setTopNavInputRef } = usePowerK();
   const { data: currentUser } = useUser();
   const ppmT = usePpmTranslation();
+  const commandShortcutLabel = getPpmCommandShortcutLabel(typeof navigator === "undefined" ? "" : navigator.platform);
 
   const handleOnClose = useCallback(() => {
     setSearchTerm("");
@@ -224,6 +226,7 @@ export const TopNavPowerK = observer(() => {
       >
         <label
           htmlFor="top-nav-command-input"
+          data-ppm-command-search=""
           className={cn(
             "flex h-7 w-full items-center rounded-lg border border-subtle-1 bg-layer-2 p-2 transition-colors duration-200 focus-within:border-accent-strong focus-within:ring-1 focus-within:ring-accent-strong",
             {
@@ -252,6 +255,9 @@ export const TopNavPowerK = observer(() => {
             placeholder={ppmT("navigation.search_commands")}
             className="min-w-0 flex-1 bg-transparent text-13 text-primary outline-none placeholder:text-placeholder"
           />
+          {IS_PPM_SHELL_ENABLED && !searchTerm && (
+            <PpmKbdHint keys={[commandShortcutLabel]} className="ppm-v2:inline-flex ml-2 hidden" />
+          )}
           {searchTerm && (
             <button
               type="button"
@@ -265,6 +271,7 @@ export const TopNavPowerK = observer(() => {
         </label>
       </div>
       <div
+        data-ppm-command-panel=""
         className={cn(
           "absolute -top-[6px] left-1/2 z-20 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-col overflow-hidden rounded-md border border-subtle bg-surface-1 px-0 pt-10 shadow-overlay-100 transition-all duration-300 ease-in-out",
           {

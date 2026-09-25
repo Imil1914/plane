@@ -87,6 +87,7 @@ import { EFileAssetType } from "@plane/types";
 import { resolveGeneralTheme } from "@plane/utils";
 import { formatPpmTimeAgo } from "@/helpers/ppm-time-ago.helper";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { usePpmDesignV2 } from "@/lib/ppm-design";
 import { PpmCanvasService, PpmCanvasServiceError } from "@/services/ppm-canvas.service";
 import { FileService } from "@/services/file.service";
 import { PpmVaultService } from "@/services/ppm-vault.service";
@@ -121,6 +122,10 @@ import {
 } from "./board-recovery";
 import { canvasSaveRetryDelayMs, shouldRetryCanvasSave } from "./board-save-retry";
 import { isBlockingCanvasStatus } from "./board-workspace-state";
+import { PpmCanvasInspector } from "./canvas-inspector";
+import { PpmCanvasGrammarContext, isCanvasGrammarV2 } from "./canvas-grammar";
+import { PpmSemanticEdgeFocusContext, PpmSemanticEdgesContext, PpmSemanticEdgesLayer } from "./semantic-edges-layer";
+import { SEMANTIC_RELATION_LABELS, sameSemanticEdges } from "./semantic-edge-style";
 import {
   MAX_CANVAS_IMPORT_SNAPSHOT_BYTES,
   createDesktopImportReport,
@@ -132,6 +137,8 @@ import {
 import "tldraw/tldraw.css";
 // oxlint-disable-next-line import/no-unassigned-import -- PPM theme is intentionally scoped to this route
 import "./canvas.css";
+// oxlint-disable-next-line import/no-unassigned-import -- UX1.1: v2 look, every rule scoped to html[data-ppm-design="v2"]
+import "./canvas-v2.css";
 
 type TPpmCanvasEditorProps = {
   authorId: string;
@@ -143,6 +150,9 @@ type TPpmCanvasEditorProps = {
   onOrchestratorRunVersionsChange?: (boardId: string, versions: Record<string, string>) => void;
   onSelectionChange?: (boardId: string, shapeIds: string[]) => void;
   onSyncStatusChange?: (boardId: string, status: TPpmCanvasSyncStatus) => void;
+  // UX1.1 (v2 workspace only): server time of the last saved version and the rounded zoom, for the footer.
+  onSavedAtChange?: (boardId: string, savedAt: string | null) => void;
+  onZoomChange?: (boardId: string, zoom: number) => void;
   onToolChange?: (boardId: string, toolId: string) => void;
   presence?: TPpmBoardPresenceController;
   projectId: string;
@@ -206,6 +216,8 @@ export default function PpmCanvasEditor({
   onOrchestratorRunVersionsChange,
   onSelectionChange,
   onSyncStatusChange,
+  onSavedAtChange,
+  onZoomChange,
   onToolChange,
   presence,
   projectId,
@@ -214,6 +226,8 @@ export default function PpmCanvasEditor({
   workspaceSlug,
 }: TPpmCanvasEditorProps) {
   const ppmT = usePpmTranslation();
+  const designV2 = usePpmDesignV2();
+  const grammarV2 = isCanvasGrammarV2(designV2, statusPlacement);
   const service = useMemo(() => new PpmCanvasService(), []);
   const fileService = useMemo(() => new FileService(), []);
   const vaultService = useMemo(() => new PpmVaultService(), []);
@@ -250,7 +264,13 @@ export default function PpmCanvasEditor({
   const boardInfoFocusRef = useRef(false);
   // Same reason: "Semantic links" must survive autosave and edge updates, which rebuild the overlay.
   const [semanticPanelOpen, setSemanticPanelOpen] = useState(false);
+  const semanticPanelOpenRef = useRef(false);
   const semanticPanelFocusRef = useRef(false);
+  // UX1.1: the edge whose chip was clicked; the list highlights and scrolls to it. Lives here (not in the overlay)
+  // and reaches the list through PpmSemanticEdgeFocusContext, so a chip click does not rebuild the overlay.
+  const [focusedEdgeId, setFocusedEdgeId] = useState<string>();
+  // Every write of the edge list bumps it: a focus refresh applies its response only if nothing newer happened.
+  const semanticEdgesRequestRef = useRef(0);
   const [fileDropNotice, setFileDropNotice] = useState(false);
   const [pendingFileDrop, setPendingFileDrop] = useState<TPendingFileDrop>();
   const [fileDropError, setFileDropError] = useState<string>();
@@ -266,6 +286,7 @@ export default function PpmCanvasEditor({
   const [pendingWorkItemIds, setPendingWorkItemIds] = useState<ReadonlySet<string>>(new Set());
   const [isRefreshingWorkItems, setIsRefreshingWorkItems] = useState(false);
   const [semanticEdges, setSemanticEdges] = useState<TPpmCanvasSemanticEdge[]>([]);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const editorRef = useRef<Editor>();
   const approvedProjectionDeletesRef = useRef(new Set<TLShapeId>());
   const processedVaultProjectionRef = useRef<string>();
@@ -421,6 +442,7 @@ export default function PpmCanvasEditor({
       };
       const response = await service.saveBoard(workspaceId, projectId, boardId, request);
       versionRef.current = response.version;
+      setSavedAt(response.saved_at);
       baselineSnapshotRef.current = pending.snapshot;
       if (pending.binding_changes.activate.length > 0) {
         const activatedIds = new Set(pending.binding_changes.activate);
@@ -619,6 +641,7 @@ export default function PpmCanvasEditor({
     mergeBusyRef.current = false;
     initializedRef.current = false;
     versionRef.current = 0;
+    setSavedAt(null);
     setCopiedLocal(false);
     setImportError(false);
     setDesktopImport(undefined);
@@ -642,6 +665,7 @@ export default function PpmCanvasEditor({
         const remoteCanvas = await service.getBoard(workspaceId, projectId, boardId);
         if (!active) return;
         versionRef.current = remoteCanvas.version;
+        setSavedAt(remoteCanvas.saved_at);
         baselineSnapshotRef.current = remoteCanvas.snapshot;
         if (remoteCanvas.snapshot_status === "corrupt") {
           setSyncStatus("corrupt");
@@ -658,6 +682,7 @@ export default function PpmCanvasEditor({
           .getSemanticEdges(workspaceId, projectId, boardId)
           .catch(() => ({ semantic_edges: [] }));
         if (!active) return;
+        semanticEdgesRequestRef.current += 1;
         setSemanticEdges(edgeResponse.semantic_edges);
         const mayEdit = canEdit && remoteCanvas.access === "edit";
         const sessionStorage = getCanvasSessionStorage();
@@ -862,6 +887,7 @@ export default function PpmCanvasEditor({
           return;
         }
         versionRef.current = remoteCanvas.version;
+        setSavedAt(remoteCanvas.saved_at);
         baselineSnapshotRef.current = remoteCanvas.snapshot;
         if (remoteCanvas.snapshot_status === "corrupt") {
           setSyncStatus("corrupt");
@@ -885,6 +911,7 @@ export default function PpmCanvasEditor({
           .getSemanticEdges(workspaceId, projectId, boardId)
           .catch(() => ({ semantic_edges: [] }));
         if (!active) return;
+        semanticEdgesRequestRef.current += 1;
         setSemanticEdges(edgeResponse.semantic_edges);
         const mayEdit = canEdit && remoteCanvas.access === "edit";
         blockedRef.current = !mayEdit;
@@ -939,6 +966,37 @@ export default function PpmCanvasEditor({
   useEffect(() => {
     onSyncStatusChange?.(boardId, syncStatus);
   }, [boardId, onSyncStatusChange, syncStatus]);
+
+  useEffect(() => {
+    onSavedAtChange?.(boardId, savedAt);
+  }, [boardId, onSavedAtChange, savedAt]);
+
+  useEffect(() => {
+    // Semantic edges have no realtime channel: refresh them when the user comes back, active board only.
+    if (!grammarV2) return;
+    const onFocus = () => {
+      // Not while «Смысловые связи» is open: a new list rebuilds the overlay and would drop a half-filled form.
+      if (semanticPanelOpenRef.current) return;
+      const container = editorRef.current?.getContainer();
+      if (!initializedRef.current || !container?.closest(".ppm-canvas-workspace__editor[data-active]")) return;
+      const request = ++semanticEdgesRequestRef.current;
+      void service.getSemanticEdges(workspaceId, projectId, boardId).then(
+        (response) =>
+          setSemanticEdges((current) =>
+            // Stale when a later refresh, a local create/review/delete or a reload already wrote a newer list.
+            request !== semanticEdgesRequestRef.current || sameSemanticEdges(current, response.semantic_edges)
+              ? current
+              : response.semantic_edges
+          ),
+        () => undefined
+      );
+    };
+    window.addEventListener("focus", onFocus);
+    return () => {
+      semanticEdgesRequestRef.current += 1;
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [boardId, grammarV2, projectId, service, workspaceId]);
 
   useEffect(() => {
     onEditabilityChange?.(boardId, effectiveCanEdit);
@@ -1455,6 +1513,7 @@ export default function PpmCanvasEditor({
       });
       if (generation !== mergeGenerationRef.current || editorRef.current !== activeEditor) return;
       versionRef.current = response.version;
+      setSavedAt(response.saved_at);
       baselineSnapshotRef.current = merge.snapshot;
       clearRecoveryDraft();
       setRecoveryDraft(undefined);
@@ -1595,6 +1654,7 @@ export default function PpmCanvasEditor({
         applyingRemoteRef.current = false;
       }
       versionRef.current = current.version;
+      setSavedAt(current.saved_at);
       baselineSnapshotRef.current = current.snapshot;
       const candidate = recoveryCandidates.find((item) => item.key === selectedRecoveryKey);
       adoptedRecoveryKeyRef.current = candidate?.storage === "local" ? candidate.key : undefined;
@@ -1918,6 +1978,7 @@ export default function PpmCanvasEditor({
         origin: "user",
         client_operation_id: crypto.randomUUID(),
       });
+      semanticEdgesRequestRef.current += 1;
       setSemanticEdges((current) => [...current.filter((item) => item.edge_id !== edge.edge_id), edge]);
     },
     [boardId, projectId, service, workspaceId]
@@ -1926,6 +1987,7 @@ export default function PpmCanvasEditor({
   const deleteSemanticEdge = useCallback(
     async (edgeId: string) => {
       await service.deleteSemanticEdge(workspaceId, projectId, boardId, edgeId);
+      semanticEdgesRequestRef.current += 1;
       setSemanticEdges((current) => current.filter((edge) => edge.edge_id !== edgeId));
     },
     [boardId, projectId, service, workspaceId]
@@ -1936,6 +1998,7 @@ export default function PpmCanvasEditor({
       const edge = await service.updateSemanticEdge(workspaceId, projectId, boardId, edgeId, {
         confirmation_status: confirmationStatus,
       });
+      semanticEdgesRequestRef.current += 1;
       setSemanticEdges((current) => current.map((item) => (item.edge_id === edge.edge_id ? edge : item)));
     },
     [boardId, projectId, service, workspaceId]
@@ -1949,20 +2012,37 @@ export default function PpmCanvasEditor({
 
   const openSemanticPanel = useCallback(() => {
     // Focus moves into the panel once, when it opens; later overlay remounts must not steal focus from the canvas.
+    // Opening an already open panel (a chip click) must not raise the flag for the next remount either.
+    if (semanticPanelOpenRef.current) return;
+    semanticPanelOpenRef.current = true;
     semanticPanelFocusRef.current = true;
     setSemanticPanelOpen(true);
   }, []);
   const closeSemanticPanel = useCallback(() => {
+    setFocusedEdgeId(undefined);
     const focusInPanel =
       document.activeElement instanceof HTMLElement && Boolean(document.activeElement.closest(".ppm-semantic-edges"));
+    semanticPanelOpenRef.current = false;
     setSemanticPanelOpen(false);
     // The panel unmounts with focus inside it: keep keyboard focus on this board's canvas, not on the page body.
     if (focusInPanel) editorRef.current?.getContainer().focus();
   }, []);
+  const openSemanticEdge = useCallback(
+    (edgeId: string) => {
+      setFocusedEdgeId(edgeId);
+      openSemanticPanel();
+    },
+    [openSemanticPanel]
+  );
+  const semanticLayerValue = useMemo(
+    () => ({ edges: semanticEdges, enabled: grammarV2, onOpenEdge: openSemanticEdge }),
+    [grammarV2, openSemanticEdge, semanticEdges]
+  );
 
   const components = useMemo<TLComponents>(
     () => ({
       ...HIDDEN_TLDRAW_UI,
+      ...(grammarV2 ? { OnTheCanvas: PpmSemanticEdgesLayer } : {}),
       InFrontOfTheCanvas: () => (
         <CanvasControls
           authorId={authorId}
@@ -1973,6 +2053,7 @@ export default function PpmCanvasEditor({
           boards={boards}
           canEdit={effectiveCanEdit}
           copiedLocal={copiedLocal}
+          designV2={designV2}
           draftStorageUnavailable={draftStorageUnavailable}
           mergeBusy={mergeBusy}
           mergePreview={mergePreview}
@@ -2031,9 +2112,11 @@ export default function PpmCanvasEditor({
       createWorkItem,
       createSemanticEdge,
       deleteSemanticEdge,
+      designV2,
       discardRecoveryDraft,
       downloadRecoveryDraft,
       draftStorageUnavailable,
+      grammarV2,
       mergeBusy,
       mergePreview,
       mergeUnavailable,
@@ -2110,26 +2193,50 @@ export default function PpmCanvasEditor({
     ]
   );
   const boardNavigationContext = useMemo(() => ({ onOpenBoard }), [onOpenBoard]);
+  // RC9: the inspector never covers the "Board" panel, the import preview or a blocking banner.
+  const inspectorHidden =
+    boardInfoOpen || Boolean(desktopImport) || isBlockingCanvasStatus(syncStatus, Boolean(recoveryDraft));
 
   return (
     <div
       className="ppm-canvas-shell"
+      data-ppm-canvas-grammar={grammarV2 ? "v2" : undefined}
       data-ppm-canvas-mode={effectiveCanEdit ? "edit" : "read"}
       onDragOverCapture={handleFileDrop}
       onDropCapture={handleFileDrop}
     >
-      <PpmCanvasBoardNavigationContext.Provider value={boardNavigationContext}>
-        <PpmWorkItemProjectionContext.Provider value={projectionContext}>
-          <Tldraw
-            cameraOptions={{ wheelBehavior: "pan" }}
-            components={components}
-            shapeUtils={[PpmCanvasNodeShapeUtil]}
-            onMount={setEditor}
-          >
-            {presence && <PpmCanvasRealtimeCursors presence={presence} />}
-          </Tldraw>
-        </PpmWorkItemProjectionContext.Provider>
-      </PpmCanvasBoardNavigationContext.Provider>
+      <PpmCanvasGrammarContext.Provider value={grammarV2}>
+        <PpmCanvasBoardNavigationContext.Provider value={boardNavigationContext}>
+          <PpmWorkItemProjectionContext.Provider value={projectionContext}>
+            <PpmSemanticEdgesContext.Provider value={semanticLayerValue}>
+              <PpmSemanticEdgeFocusContext.Provider value={focusedEdgeId}>
+                <Tldraw
+                  cameraOptions={{ wheelBehavior: "pan" }}
+                  components={components}
+                  shapeUtils={[PpmCanvasNodeShapeUtil]}
+                  onMount={setEditor}
+                >
+                  {presence && <PpmCanvasRealtimeCursors presence={presence} />}
+                  {grammarV2 && onZoomChange && <PpmCanvasZoomReporter boardId={boardId} onZoomChange={onZoomChange} />}
+                </Tldraw>
+              </PpmSemanticEdgeFocusContext.Provider>
+            </PpmSemanticEdgesContext.Provider>
+          </PpmWorkItemProjectionContext.Provider>
+        </PpmCanvasBoardNavigationContext.Provider>
+      </PpmCanvasGrammarContext.Provider>
+      {grammarV2 && editor && !inspectorHidden && (
+        <PpmCanvasInspector
+          bindingsByShapeId={bindingsByShapeId}
+          canEdit={effectiveCanEdit}
+          edges={semanticEdges}
+          editor={editor}
+          errorsByShapeId={projectionErrors}
+          options={workItemOptions}
+          pendingWorkItemIds={pendingWorkItemIds}
+          onOpenLinks={openSemanticPanel}
+          onUpdate={(shapeId, binding, patch) => void updateWorkItemProjection(shapeId, binding, patch)}
+        />
+      )}
       {fileDropNotice && (
         <div className="ppm-canvas-file-drop-notice" role="status">
           <span>{ppmT("canvas.file_drop_placeholder")}</span>
@@ -2214,6 +2321,23 @@ function PpmCanvasRealtimeCursors({ presence }: { presence: TPpmBoardPresenceCon
   );
 }
 
+// UX1.1: a leaf child of <Tldraw> (never inside the InFrontOfTheCanvas memo). It re-renders only when the rounded
+// zoom percent changes, so pinch and wheel zoom do not touch the workspace tree.
+function PpmCanvasZoomReporter({
+  boardId,
+  onZoomChange,
+}: {
+  boardId: string;
+  onZoomChange: (boardId: string, zoom: number) => void;
+}) {
+  const editor = useEditor();
+  const zoom = useValue("ppm canvas zoom percent", () => Math.round(editor.getZoomLevel() * 100), [editor]);
+  useEffect(() => {
+    onZoomChange(boardId, zoom);
+  }, [boardId, onZoomChange, zoom]);
+  return null;
+}
+
 function CanvasControls({
   authorId,
   boardId,
@@ -2222,6 +2346,7 @@ function CanvasControls({
   boards,
   canEdit,
   copiedLocal,
+  designV2,
   desktopImport,
   desktopImportCount,
   desktopImportReport,
@@ -2273,6 +2398,7 @@ function CanvasControls({
   boards: TPpmCanvasBoard[];
   canEdit: boolean;
   copiedLocal: boolean;
+  designV2: boolean;
   desktopImport?: { boardId: string; filename: string; plan: TPpmDesktopImportPlan };
   desktopImportCount?: number;
   desktopImportReport?: TPpmDesktopImportReport;
@@ -2442,6 +2568,9 @@ function CanvasControls({
           break;
         case "fit-view":
           editor.zoomToFit({ animation: { duration: 180 } });
+          break;
+        case "zoom-reset":
+          editor.resetZoom(editor.getViewportScreenCenter(), { animation: { duration: 180 } });
           break;
         case "focus-selection":
           if (editor.getSelectedShapeIds().length > 0) editor.zoomToSelection({ animation: { duration: 180 } });
@@ -2687,6 +2816,7 @@ function CanvasControls({
       {semanticPanelOpen && (
         <SemanticEdgesPanel
           canEdit={canEdit}
+          designV2={designV2}
           edges={semanticEdges}
           focusOnMountRef={semanticPanelFocusRef}
           nodes={nodes}
@@ -3058,20 +3188,9 @@ function BoardLinkPicker({
   );
 }
 
-const SEMANTIC_RELATION_LABELS = {
-  relates_to: "canvas.semantic_relation_relates_to",
-  depends_on: "canvas.semantic_relation_depends_on",
-  blocks: "canvas.semantic_relation_blocks",
-  explains: "canvas.semantic_relation_explains",
-  implements: "canvas.semantic_relation_implements",
-  evidence_for: "canvas.semantic_relation_evidence_for",
-  contradicts: "canvas.semantic_relation_contradicts",
-  derived_from: "canvas.semantic_relation_derived_from",
-  result_of: "canvas.semantic_relation_result_of",
-} as const satisfies Record<TPpmCanvasSemanticRelationType, TPpmTranslationKey>;
-
 function SemanticEdgesPanel({
   canEdit,
+  designV2,
   edges,
   focusOnMountRef,
   nodes,
@@ -3082,6 +3201,7 @@ function SemanticEdgesPanel({
   selectedShapeIds,
 }: {
   canEdit: boolean;
+  designV2: boolean;
   edges: TPpmCanvasSemanticEdge[];
   focusOnMountRef: { current: boolean };
   nodes: { parsed: ReturnType<typeof parseSerializedPpmCanvasNode>; shape: TPpmCanvasShape }[];
@@ -3104,6 +3224,12 @@ function SemanticEdgesPanel({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
+  // From context, not props: a chip click on an open panel re-renders only this list (the overlay stays mounted).
+  const focusedEdgeId = useContext(PpmSemanticEdgeFocusContext);
+  const focusedRowRef = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (focusedEdgeId) focusedRowRef.current?.scrollIntoView({ block: "nearest" });
+  }, [focusedEdgeId]);
   const pair = fromShapeId && toShapeId && fromShapeId !== toShapeId ? [fromShapeId, toShapeId] : [];
   const titleByShapeId = new Map(
     nodes.map(({ parsed, shape }) => [
@@ -3126,7 +3252,10 @@ function SemanticEdgesPanel({
     if (!focusOnMountRef.current) return;
     focusOnMountRef.current = false;
     // Next frame: when the command palette runs this command, it returns focus to its trigger in a frame first.
-    requestAnimationFrame(() => sectionRef.current?.querySelector<HTMLElement>("button, select, input")?.focus());
+    // No scroll: after a chip click the list has already scrolled to the highlighted link.
+    requestAnimationFrame(() =>
+      sectionRef.current?.querySelector<HTMLElement>("button, select, input")?.focus({ preventScroll: true })
+    );
   }, [focusOnMountRef]);
 
   const create = async () => {
@@ -3261,13 +3390,20 @@ function SemanticEdgesPanel({
         ) : (
           <ul>
             {edges.map((edge) => (
-              <li key={edge.edge_id} data-confirmation={edge.confirmation_status}>
+              <li
+                key={edge.edge_id}
+                data-confirmation={edge.confirmation_status}
+                data-focused={edge.edge_id === focusedEdgeId || undefined}
+                ref={edge.edge_id === focusedEdgeId ? focusedRowRef : undefined}
+              >
                 <span>
                   <strong>{titleByShapeId.get(edge.from_shape_id as TLShapeId) ?? edge.from_shape_id}</strong>
                   <small>{ppmT(SEMANTIC_RELATION_LABELS[edge.relation_type])}</small>
                   <strong>{titleByShapeId.get(edge.to_shape_id as TLShapeId) ?? edge.to_shape_id}</strong>
                   {edge.label && <small>{edge.label}</small>}
-                  {edge.confirmation_status === "proposed" && <small>{ppmT("canvas.semantic_edges_proposed")}</small>}
+                  {edge.confirmation_status === "proposed" && (
+                    <small>{ppmT(designV2 ? "canvas.edge_proposed" : "canvas.semantic_edges_proposed")}</small>
+                  )}
                 </span>
                 {canEdit && (
                   <div className="ppm-semantic-edges__actions">

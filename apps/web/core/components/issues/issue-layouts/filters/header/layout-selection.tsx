@@ -8,12 +8,13 @@
 import { ISSUE_LAYOUTS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Tooltip } from "@plane/propel/tooltip";
-import type { EIssueLayoutTypes } from "@plane/types";
+import { EIssueLayoutTypes } from "@plane/types";
 import { cn } from "@plane/utils";
 // components
 import { IssueLayoutIcon } from "@/components/issues/issue-layouts/layout-icon";
 // hooks
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmDesignV2 } from "@/lib/ppm-design";
 
 type Props = {
   layouts: EIssueLayoutTypes[];
@@ -25,11 +26,34 @@ export function LayoutSelection(props: Props) {
   const { layouts, onChange, selectedLayout } = props;
   const { isMobile } = usePlatformOS();
   const { t } = useTranslation();
+  const isDesignV2 = usePpmDesignV2();
   const handleOnChange = (layoutKey: EIssueLayoutTypes) => {
     if (selectedLayout !== layoutKey) {
       onChange(layoutKey);
     }
   };
+
+  if (isDesignV2)
+    return (
+      <div className="ppm-layout-switch">
+        {ISSUE_LAYOUTS.filter((l) => layouts.includes(l.key)).map((layout) => (
+          <Tooltip key={layout.key} tooltipContent={t(layout.i18n_title)} isMobile={isMobile}>
+            <button
+              type="button"
+              className="ppm-layout-switch__item"
+              onClick={() => handleOnChange(layout.key)}
+              aria-label={t(layout.i18n_title)}
+              aria-pressed={selectedLayout === layout.key}
+            >
+              <IssueLayoutIcon layout={layout.key} size={14} strokeWidth={1.5} className="size-3.5" />
+              {(layout.key === EIssueLayoutTypes.LIST || layout.key === EIssueLayoutTypes.KANBAN) && (
+                <span>{t(layout.i18n_title)}</span>
+              )}
+            </button>
+          </Tooltip>
+        ))}
+      </div>
+    );
 
   return (
     <div className="flex items-center gap-1 rounded-md bg-layer-3 p-1">

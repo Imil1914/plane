@@ -13,12 +13,14 @@ import { THEME_OPTIONS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { setPromiseToast } from "@plane/propel/toast";
 import { applyCustomTheme } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { CustomThemeSelector } from "@/components/core/theme/custom-theme-selector";
 import { ThemeSwitch } from "@/components/core/theme/theme-switch";
 import { SettingsControlItem } from "@/components/settings/control-item";
 // hooks
 import { useUserProfile } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 export const ThemeSwitcher = observer(function ThemeSwitcher(props: {
   option: {
@@ -33,6 +35,8 @@ export const ThemeSwitcher = observer(function ThemeSwitcher(props: {
   const { setTheme } = useTheme();
   // translation
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // derived values
   const currentTheme = useMemo(() => {
     // oxlint-disable-next-line no-shadow
@@ -61,14 +65,15 @@ export const ThemeSwitcher = observer(function ThemeSwitcher(props: {
 
         const updatePromise = updateUserTheme({ theme: themeOption.value });
         setPromiseToast(updatePromise, {
-          loading: "Updating theme...",
+          loading: isPpmShell ? ppmT("ux.preferences.theme_updating") : "Updating theme...",
           success: {
-            title: "Theme updated",
-            message: () => "Reloading to apply changes...",
+            title: isPpmShell ? ppmT("ux.preferences.theme_updated") : "Theme updated",
+            message: () => (isPpmShell ? ppmT("ux.preferences.theme_reloading") : "Reloading to apply changes..."),
           },
           error: {
-            title: "Error!",
-            message: () => "Failed to update theme. Please try again.",
+            title: isPpmShell ? ppmT("ux.preferences.error_title") : "Error!",
+            message: () =>
+              isPpmShell ? ppmT("ux.preferences.theme_failed") : "Failed to update theme. Please try again.",
           },
         });
         // Wait for the promise to resolve, then reload after showing toast
@@ -78,7 +83,7 @@ export const ThemeSwitcher = observer(function ThemeSwitcher(props: {
         console.error("Error updating theme:", error);
       }
     },
-    [setTheme, updateUserTheme, userProfile]
+    [setTheme, updateUserTheme, userProfile, isPpmShell, ppmT]
   );
 
   if (!userProfile) return null;

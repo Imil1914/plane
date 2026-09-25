@@ -17,17 +17,26 @@ import {
   type PointerEvent,
 } from "react";
 import {
+  Archive,
   ChevronDown,
   ChevronUp,
   Columns3,
   Copy,
   Download,
   ExternalLink,
+  FileText,
+  FolderGit2,
+  GitBranch,
+  GitCommitHorizontal,
+  GitPullRequest,
   List,
   ListTodo,
   LoaderCircle,
+  Paperclip,
   Plus,
   RefreshCw,
+  Search,
+  SquareCheck,
   Trash2,
 } from "lucide-react";
 import {
@@ -65,6 +74,7 @@ import {
   type TPpmCanvasOrchestratorProjectionRef,
   type TPpmCanvasOrchestratorTrace,
   type TPpmCanvasOwnedNode,
+  type TPpmCanvasSearchNode,
   type TPpmCanvasServiceRunEnvelope,
   type TPpmCanvasWorkItemBinding,
   type TPpmWorkItemEditOptions,
@@ -75,7 +85,23 @@ import {
   type TPpmWorkItemsViewResponse,
 } from "@ppm/canvas";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { getPpmStateDisplayName } from "@/lib/ppm-design";
+import { useTranslation } from "@plane/i18n";
 import type { TPpmTranslationKey } from "@ppm/brand";
+import {
+  fillCanvasTemplate,
+  LIVE_SOURCE_LABEL_KEYS,
+  LIVE_SOURCE_OPEN_KEYS,
+  liveCardMeta,
+  liveSourceForEntity,
+  nodeIndicatorRadius,
+  OWN_NODE_KIND_KEYS,
+  sectionObjectCountKey,
+  shouldNarrowTitle,
+  usePpmCanvasGrammarV2,
+} from "./canvas-grammar";
+import { citationParts, isCitationStale, isExternalHref } from "./citation-format";
+import { LiveOpenLink, LiveSourceHeader, OwnNodeGlyph } from "./live-card";
 
 export const PPM_CANVAS_SHAPE_TYPE = "ppm-canvas-node" as const;
 
@@ -95,7 +121,7 @@ const COLOR_CLASS: Record<TPpmCanvasNode["visual"]["color"], string> = {
   yellow: "ppm-canvas-node--yellow",
 };
 
-const PRIORITY_LABELS = {
+export const PRIORITY_LABELS = {
   urgent: "canvas.priority_urgent",
   high: "canvas.priority_high",
   medium: "canvas.priority_medium",
@@ -199,7 +225,12 @@ export class PpmCanvasNodeShapeUtil extends ShapeUtil<TPpmCanvasShape> {
   }
 
   override indicator(shape: TPpmCanvasShape) {
-    return <rect height={shape.props.h} rx={12} ry={12} width={shape.props.w} />;
+    // No React context here: read the grammar from the DOM so the outline matches canvas-v2.css exactly.
+    const grammarV2 = Boolean(this.editor.getContainer().closest('[data-ppm-canvas-grammar="v2"]'));
+    const parsed = grammarV2 ? parseSerializedPpmCanvasNode(shape.props.node) : undefined;
+    const node = parsed && (parsed.status === "valid" || parsed.status === "migrated") ? parsed.node : undefined;
+    const radius = nodeIndicatorRadius(grammarV2, node?.kind);
+    return <rect height={shape.props.h} rx={radius} ry={radius} width={shape.props.w} />;
   }
 
   override onResize(shape: TPpmCanvasShape, info: TLResizeInfo<TPpmCanvasShape>) {
@@ -247,6 +278,7 @@ function NodeEditor({ node, shape }: { node: TPpmCanvasNode; shape: TPpmCanvasSh
   const ppmT = usePpmTranslation();
   const editor = useEditor();
   const [orchestratorProjectionStatus, setOrchestratorProjectionStatus] = useState<string>();
+  const grammarV2 = usePpmCanvasGrammarV2();
   if (node.kind === "work_item_ref") return <WorkItemProjectionCard node={node} shape={shape} />;
   if (node.kind === "work_items_view") return <WorkItemsViewNode node={node} shape={shape} />;
 
@@ -285,6 +317,7 @@ function NodeEditor({ node, shape }: { node: TPpmCanvasNode; shape: TPpmCanvasSh
   if (node.kind === "git_ref") return <GitReferenceCard node={node} shape={shape} />;
 
   if (node.kind === "search") {
+    if (grammarV2) return <FoundBySearchCard node={node} />;
     return (
       <div className="ppm-canvas-node__content ppm-agent-node ppm-agent-node--search">
         <span className="ppm-canvas-node__kind">Поиск по проекту</span>
@@ -517,6 +550,86 @@ function NodeEditor({ node, shape }: { node: TPpmCanvasNode; shape: TPpmCanvasSh
   return <NativeNodeCard editor={editor} node={node} shape={shape} />;
 }
 
+function FoundBySearchCard({ node }: { node: TPpmCanvasSearchNode }) {
+  const ppmT = usePpmTranslation();
+  const projectionContext = useContext(PpmWorkItemProjectionContext);
+  const results = node.results.slice(0, 5);
+  const bindings = [...projectionContext.bindingsByShapeId.values()];
+  const stale = results.map((result) => isCitationStale(result, bindings));
+  const firstStale = results.find((_, index) => stale[index]);
+  const excerpt = results[0]?.excerpt.trim();
+  return (
+    <div className="ppm-canvas-node__content ppm-found-card">
+      <header className="ppm-found-card__header">
+        <Search aria-hidden="true" />
+        <span>{ppmT("canvas.found_by_search")}</span>
+      </header>
+      <p className="ppm-found-card__query">{fillCanvasTemplate(ppmT("canvas.found_query"), { query: node.query })}</p>
+      {excerpt ? (
+        <blockquote className="ppm-found-card__excerpt" data-code={results[0].source_type === "git_code" || undefined}>
+          {excerpt}
+        </blockquote>
+      ) : (
+        <p className="ppm-found-card__empty">{ppmT("canvas.found_no_excerpt")}</p>
+      )}
+      {results.length > 0 && (
+        <ol className="ppm-found-card__citations">
+          {results.map((result, index) => {
+            const parts = citationParts(result);
+            const text = [
+              parts.title,
+              parts.page ? fillCanvasTemplate(ppmT("canvas.citation_page"), { page: parts.page }) : null,
+              parts.lines ? fillCanvasTemplate(ppmT("canvas.citation_lines"), { range: parts.lines }) : null,
+              parts.version,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            const label = fillCanvasTemplate(
+              ppmT(stale[index] ? "canvas.citation_label_stale" : "canvas.citation_label"),
+              { index: index + 1, text }
+            );
+            return (
+              <li key={result.result_id}>
+                <a
+                  className="ppm-citation-chip"
+                  data-stale={stale[index] || undefined}
+                  href={result.source_url}
+                  aria-label={label}
+                  rel={isExternalHref(result.source_url) ? "noreferrer" : undefined}
+                  target={isExternalHref(result.source_url) ? "_blank" : undefined}
+                  title={label}
+                  onClick={stopEventPropagation}
+                  onKeyDown={stopEventPropagation}
+                  onPointerDown={stopEventPropagation}
+                >
+                  <span className="ppm-citation-chip__index">{index + 1}</span>
+                  <span className="ppm-citation-chip__text">{text}</span>
+                  {stale[index] && <RefreshCw aria-hidden="true" />}
+                </a>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      {firstStale && (
+        <p className="ppm-found-card__stale">
+          {ppmT("canvas.citation_stale")} ·{" "}
+          <a
+            href={firstStale.source_url}
+            rel={isExternalHref(firstStale.source_url) ? "noreferrer" : undefined}
+            target={isExternalHref(firstStale.source_url) ? "_blank" : undefined}
+            onClick={stopEventPropagation}
+            onKeyDown={stopEventPropagation}
+            onPointerDown={stopEventPropagation}
+          >
+            {ppmT("canvas.citation_open")}
+          </a>
+        </p>
+      )}
+    </div>
+  );
+}
+
 const NATIVE_NODE_LABELS = {
   note: "canvas.note_title",
   document: "canvas.document_title",
@@ -544,11 +657,26 @@ function NativeNodeCard({
   const boardNavigation = useContext(PpmCanvasBoardNavigationContext);
   const readonly = editor.getInstanceState().isReadonly;
   const collapsed = Boolean(node.visual.collapsed);
+  const grammarV2 = usePpmCanvasGrammarV2();
+  const { currentLocale } = useTranslation();
+  const isSection = node.kind === "group" || node.kind === "frame";
+  const childCount = useValue(
+    "ppm section object count",
+    () => (grammarV2 && isSection ? editor.getSortedChildIdsForParent(shape.id).length : 0),
+    [editor, grammarV2, isSection, shape.id]
+  );
 
   return (
     <div className="ppm-canvas-node__native" data-collapsed={collapsed || undefined}>
       <header className="ppm-canvas-node__chrome">
-        <span>{ppmT(NATIVE_NODE_LABELS[node.kind])}</span>
+        {grammarV2 ? (
+          <span className="ppm-canvas-node__type">
+            <OwnNodeGlyph kind={node.kind} />
+            {ppmT(OWN_NODE_KIND_KEYS[node.kind])}
+          </span>
+        ) : (
+          <span>{ppmT(NATIVE_NODE_LABELS[node.kind])}</span>
+        )}
         {!readonly && (
           <div>
             <button
@@ -589,11 +717,18 @@ function NativeNodeCard({
         className="ppm-canvas-node__title"
         disabled={readonly}
         maxLength={160}
+        size={grammarV2 && isSection ? Math.min(48, Math.max(8, node.title.length + 1)) : undefined}
         value={node.title}
         onChange={(event) => updateNode(editor, shape, node, { title: event.currentTarget.value })}
         onKeyDown={stopEventPropagation}
         onPointerDown={stopEventPropagation}
       />
+      {grammarV2 && isSection && (
+        <span className="ppm-canvas-section__count">
+          <span aria-hidden="true">·</span>
+          {fillCanvasTemplate(ppmT(sectionObjectCountKey(childCount, currentLocale)), { count: childCount })}
+        </span>
+      )}
       {!collapsed && (
         <div className="ppm-canvas-node__content ppm-canvas-node__native-content">
           {(node.kind === "note" || node.kind === "document" || node.kind === "group" || node.kind === "frame") && (
@@ -1282,6 +1417,7 @@ function GitReferenceCard({
     resolved && ["repository", "branch", "commit", "pull_request"].includes(resolved.entity_type)
       ? (resolved as TPpmCanvasGitBinding)
       : undefined;
+  const grammarV2 = usePpmCanvasGrammarV2();
 
   if (node.binding && !binding) {
     return (
@@ -1302,11 +1438,38 @@ function GitReferenceCard({
   const workItems = display?.work_items ?? [];
   return (
     <div
-      className="ppm-canvas-node__content ppm-canvas-node__content--vault"
+      className={
+        grammarV2
+          ? "ppm-canvas-node__content ppm-canvas-node__content--vault ppm-live-card"
+          : "ppm-canvas-node__content ppm-canvas-node__content--vault"
+      }
       data-git-object={display?.object_type ?? node.object_type}
       data-source-status={display?.source_status ?? "legacy"}
     >
-      <span className="ppm-canvas-node__kind">{ppmT(GIT_OBJECT_LABELS[display?.object_type ?? node.object_type])}</span>
+      {grammarV2 ? (
+        <LiveSourceHeader
+          icon={
+            (display?.object_type ?? node.object_type) === "pull_request"
+              ? GitPullRequest
+              : (display?.object_type ?? node.object_type) === "branch"
+                ? GitBranch
+                : (display?.object_type ?? node.object_type) === "commit"
+                  ? GitCommitHorizontal
+                  : FolderGit2
+          }
+          identifier={
+            (display?.object_type ?? node.object_type) === "commit"
+              ? display?.commit_sha.slice(0, 7)
+              : `${ppmT(GIT_OBJECT_LABELS[display?.object_type ?? node.object_type])}${display?.ref ? ` ${display.ref}` : ""}`
+          }
+          source="code"
+          sourceLabel={ppmT(LIVE_SOURCE_LABEL_KEYS.code)}
+        />
+      ) : (
+        <span className="ppm-canvas-node__kind">
+          {ppmT(GIT_OBJECT_LABELS[display?.object_type ?? node.object_type])}
+        </span>
+      )}
       <strong className="ppm-canvas-node__vault-title">{display?.title ?? node.title}</strong>
       <span className="ppm-canvas-node__vault-meta">
         {(display?.provider ?? node.provider).toUpperCase()} · {display?.repository_name ?? node.repository_name}
@@ -1317,31 +1480,41 @@ function GitReferenceCard({
           {workItems.map((item) => item.identifier).join(", ") || node.work_item_key}
         </span>
       )}
-      {sourceUrl && !unavailable && (
-        <a
-          className="ppm-canvas-node__vault-link"
-          href={sourceUrl}
-          target="_blank"
-          rel="noreferrer"
-          onClick={stopEventPropagation}
-          onKeyDown={stopEventPropagation}
-          onPointerDown={stopEventPropagation}
-        >
-          <ExternalLink aria-hidden="true" />
-          {ppmT("canvas.open_git")}
-        </a>
-      )}
+      {sourceUrl &&
+        !unavailable &&
+        (grammarV2 ? (
+          <LiveOpenLink
+            external
+            href={sourceUrl}
+            label={fillCanvasTemplate(ppmT(LIVE_SOURCE_OPEN_KEYS.code), { name: `«${display?.title ?? node.title}»` })}
+          />
+        ) : (
+          <a
+            className="ppm-canvas-node__vault-link"
+            href={sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            onClick={stopEventPropagation}
+            onKeyDown={stopEventPropagation}
+            onPointerDown={stopEventPropagation}
+          >
+            <ExternalLink aria-hidden="true" />
+            {ppmT("canvas.open_git")}
+          </a>
+        ))}
       {unavailable && <span className="ppm-work-item-card__error">{ppmT("canvas.source_unavailable")}</span>}
       {binding && projectionContext.canEdit && (
         <button
           type="button"
-          className="ppm-work-item-card__remove"
+          aria-label={grammarV2 ? ppmT("canvas.remove_projection") : undefined}
+          className={grammarV2 ? "ppm-live-card__remove" : "ppm-work-item-card__remove"}
           disabled={projectionContext.pendingWorkItemIds.has(binding.entity_id)}
+          title={grammarV2 ? ppmT("canvas.remove_projection") : undefined}
           onClick={() => projectionContext.onRemove(shape, binding)}
           onPointerDown={stopEventPropagation}
         >
           <Trash2 aria-hidden="true" />
-          {ppmT("canvas.remove_projection")}
+          {!grammarV2 && ppmT("canvas.remove_projection")}
         </button>
       )}
     </div>
@@ -2030,6 +2203,8 @@ function WorkItemProjectionCard({
   const projectionContext = useContext(PpmWorkItemProjectionContext);
   const binding = projectionContext.bindingsByShapeId.get(shape.id);
   const error = projectionContext.errorsByShapeId.get(shape.id);
+  const grammarV2 = usePpmCanvasGrammarV2();
+  const { currentLocale } = useTranslation();
 
   if (!binding || binding.entity_type !== "work_item") {
     return (
@@ -2055,14 +2230,34 @@ function WorkItemProjectionCard({
   const assigneeIds = display.assignees.map((assignee) => assignee.id);
 
   return (
-    <div className="ppm-work-item-card" data-source-status={display.source_status}>
-      <header>
-        <div>
-          <span className="ppm-canvas-node__kind">{identity.identifier ?? ppmT("canvas.work_item")}</span>
-          <strong>{display.title}</strong>
-        </div>
-        <span className="ppm-work-item-card__source">PPM</span>
-      </header>
+    <div
+      className={grammarV2 ? "ppm-work-item-card ppm-live-card" : "ppm-work-item-card"}
+      data-source-status={display.source_status}
+    >
+      {grammarV2 ? (
+        <>
+          <LiveSourceHeader
+            icon={SquareCheck}
+            identifier={identity.identifier}
+            source="tasks"
+            sourceLabel={ppmT(LIVE_SOURCE_LABEL_KEYS.tasks)}
+          />
+          <strong
+            className="ppm-live-card__title"
+            data-narrow={shouldNarrowTitle(display.title, shape.props.w) || undefined}
+          >
+            {display.title}
+          </strong>
+        </>
+      ) : (
+        <header>
+          <div>
+            <span className="ppm-canvas-node__kind">{identity.identifier ?? ppmT("canvas.work_item")}</span>
+            <strong>{display.title}</strong>
+          </div>
+          <span className="ppm-work-item-card__source">PPM</span>
+        </header>
+      )}
 
       {display.source_status === "active" ? (
         <div className="ppm-work-item-card__fields">
@@ -2081,7 +2276,7 @@ function WorkItemProjectionCard({
               {!display.state && <option value="">—</option>}
               {projectionContext.options.states.map((state) => (
                 <option key={state.id} value={state.id}>
-                  {state.name}
+                  {grammarV2 ? (getPpmStateDisplayName(state, currentLocale) ?? state.name) : state.name}
                 </option>
               ))}
             </select>
@@ -2152,21 +2347,40 @@ function WorkItemProjectionCard({
 
       {error && <p className="ppm-work-item-card__error">{error}</p>}
       <footer>
-        {identity.source_url && (
-          <a href={identity.source_url} onClick={stopEventPropagation} onPointerDown={stopEventPropagation}>
-            <ExternalLink aria-hidden="true" />
-            {ppmT("canvas.open_work_item")}
-          </a>
+        {grammarV2 ? (
+          <>
+            <span className="ppm-live-card__meta">
+              {display.assignees.map((assignee) => assignee.display_name).join(", ") || ppmT("canvas.unassigned")}
+            </span>
+            {identity.source_url && (
+              <LiveOpenLink
+                href={identity.source_url}
+                label={fillCanvasTemplate(ppmT(LIVE_SOURCE_OPEN_KEYS.tasks), {
+                  name: identity.identifier ?? display.title,
+                })}
+              />
+            )}
+          </>
+        ) : (
+          identity.source_url && (
+            <a href={identity.source_url} onClick={stopEventPropagation} onPointerDown={stopEventPropagation}>
+              <ExternalLink aria-hidden="true" />
+              {ppmT("canvas.open_work_item")}
+            </a>
+          )
         )}
         {projectionContext.canEdit && (
           <button
             type="button"
+            aria-label={grammarV2 ? ppmT("canvas.remove_projection") : undefined}
+            className={grammarV2 ? "ppm-live-card__remove" : undefined}
             disabled={projectionContext.pendingWorkItemIds.has(binding.entity_id)}
+            title={grammarV2 ? ppmT("canvas.remove_projection") : undefined}
             onClick={() => projectionContext.onRemove(shape, binding)}
             onPointerDown={stopEventPropagation}
           >
             <Trash2 aria-hidden="true" />
-            {ppmT("canvas.remove_projection")}
+            {!grammarV2 && ppmT("canvas.remove_projection")}
           </button>
         )}
       </footer>
@@ -2187,6 +2401,7 @@ function ContentProjectionCard({
   const binding = isContentProjectionBinding(resolved) ? resolved : undefined;
   const fallbackTitle = node.title;
   const fallbackUrl = node.source_url;
+  const grammarV2 = usePpmCanvasGrammarV2();
 
   if (!binding) {
     return (
@@ -2205,41 +2420,79 @@ function ContentProjectionCard({
 
   const { display, identity } = binding.source;
   const sourceLabel = CONTENT_SOURCE_LABELS[binding.entity_type];
+  const liveSource = liveSourceForEntity(binding.entity_type);
+  // «PDF · v3»; an unknown version is hidden instead of «v—» (the header already names the source).
+  const liveMeta = liveCardMeta(display.extension, binding.source_version);
   return (
     <div
-      className="ppm-canvas-node__content ppm-canvas-node__content--vault"
+      className={
+        grammarV2
+          ? "ppm-canvas-node__content ppm-canvas-node__content--vault ppm-live-card"
+          : "ppm-canvas-node__content ppm-canvas-node__content--vault"
+      }
       data-source-status={display.source_status}
     >
-      <span className="ppm-canvas-node__kind">{ppmT(sourceLabel)}</span>
-      <strong className="ppm-canvas-node__vault-title">{display.title || fallbackTitle}</strong>
+      {grammarV2 ? (
+        <LiveSourceHeader
+          icon={binding.entity_type === "page" ? FileText : binding.entity_type === "attachment" ? Paperclip : Archive}
+          identifier={display.extension ? display.extension.slice(1).toUpperCase() : null}
+          source={liveSource}
+          sourceLabel={ppmT(LIVE_SOURCE_LABEL_KEYS[liveSource])}
+        />
+      ) : (
+        <span className="ppm-canvas-node__kind">{ppmT(sourceLabel)}</span>
+      )}
+      <strong
+        className={grammarV2 ? "ppm-live-card__title" : "ppm-canvas-node__vault-title"}
+        data-narrow={grammarV2 && shouldNarrowTitle(display.title || fallbackTitle, shape.props.w) ? true : undefined}
+      >
+        {display.title || fallbackTitle}
+      </strong>
       {display.excerpt && <p>{display.excerpt}</p>}
-      <span className="ppm-canvas-node__vault-meta">
-        {display.extension ? `${display.extension.slice(1).toUpperCase()} · ` : ""}
-        {ppmT("canvas.source_version")} {binding.source_version ?? "—"}
-      </span>
+      {grammarV2 ? (
+        // Kept even when empty: the card grid (canvas-v2.css .ppm-live-card) places rows by position.
+        <span className="ppm-canvas-node__vault-meta ppm-live-card__version">{liveMeta}</span>
+      ) : (
+        <span className="ppm-canvas-node__vault-meta">
+          {display.extension ? `${display.extension.slice(1).toUpperCase()} · ` : ""}
+          {`${ppmT("canvas.source_version")} ${binding.source_version ?? "—"}`}
+        </span>
+      )}
       {display.source_status === "deleted" && <p>{ppmT("canvas.source_unavailable")}</p>}
       <footer>
-        {(identity.source_url || fallbackUrl) && display.source_status !== "deleted" && (
-          <a
-            className="ppm-canvas-node__vault-link"
-            href={identity.source_url ?? fallbackUrl}
-            onClick={stopEventPropagation}
-            onKeyDown={stopEventPropagation}
-            onPointerDown={stopEventPropagation}
-          >
-            <ExternalLink aria-hidden="true" />
-            {ppmT(CONTENT_SOURCE_OPEN_LABELS[binding.entity_type])}
-          </a>
-        )}
+        {(identity.source_url || fallbackUrl) &&
+          display.source_status !== "deleted" &&
+          (grammarV2 ? (
+            <LiveOpenLink
+              href={identity.source_url ?? fallbackUrl}
+              label={fillCanvasTemplate(ppmT(LIVE_SOURCE_OPEN_KEYS[liveSource]), {
+                name: `«${display.title || fallbackTitle}»`,
+              })}
+            />
+          ) : (
+            <a
+              className="ppm-canvas-node__vault-link"
+              href={identity.source_url ?? fallbackUrl}
+              onClick={stopEventPropagation}
+              onKeyDown={stopEventPropagation}
+              onPointerDown={stopEventPropagation}
+            >
+              <ExternalLink aria-hidden="true" />
+              {ppmT(CONTENT_SOURCE_OPEN_LABELS[binding.entity_type])}
+            </a>
+          ))}
         {projectionContext.canEdit && (
           <button
             type="button"
+            aria-label={grammarV2 ? ppmT("canvas.remove_projection") : undefined}
+            className={grammarV2 ? "ppm-live-card__remove" : undefined}
             disabled={projectionContext.pendingWorkItemIds.has(binding.entity_id)}
+            title={grammarV2 ? ppmT("canvas.remove_projection") : undefined}
             onClick={() => projectionContext.onRemove(shape, binding)}
             onPointerDown={stopEventPropagation}
           >
             <Trash2 aria-hidden="true" />
-            {ppmT("canvas.remove_projection")}
+            {!grammarV2 && ppmT("canvas.remove_projection")}
           </button>
         )}
       </footer>
@@ -2264,6 +2517,7 @@ function MediaProjectionCard({
   const [previewError, setPreviewError] = useState(false);
   const visible = useLazyPreview(editor, shape.id);
   const previewUrl = binding?.source.display.preview_url;
+  const grammarV2 = usePpmCanvasGrammarV2();
   useEffect(() => setPreviewError(false), [previewUrl]);
 
   if (!binding) {
@@ -2281,6 +2535,7 @@ function MediaProjectionCard({
 
   const { display, identity } = binding.source;
   const unavailable = display.source_status === "deleted" || display.source_status === "quarantined";
+  const liveSource = liveSourceForEntity(binding.entity_type);
   return (
     <div
       className="ppm-canvas-media"
@@ -2289,11 +2544,21 @@ function MediaProjectionCard({
       data-source-status={display.source_status}
     >
       <header>
-        <span className="ppm-canvas-node__kind">{ppmT(MEDIA_KIND_LABELS[node.kind])}</span>
+        {grammarV2 ? (
+          <LiveSourceHeader
+            icon={binding.entity_type === "attachment" ? Paperclip : Archive}
+            identifier={display.extension?.slice(1).toUpperCase() || null}
+            source={liveSource}
+            sourceLabel={ppmT(LIVE_SOURCE_LABEL_KEYS[liveSource])}
+          />
+        ) : (
+          <span className="ppm-canvas-node__kind">{ppmT(MEDIA_KIND_LABELS[node.kind])}</span>
+        )}
         <strong>{display.title || node.title}</strong>
         <small>
-          {display.extension?.slice(1).toUpperCase() || display.mime_type} · {formatMediaSize(display.size_bytes)} · v
-          {binding.source_version ?? "—"}
+          {display.extension?.slice(1).toUpperCase() || display.mime_type} · {formatMediaSize(display.size_bytes)}
+          {/* v2 hides an unknown version instead of «v—» (as liveCardMeta); v1 keeps the wave 0 line. */}
+          {grammarV2 && !binding.source_version?.trim() ? null : <> · v{binding.source_version ?? "—"}</>}
         </small>
       </header>
       <div className="ppm-canvas-media__preview">
@@ -2331,17 +2596,26 @@ function MediaProjectionCard({
         <p className="ppm-work-item-card__error">{projectionContext.errorsByShapeId.get(shape.id)}</p>
       )}
       <footer>
-        {identity.source_url && !unavailable && (
-          <a
-            href={identity.source_url}
-            onClick={stopEventPropagation}
-            onKeyDown={stopEventPropagation}
-            onPointerDown={stopEventPropagation}
-          >
-            <ExternalLink aria-hidden="true" />
-            {ppmT("canvas.open_source")}
-          </a>
-        )}
+        {identity.source_url &&
+          !unavailable &&
+          (grammarV2 ? (
+            <LiveOpenLink
+              href={identity.source_url}
+              label={fillCanvasTemplate(ppmT(LIVE_SOURCE_OPEN_KEYS[liveSource]), {
+                name: `«${display.title || node.title}»`,
+              })}
+            />
+          ) : (
+            <a
+              href={identity.source_url}
+              onClick={stopEventPropagation}
+              onKeyDown={stopEventPropagation}
+              onPointerDown={stopEventPropagation}
+            >
+              <ExternalLink aria-hidden="true" />
+              {ppmT("canvas.open_source")}
+            </a>
+          ))}
         {projectionContext.canEdit && binding.entity_type === "vault_file" && !unavailable && (
           <>
             <button
@@ -2368,12 +2642,15 @@ function MediaProjectionCard({
         {projectionContext.canEdit && (
           <button
             type="button"
+            aria-label={grammarV2 ? ppmT("canvas.remove_projection") : undefined}
+            className={grammarV2 ? "ppm-live-card__remove" : undefined}
             disabled={projectionContext.pendingWorkItemIds.has(binding.entity_id)}
+            title={grammarV2 ? ppmT("canvas.remove_projection") : undefined}
             onClick={() => projectionContext.onRemove(shape, binding)}
             onPointerDown={stopEventPropagation}
           >
             <Trash2 aria-hidden="true" />
-            {ppmT("canvas.remove_projection")}
+            {!grammarV2 && ppmT("canvas.remove_projection")}
           </button>
         )}
       </footer>

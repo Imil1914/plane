@@ -33,6 +33,7 @@ export const PPM_CANVAS_COMMANDS = [
   "zoom-in",
   "zoom-out",
   "fit-view",
+  "zoom-reset",
   "focus-selection",
   "align-left",
   "align-center-horizontal",

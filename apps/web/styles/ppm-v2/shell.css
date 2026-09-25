@@ -1,0 +1,39 @@
+/*
+ * PPM design v2 («гибрид A+B», UX1.1): shell. Controller rulings R25/R26 (task-5-brief.md): the content frame
+ * stays exactly as on the mockups the owner saw (H-*) — this file does NOT remove the wave-0 gutter/panel frame
+ * and does NOT add a border to the top bar. What it does: top bar 48/44, command search 32/28, sidebar items 32/28.
+ * Gated by design v2 AND the PPM shell: PPM_SHELL_ENABLED=0 keeps the upstream Plane shell. The hooks are inert
+ * data-attributes (plan-F task F5); every var(--ppm-*) falls back to the wave-0 value of that property.
+ * `data-ppm-app-frame="gutter"|"panel"` hooks exist in the markup (content-wrapper.tsx, the (projects)/(settings)/
+ * profile layouts) for future use but are intentionally not styled here (R25).
+ */
+@layer utilities {
+  /* Top bar 48/44 (was min-h-10). R25: no border-bottom — the wave-0 frame stays as the only separator. */
+  :where(html[data-ppm-design="v2"][data-ppm-shell="enabled"]) [data-ppm-topbar] {
+    min-height: var(--ppm-topbar-height, 2.5rem);
+  }
+  /* The workspace menu drops from under the taller bar (wave 0: top-10 + mt-1 under a 40px bar). */
+  :where(html[data-ppm-design="v2"][data-ppm-shell="enabled"]) [data-ppm-topbar-menu] {
+    top: var(--ppm-topbar-height, 2.5rem);
+  }
+
+  /* Command search: control height 32/28, radius 6; the results panel clears the taller field (wave 0: h-7, pt-10). */
+  :where(html[data-ppm-design="v2"][data-ppm-shell="enabled"]) [data-ppm-command-search] {
+    height: var(--ppm-control-height, 1.75rem);
+    border-radius: var(--ppm-radius-sm, 0.5rem);
+  }
+  :where(html[data-ppm-design="v2"][data-ppm-shell="enabled"]) [data-ppm-command-panel] {
+    padding-top: calc(var(--ppm-control-height, 1.75rem) + 0.75rem);
+  }
+
+  /* Sidebar items 32/28 (SidebarNavItem and project rows). The active item is the neutral selected layer
+     (TOKENS §9.1: the accent is not used for navigation); re-pointing the variable keeps the upstream
+     !bg-layer-transparent-active utility working without an !important fight. */
+  :where(html[data-ppm-design="v2"][data-ppm-shell="enabled"]) [data-ppm-nav-item] {
+    min-height: var(--ppm-sidebar-item-height, auto);
+    padding-block: 0;
+  }
+  :where(html[data-ppm-design="v2"][data-ppm-shell="enabled"]) [data-ppm-nav-item][data-active] {
+    --bg-layer-transparent-active: var(--ppm-color-layer-1-selected, var(--bg-layer-1-selected));
+  }
+}

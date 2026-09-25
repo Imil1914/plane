@@ -1,0 +1,864 @@
+/* UX1.1 · Холст, облик v2 (гибрид A+B). Каждый селектор начинается с :where(html[data-ppm-design="v2"]) — при v1
+   файл не действует. Карточки, связи и инспектор дополнительно ограничены [data-ppm-canvas-grammar="v2"]
+   (только рабочее пространство; минимальный режим остаётся как в волне 0). Цвета и размеры — токены F
+   (TOKENS.md §1 «Холст», §11) с фолбэком на роли волны 0. Порядок: этот файл импортируется после canvas.css. */
+
+/* C1 · Хром рабочего пространства и строка статуса */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-workspace {
+  grid-template-rows: var(--ppm-page-header-height, 3.25rem) minmax(0, 1fr) var(--ppm-canvas-status-height, 2rem);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-statusline {
+  gap: 0.75rem;
+  padding: 0 0.5rem 0 0.75rem;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-statusline__info {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.375rem;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-statusline__sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-statusline__time,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-zoom__reset {
+  font-family: var(--ppm-font-mono, var(--font-code, ui-monospace, monospace));
+  font-variant-numeric: tabular-nums;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-zoom {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-zoom > button {
+  display: inline-grid;
+  min-width: var(--ppm-control-height-sm, 1.75rem);
+  height: var(--ppm-control-height-sm, 1.75rem);
+  place-items: center;
+  padding: 0 0.375rem;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-zoom > button:hover {
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-zoom > button:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: var(--ppm-focus-ring, 0 0 0 2px var(--border-accent-strong));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-zoom svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Узкая строка: прячем лист и время вместе с их собственными разделителями; разделитель перед ролью («Холст
+   только для чтения») остаётся, чтобы статус синхронизации и роль не слиплись. */
+@media (max-width: 680px) {
+  :where(html[data-ppm-design="v2"]) .ppm-canvas-statusline__sheet,
+  :where(html[data-ppm-design="v2"]) .ppm-canvas-statusline__time,
+  :where(html[data-ppm-design="v2"]) .ppm-canvas-statusline__sep--sheet,
+  :where(html[data-ppm-design="v2"]) .ppm-canvas-statusline__sep--time {
+    display: none;
+  }
+}
+
+/* C1 · Доска и пилюля «Доска · Объектов: N» (радиус full, рамка border-control, без тени) */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-shell[data-ppm-canvas-grammar="v2"] {
+  background: var(--ppm-color-board, var(--bg-surface-1));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .tl-container {
+  --color-background: var(--ppm-color-board, var(--bg-surface-1));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-overlay-top {
+  inset: var(--ppm-canvas-overlay-inset, 1rem);
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-board-info__toggle {
+  min-height: 1.75rem;
+  padding: 0 0.625rem;
+  border-color: var(--ppm-color-border-control, var(--border-subtle-1));
+  border-radius: var(--ppm-radius-full, 999px);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  box-shadow: none;
+  backdrop-filter: none;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* `box-shadow: none` выше (без парения в v2) без слоя перебивает и общее кольцо фокуса — возвращаем его, как у
+   кнопок масштаба. Прозрачный outline невидим, но в режиме forced-colors становится системным кольцом. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-board-info__toggle:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: var(--ppm-focus-ring, 0 0 0 2px var(--border-accent-strong));
+}
+
+/* C2 · Смысловые связи: линии под карточками, порт в начале, тип — по концу линии (TOKENS §11) */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-semantic-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-semantic-edge {
+  color: var(--ppm-color-link, var(--txt-tertiary));
+  stroke-width: var(--ppm-link-width, 1.5px);
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-semantic-edge__line,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-semantic-edge__end {
+  fill: none;
+  stroke: currentColor;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-semantic-edge__port {
+  fill: currentColor;
+  stroke: var(--ppm-color-board, var(--bg-surface-1));
+  stroke-width: 1.5px;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-semantic-edge[data-tone="danger"] {
+  color: var(--ppm-color-danger-line, var(--txt-danger-primary));
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-semantic-edge[data-dashed]
+  .ppm-semantic-edge__line {
+  stroke-dasharray: var(--ppm-link-dash, 4 3);
+}
+
+/* Предложенная связь сохраняет штрих и конец своего типа (не похожа на «Противоречит»): приглушена только линия,
+   текст чипа «… · Предложено» остаётся контрастным (≥ 4,5:1). 0,75 держит линию ≥ 3:1 к доске в обеих темах
+   (светлая: нейтральная ≈ 3,5:1, красная ≈ 3,2:1; 0,55 давало ≈ 2,4:1 / 2,3:1) — проверяет canvas-v2-css.test.ts. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-semantic-edge[data-confirmation="proposed"] {
+  opacity: 0.75;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-semantic-edge[data-emphasized] {
+  color: var(--ppm-color-link-emphasis, var(--txt-secondary));
+  stroke-width: var(--ppm-link-width-emphasis, 2px);
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-semantic-edge[data-emphasized][data-tone="danger"] {
+  color: var(--ppm-color-danger-line, var(--txt-danger-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-semantic-chip {
+  position: absolute;
+  z-index: 1;
+  display: inline-flex;
+  height: var(--ppm-link-chip-height, 1.25rem);
+  align-items: center;
+  padding: 0 0.375rem;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-xs, 0.25rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1rem;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  pointer-events: all;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-semantic-chip[data-emphasized] {
+  border-color: var(--ppm-color-border-control, var(--border-subtle-1));
+  color: var(--ppm-color-text, var(--txt-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-semantic-chip[data-tone="danger"] {
+  border-color: var(--ppm-color-danger-line, var(--txt-danger-primary));
+  color: var(--ppm-color-danger-text, var(--txt-danger-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-semantic-chip[data-confirmation="proposed"] {
+  border-style: dashed;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-semantic-edges li[data-focused] {
+  background: var(--ppm-color-selection-bg, var(--bg-accent-subtle));
+  box-shadow: inset 2px 0 0 var(--ppm-color-selection, var(--border-accent-strong));
+}
+
+/* C3 · Общая рамка карточки (своя по умолчанию) и живые карточки источников (TOKENS §11, «Три семейства»).
+   Секции (group/frame) исключены: они прямоугольные с угловыми засечками (см. блок «C4 · Секции» ниже), а не
+   скруглённые карточки — без :not() тут эта декларация (0,3,0) перебивала бы border-radius:0 у секций (0,2,0),
+   и контур выделения (nodeIndicatorRadius, canvas-grammar.ts) разъезжался бы с видимой рамкой карточки. */
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-canvas-node:not(.ppm-canvas-node--fallback):not(.ppm-canvas-node--group):not(.ppm-canvas-node--frame) {
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-card-own, var(--bg-layer-1));
+  box-shadow: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--work_item_ref,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--page_ref,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--attachment_ref,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--vault_file_ref,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--pdf,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--image,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--reference,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--git_ref {
+  background: var(--ppm-color-card-live, var(--bg-surface-1));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card {
+  display: grid;
+  height: 100%;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  padding: 0.75rem 0.75rem 0;
+  color: var(--ppm-color-text, var(--txt-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__header {
+  display: flex;
+  min-width: 0;
+  height: 1.25rem;
+  align-items: center;
+  gap: 0.375rem;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__source-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+  color: var(--ppm-type-task, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-live-card__header[data-source="knowledge"]
+  .ppm-live-card__source-icon {
+  color: var(--ppm-type-file, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-live-card__header[data-source="pages"]
+  .ppm-live-card__source-icon {
+  color: var(--ppm-type-doc, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-live-card__header[data-source="code"]
+  .ppm-live-card__source-icon {
+  color: var(--ppm-type-code, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__source {
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__id,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__version {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-family: var(--ppm-font-mono, var(--font-code, ui-monospace, monospace));
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-glyph {
+  display: inline-flex;
+  flex: none;
+  margin-left: auto;
+  color: var(--ppm-color-accent, var(--txt-accent-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__title {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ppm-color-text, var(--txt-primary));
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__title[data-narrow] {
+  font-stretch: var(--ppm-font-stretch-narrow, 85%);
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card > footer {
+  display: flex;
+  min-height: var(--ppm-canvas-card-footer-height, 2.25rem);
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 -0.75rem;
+  padding: 0 0.75rem;
+  border-top: 1px solid var(--ppm-color-border, var(--border-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__meta {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__open {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__open svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__remove {
+  display: inline-grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  place-items: center;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-icon-subtle, var(--txt-tertiary));
+}
+
+/* Поля задачи — тихие «чипы-селекты» (R4: нативные контролы остаются, подписи — только для скринридера) */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-work-item-card__fields {
+  grid-template-columns: repeat(3, minmax(0, max-content));
+  gap: 0.25rem 0.5rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-work-item-card__fields label > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-work-item-card__fields select,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-work-item-card__fields input {
+  height: var(--ppm-control-height-sm, 1.75rem);
+  border-color: transparent;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  background: transparent;
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-work-item-card__fields select:hover,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-work-item-card__fields input:hover {
+  border-color: var(--ppm-color-border-control, var(--border-subtle-1));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-work-item-card__assignees select {
+  height: 2.5rem;
+}
+
+/* C6 · Инспектор: плавающая панель под пилюлей «Доска», 304 px, радиус 8, тень всплывающего слоя (TOKENS §11) */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector {
+  position: absolute;
+  z-index: 320;
+  top: calc(var(--ppm-canvas-overlay-inset, 1rem) + 2.25rem);
+  right: var(--ppm-canvas-overlay-inset, 1rem);
+  display: grid;
+  width: min(var(--ppm-inspector-width, 19rem), calc(100% - 2rem));
+  max-height: calc(100% - 4.25rem);
+  overflow-y: auto;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  box-shadow: var(--ppm-shadow-popover, 0 8px 24px rgb(0 0 0 / 0.24));
+  font-size: 0.8125rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__header,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__links > header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem 0.625rem 1rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__header {
+  border-bottom: 1px solid var(--ppm-color-border, var(--border-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__header button,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__links > header button {
+  margin-left: auto;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__body,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__fields {
+  display: grid;
+  gap: 0.625rem;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--ppm-color-border, var(--border-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__source {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__source svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--ppm-type-task, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__open {
+  display: inline-flex;
+  width: fit-content;
+  height: var(--ppm-control-height, 2rem);
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 0.75rem;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-on-accent, var(--txt-on-accent));
+  background: var(--ppm-color-accent, var(--bg-accent-primary));
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__hint,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__relative {
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__error {
+  color: var(--ppm-color-danger-text, var(--txt-danger-primary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__fields > div {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__fields dt {
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__fields dd {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__fields select,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__fields input {
+  min-width: 0;
+  height: var(--ppm-control-height-sm, 1.75rem);
+  padding: 0 0.375rem;
+  border: 1px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-layer-1, var(--bg-layer-1));
+  font-size: 0.8125rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__fields select[multiple] {
+  height: 4.5rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__links ul {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0 0.5rem 0.75rem;
+  list-style: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__links li > button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 1rem max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  text-align: left;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__links li > button:hover {
+  background: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__links li svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__relation {
+  padding: 0 0.375rem;
+  border: 1px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  border-radius: var(--ppm-radius-xs, 0.25rem);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.125rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__relation[data-tone="danger"] {
+  border-color: var(--ppm-color-danger-line, var(--txt-danger-primary));
+  color: var(--ppm-color-danger-text, var(--txt-danger-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__other {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector__links > p {
+  margin: 0;
+  padding: 0 1rem 0.75rem;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+}
+
+@media (max-width: 979px) {
+  :where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inspector {
+    display: none;
+  }
+}
+
+/* C4 · Свои карточки: нейтральная подложка (рамка — из C3), подпись типа в sentence case, цвет — глиф */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node__chrome {
+  min-height: 2rem;
+  padding: 0.375rem 0.375rem 0 0.75rem;
+  border-bottom: 0;
+  background: transparent;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node__type {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.375rem;
+  overflow: hidden;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node__type-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+  color: var(--ppm-color-icon-subtle, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--yellow .ppm-canvas-node__type-icon {
+  color: var(--ppm-type-file, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--cyan .ppm-canvas-node__type-icon {
+  color: var(--ppm-type-task, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--green .ppm-canvas-node__type-icon {
+  color: var(--ppm-type-decision, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--violet .ppm-canvas-node__type-icon {
+  color: var(--ppm-type-doc, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node__chrome button {
+  color: var(--ppm-color-icon-subtle, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node__chrome button:hover {
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node__native > .ppm-canvas-node__title {
+  color: var(--ppm-color-text, var(--txt-primary));
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* C4 · Секции: прозрачные, прямые углы, угловые засечки 12×2 (TOKENS §6), подпись «Название · N объектов» */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--group,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--frame {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--group::before,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+        var(--ppm-color-section-tick, var(--border-strong)),
+        var(--ppm-color-section-tick, var(--border-strong))
+      )
+      top left / 12px 2px no-repeat,
+    linear-gradient(
+        var(--ppm-color-section-tick, var(--border-strong)),
+        var(--ppm-color-section-tick, var(--border-strong))
+      )
+      top left / 2px 12px no-repeat,
+    linear-gradient(
+        var(--ppm-color-section-tick, var(--border-strong)),
+        var(--ppm-color-section-tick, var(--border-strong))
+      )
+      top right / 12px 2px no-repeat,
+    linear-gradient(
+        var(--ppm-color-section-tick, var(--border-strong)),
+        var(--ppm-color-section-tick, var(--border-strong))
+      )
+      top right / 2px 12px no-repeat,
+    linear-gradient(
+        var(--ppm-color-section-tick, var(--border-strong)),
+        var(--ppm-color-section-tick, var(--border-strong))
+      )
+      bottom left / 12px 2px no-repeat,
+    linear-gradient(
+        var(--ppm-color-section-tick, var(--border-strong)),
+        var(--ppm-color-section-tick, var(--border-strong))
+      )
+      bottom left / 2px 12px no-repeat,
+    linear-gradient(
+        var(--ppm-color-section-tick, var(--border-strong)),
+        var(--ppm-color-section-tick, var(--border-strong))
+      )
+      bottom right / 12px 2px no-repeat,
+    linear-gradient(
+        var(--ppm-color-section-tick, var(--border-strong)),
+        var(--ppm-color-section-tick, var(--border-strong))
+      )
+      bottom right / 2px 12px no-repeat;
+  pointer-events: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--group .ppm-canvas-node__native,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--frame .ppm-canvas-node__native {
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--group .ppm-canvas-node__chrome,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--frame .ppm-canvas-node__chrome,
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-canvas-node--group
+  .ppm-canvas-node__native-content,
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-canvas-node--frame
+  .ppm-canvas-node__native-content {
+  grid-column: 1 / -1;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--group .ppm-canvas-node__type,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--frame .ppm-canvas-node__type {
+  visibility: hidden;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-section__count {
+  display: inline-flex;
+  gap: 0.375rem;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+/* C5 · Найдено поиском: пунктир (≥ 3:1), цвет доски, фрагмент цитатой, чипы «номер · источник · версия» */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--search {
+  border: 1px dashed var(--ppm-color-card-found-border, var(--border-subtle-1));
+  background: var(--ppm-color-board, var(--bg-surface-1));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-found-card {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.75rem;
+  overflow: hidden;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-found-card__header {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-found-card__header svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-found-card__query,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-found-card__stale,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-found-card__empty {
+  overflow: hidden;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-found-card__excerpt {
+  display: -webkit-box;
+  margin: 0.25rem 0 0;
+  padding-left: 0.5rem;
+  overflow: hidden;
+  border-left: 2px solid var(--ppm-color-border, var(--border-subtle));
+  color: var(--ppm-color-text, var(--txt-primary));
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-found-card__excerpt[data-code] {
+  font-family: var(--ppm-font-mono, var(--font-code, ui-monospace, monospace));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-found-card__citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-citation-chip {
+  display: inline-flex;
+  max-width: 100%;
+  height: 1.25rem;
+  align-items: center;
+  gap: 0.3125rem;
+  padding: 0 0.375rem 0 0.125rem;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-xs, 0.25rem);
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-citation-chip[data-stale] {
+  border-style: dashed;
+  border-color: var(--ppm-color-border-control, var(--border-subtle-1));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-citation-chip__index {
+  display: inline-grid;
+  min-width: 1rem;
+  height: 1rem;
+  place-items: center;
+  padding: 0 0.1875rem;
+  border: 1px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  border-radius: 0.1875rem;
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-layer-1, var(--bg-layer-1));
+  font-family: var(--ppm-font-mono, var(--font-code, ui-monospace, monospace));
+  font-size: 0.6875rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-citation-chip__text {
+  overflow: hidden;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-family: var(--ppm-font-mono, var(--font-code, ui-monospace, monospace));
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-citation-chip svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: none;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-found-card__stale a {
+  color: var(--ppm-color-accent-text, var(--txt-accent-primary));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

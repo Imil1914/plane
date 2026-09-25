@@ -15,7 +15,10 @@ function WorkspaceLayout() {
   return (
     <>
       <ProjectsAppPowerKProvider />
-      <div className="relative flex h-full w-full flex-col overflow-hidden rounded-lg border border-subtle">
+      <div
+        data-ppm-app-frame="panel"
+        className="relative flex h-full w-full flex-col overflow-hidden rounded-lg border border-subtle"
+      >
         <div id="full-screen-portal" className="absolute inset-0 w-full" />
         <div className="relative flex size-full overflow-hidden">
           <ProjectAppSidebar />

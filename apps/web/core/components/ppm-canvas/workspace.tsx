@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import {
@@ -38,6 +39,7 @@ import {
   LoaderCircle,
   LockKeyhole,
   Menu,
+  Minus,
   MousePointer2,
   Network,
   Pencil,
@@ -59,6 +61,7 @@ import { PPM_BRAND } from "@ppm/brand";
 import { useTranslation } from "@plane/i18n";
 import { formatPpmTimeAgo } from "@/helpers/ppm-time-ago.helper";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { usePpmDesignV2 } from "@/lib/ppm-design";
 import { PpmCanvasService, PpmCanvasServiceError } from "@/services/ppm-canvas.service";
 import type { TPpmBrainAnswerRun } from "@/services/ppm-brain.service";
 import {
@@ -68,6 +71,9 @@ import {
   filterCanvasCommands,
   footerRoleLabelKey,
   formatCanvasCommandShortcut,
+  formatCanvasStatusParts,
+  formatCanvasZoom,
+  isCanvasCommandAllowedReadOnly,
   MAX_OPEN_CANVAS_BOARDS,
   moveBoard,
   openBoardTab,
@@ -80,6 +86,8 @@ import {
 import { PpmBoardPresence, usePpmBoardPresence } from "./board-presence";
 import { dispatchPpmCanvasCommand, type TPpmCanvasCommand, type TPpmCanvasCommandDetail } from "./commands";
 import { PpmBrainPanel, type TPpmBrainPanelMode } from "./brain-panel";
+import { fillCanvasTemplate } from "./canvas-grammar";
+import { createCanvasZoomStore, type TPpmCanvasZoomStore } from "./canvas-zoom-store";
 
 const PpmCanvasEditor = lazy(() => import("./editor"));
 
@@ -162,6 +170,13 @@ export default function PpmCanvasWorkspace({
   >({});
   const [dialog, setDialog] = useState<TBoardDialog>();
   const presence = usePpmBoardPresence({ boardId: activeBoardId, projectId, workspaceId });
+  const designV2 = usePpmDesignV2();
+  const { currentLocale } = useTranslation();
+  const [savedAtByBoardId, setSavedAtByBoardId] = useState<Record<string, string | null>>({});
+  const zoomStore = useMemo(() => createCanvasZoomStore(), []);
+  const handleSavedAtChange = useCallback((boardId: string, savedAt: string | null) => {
+    setSavedAtByBoardId((current) => (current[boardId] === savedAt ? current : { ...current, [boardId]: savedAt }));
+  }, []);
 
   useEffect(() => {
     const narrowViewport = window.matchMedia(CANVAS_RAIL_COLLAPSE_QUERY);
@@ -318,7 +333,7 @@ export default function PpmCanvasWorkspace({
 
   const runCanvasCommand = (command: TPpmCanvasCommand) => {
     if (!activeBoardId) return;
-    if (!activeBoardEditReady && !["select", "fit-view", "zoom-in", "zoom-out"].includes(command)) return;
+    if (!activeBoardEditReady && !isCanvasCommandAllowedReadOnly(command, designV2)) return;
     dispatchPpmCanvasCommand({ boardId: activeBoardId, command });
   };
 
@@ -626,6 +641,16 @@ export default function PpmCanvasWorkspace({
             { command: "redo" as const, id: "redo", keywords: ["history"], label: ppmT("canvas.redo") },
           ]
         : []),
+      ...(designV2 && !activeBoardEditReady
+        ? [
+            {
+              command: "semantic-edges" as const,
+              id: "semantic-edges",
+              keywords: ["meaning", "relation"],
+              label: ppmT("canvas.semantic_edges"),
+            },
+          ]
+        : []),
       { command: "fit-view", id: "fit-view", keywords: ["camera"], label: ppmT("canvas.fit_view") },
       {
         command: "focus-selection",
@@ -676,7 +701,7 @@ export default function PpmCanvasWorkspace({
           ]
         : []),
     ],
-    [activeBoardEditReady, ppmT]
+    [activeBoardEditReady, designV2, ppmT]
   );
 
   if (loading) return <WorkspaceState icon={LoaderCircle} spinning text={ppmT("canvas.loading_description")} />;
@@ -924,7 +949,8 @@ export default function PpmCanvasWorkspace({
               onClick={() => runCanvasCommand("draw-connection")}
             />
             <RailButton
-              disabled={!activeBoardEditReady}
+              // v2: the read-only list stays reachable when the board is read-only, in conflict or being restored.
+              disabled={!activeBoardEditReady && !isCanvasCommandAllowedReadOnly("semantic-edges", designV2)}
               expanded={railExpanded}
               icon={Network}
               label={ppmT("canvas.semantic_edges")}
@@ -946,25 +972,39 @@ export default function PpmCanvasWorkspace({
             />
           </>
         )}
-        <RailSectionLabel expanded={railExpanded} label={ppmT("canvas.view")} />
-        <RailButton
-          expanded={railExpanded}
-          icon={Focus}
-          label={ppmT("canvas.fit_view")}
-          onClick={() => runCanvasCommand("fit-view")}
-        />
-        <RailButton
-          expanded={railExpanded}
-          icon={ZoomIn}
-          label={ppmT("canvas.zoom_in")}
-          onClick={() => runCanvasCommand("zoom-in")}
-        />
-        <RailButton
-          expanded={railExpanded}
-          icon={ZoomOut}
-          label={ppmT("canvas.zoom_out")}
-          onClick={() => runCanvasCommand("zoom-out")}
-        />
+        {designV2 && !capabilities.edit && (
+          <RailButton
+            expanded={railExpanded}
+            icon={Network}
+            label={ppmT("canvas.semantic_edges")}
+            onClick={() => runCanvasCommand("semantic-edges")}
+          />
+        )}
+        {(!designV2 || (railExpanded && capabilities.edit)) && (
+          <RailSectionLabel expanded={railExpanded} label={ppmT("canvas.view")} />
+        )}
+        {!designV2 && (
+          <>
+            <RailButton
+              expanded={railExpanded}
+              icon={Focus}
+              label={ppmT("canvas.fit_view")}
+              onClick={() => runCanvasCommand("fit-view")}
+            />
+            <RailButton
+              expanded={railExpanded}
+              icon={ZoomIn}
+              label={ppmT("canvas.zoom_in")}
+              onClick={() => runCanvasCommand("zoom-in")}
+            />
+            <RailButton
+              expanded={railExpanded}
+              icon={ZoomOut}
+              label={ppmT("canvas.zoom_out")}
+              onClick={() => runCanvasCommand("zoom-out")}
+            />
+          </>
+        )}
         {railExpanded && capabilities.edit && (
           <div className="ppm-canvas-rail__align" aria-label={ppmT("canvas.align")}>
             <button
@@ -1042,6 +1082,8 @@ export default function PpmCanvasWorkspace({
                 onOpenBoard={openBoard}
                 onOrchestratorRunVersionsChange={handleOrchestratorRunVersionsChange}
                 onSelectionChange={handleSelectionChange}
+                onSavedAtChange={designV2 ? handleSavedAtChange : undefined}
+                onZoomChange={designV2 ? zoomStore.set : undefined}
                 onToolChange={handleToolChange}
                 onSyncStatusChange={(id, status) =>
                   setSyncByBoardId((current) => (current[id] === status ? current : { ...current, [id]: status }))
@@ -1057,13 +1099,27 @@ export default function PpmCanvasWorkspace({
         ))}
       </main>
 
-      <footer className="ppm-canvas-workspace__status">
-        <span>
-          <SyncDot status={syncByBoardId[activeBoardId]} />
-          {ppmT(activeStatusKey)}
-        </span>
-        {activeRoleKey && <span>{ppmT(activeRoleKey)}</span>}
-      </footer>
+      {designV2 ? (
+        <CanvasStatusLineV2
+          activeBoardIds={activeBoards.map((board) => board.board_id)}
+          boardId={activeBoardId}
+          locale={currentLocale}
+          roleKey={activeRoleKey}
+          savedAt={savedAtByBoardId[activeBoardId]}
+          status={syncByBoardId[activeBoardId]}
+          statusKey={activeStatusKey}
+          zoomStore={zoomStore}
+          onCommand={runCanvasCommand}
+        />
+      ) : (
+        <footer className="ppm-canvas-workspace__status">
+          <span>
+            <SyncDot status={syncByBoardId[activeBoardId]} />
+            {ppmT(activeStatusKey)}
+          </span>
+          {activeRoleKey && <span>{ppmT(activeRoleKey)}</span>}
+        </footer>
+      )}
 
       {boardMenuOpen && (
         <BoardSwitcher
@@ -1531,6 +1587,120 @@ function RailSectionLabel({ expanded, label }: { expanded: boolean; label: strin
 
 function SyncDot({ status }: { status?: TPpmCanvasSyncStatus }) {
   return <span className="ppm-canvas-sync-dot" data-status={status ?? "loading"} aria-hidden="true" />;
+}
+
+// UX1.1 status line. Separators are aria-hidden siblings, so the saved label keeps its exact text for e2e.
+function CanvasStatusLineV2({
+  activeBoardIds,
+  boardId,
+  locale,
+  onCommand,
+  roleKey,
+  savedAt,
+  status,
+  statusKey,
+  zoomStore,
+}: {
+  activeBoardIds: string[];
+  boardId: string;
+  locale: string;
+  onCommand: (command: TPpmCanvasCommand) => void;
+  roleKey: ReturnType<typeof footerRoleLabelKey>;
+  savedAt: string | null | undefined;
+  status?: TPpmCanvasSyncStatus;
+  statusKey: ReturnType<typeof syncStatusLabel>;
+  zoomStore: TPpmCanvasZoomStore;
+}) {
+  const ppmT = usePpmTranslation();
+  const parts = formatCanvasStatusParts({ activeBoardIds, boardId, locale, roleKey, savedAt, statusKey });
+  return (
+    <footer className="ppm-canvas-workspace__status ppm-canvas-statusline">
+      <span className="ppm-canvas-statusline__info">
+        {parts.sheet && (
+          <>
+            <span className="ppm-canvas-statusline__sheet">
+              {fillCanvasTemplate(ppmT("canvas.status_sheet"), parts.sheet)}
+            </span>
+            <span className="ppm-canvas-statusline__sep ppm-canvas-statusline__sep--sheet" aria-hidden="true">
+              ·
+            </span>
+          </>
+        )}
+        <span className="ppm-canvas-statusline__sync">
+          <SyncDot status={status} />
+          {ppmT(statusKey)}
+        </span>
+        {parts.time && (
+          <>
+            <span className="ppm-canvas-statusline__sep ppm-canvas-statusline__sep--time" aria-hidden="true">
+              ·
+            </span>
+            <time className="ppm-canvas-statusline__time" dateTime={parts.time.iso}>
+              {parts.time.label}
+            </time>
+          </>
+        )}
+        {parts.role && (
+          <>
+            <span className="ppm-canvas-statusline__sep" aria-hidden="true">
+              ·
+            </span>
+            <span>{ppmT(parts.role)}</span>
+          </>
+        )}
+      </span>
+      <span className="ppm-canvas-zoom" role="group" aria-label={ppmT("canvas.zoom_group")}>
+        <button
+          type="button"
+          aria-label={ppmT("canvas.zoom_out")}
+          title={ppmT("canvas.zoom_out")}
+          onClick={() => onCommand("zoom-out")}
+        >
+          <Minus aria-hidden="true" />
+        </button>
+        <CanvasZoomResetButton boardId={boardId} store={zoomStore} onReset={() => onCommand("zoom-reset")} />
+        <button
+          type="button"
+          aria-label={ppmT("canvas.zoom_in")}
+          title={ppmT("canvas.zoom_in")}
+          onClick={() => onCommand("zoom-in")}
+        >
+          <Plus aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          aria-label={ppmT("canvas.fit_view")}
+          title={ppmT("canvas.fit_view")}
+          onClick={() => onCommand("fit-view")}
+        >
+          <Focus aria-hidden="true" />
+        </button>
+      </span>
+    </footer>
+  );
+}
+
+function CanvasZoomResetButton({
+  boardId,
+  onReset,
+  store,
+}: {
+  boardId: string;
+  onReset: () => void;
+  store: TPpmCanvasZoomStore;
+}) {
+  const ppmT = usePpmTranslation();
+  const zoom = useSyncExternalStore(
+    store.subscribe,
+    () => store.get(boardId),
+    () => 100
+  );
+  const label = fillCanvasTemplate(ppmT("canvas.zoom_reset_label"), { zoom });
+  return (
+    <button type="button" className="ppm-canvas-zoom__reset" aria-label={label} title={label} onClick={onReset}>
+      {formatCanvasZoom(zoom)}
+    </button>
+  );
 }
 
 function WorkspaceState({

@@ -39,6 +39,7 @@ import {
   type TPpmSemanticRelation,
 } from "@/services/ppm-brain.service";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { formatLocator } from "./citation-format";
 import type { TPpmCanvasCommandDetail } from "./commands";
 
 /** "search" is the non-AI project search of PPM 1.0; "full" adds agents and generated answers. */
@@ -2967,20 +2968,6 @@ function StatusCard({ label, tone, value }: { label: string; tone: string; value
       <span>{label}</span>
     </div>
   );
-}
-
-function formatLocator(locator: Record<string, string | number>) {
-  if (locator.identifier) return `Задача ${locator.identifier}`;
-  if (locator.page) return `${locator.path ?? "PDF"}, страница ${locator.page}`;
-  if (locator.kind === "git_code" && locator.path) {
-    const lines = locator.line_start
-      ? `, строки ${locator.line_start}${locator.line_end ? `–${locator.line_end}` : ""}`
-      : "";
-    const commit = locator.commit_sha ? ` · ${String(locator.commit_sha).slice(0, 12)}` : "";
-    return `${locator.path}${lines}${commit}`;
-  }
-  if (locator.path) return String(locator.path);
-  return "Источник проекта";
 }
 
 function formatGraphPath(path: NonNullable<TPpmBrainResult["graph_path"]>) {

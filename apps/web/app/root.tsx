@@ -12,7 +12,14 @@ import { ThemeProvider } from "next-themes";
 // plane imports
 import { SITE_DESCRIPTION, SITE_NAME } from "@plane/constants";
 import { cn } from "@plane/utils";
-import { isPpmBrandEnabled, isPpmShellEnabled, PPM_BRAND } from "@ppm/brand";
+import {
+  getPpmAppearanceBootstrapScript,
+  isPpmBrandEnabled,
+  isPpmShellEnabled,
+  PPM_BRAND,
+  PPM_THEME_COLOR_V2,
+  resolvePpmDesign,
+} from "@ppm/brand";
 // types
 // assets
 import favicon16 from "@/app/assets/favicon/favicon-16x16.png?url";
@@ -26,6 +33,7 @@ import type { Route } from "./+types/root";
 // components
 import { PpmLocaleBootstrap, PpmLocaleFallback } from "@/components/ppm-shell/locale-bootstrap";
 // lib
+import { usePpmDesignV2 } from "@/lib/ppm-design";
 import { isStaleAssetError, recoverFromStaleAsset } from "@/lib/stale-asset-error";
 // local
 import { CustomErrorComponent } from "./error";
@@ -34,17 +42,27 @@ import { AppProvider } from "./provider";
 // oxlint-disable-next-line import/no-unassigned-import -- Fontsource registers the Inter font-face globally.
 import "@fontsource-variable/inter";
 import interVariableWoff2 from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
-// oxlint-disable-next-line import/no-unassigned-import -- Fontsource registers the PPM UI font-face globally.
-import "@fontsource-variable/ibm-plex-sans";
-// oxlint-disable-next-line import/no-unassigned-import -- Fontsource registers the PPM monospace font-face globally.
+// oxlint-disable-next-line import/no-unassigned-import -- IBM Plex Sans Variable with the wdth axis (UX1.1: font-stretch 85%).
+import "@fontsource-variable/ibm-plex-sans/wdth.css";
+import plexSansCyrillicWoff2 from "@fontsource-variable/ibm-plex-sans/files/ibm-plex-sans-cyrillic-wdth-normal.woff2?url";
+import plexSansLatinWoff2 from "@fontsource-variable/ibm-plex-sans/files/ibm-plex-sans-latin-wdth-normal.woff2?url";
+// oxlint-disable-next-line import/no-unassigned-import -- Wave-0 (v1) monospace face; v2 uses IBM Plex Mono.
 import "@fontsource-variable/jetbrains-mono";
 // oxlint-disable-next-line import/no-unassigned-import -- Fontsource registers the icon font-face globally.
 import "@fontsource/material-symbols-rounded";
 // oxlint-disable-next-line import/no-unassigned-import -- Fontsource registers the editor monospace font-face globally.
 import "@fontsource/ibm-plex-mono";
+// oxlint-disable-next-line import/no-unassigned-import -- UX1.1: IBM Plex Mono 500 (IDs, keys, citation numbers).
+import "@fontsource/ibm-plex-mono/500.css";
 
 const IS_PPM_BRAND_ENABLED = isPpmBrandEnabled(process.env.PPM_BRAND_ENABLED);
 const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+// UX1.1: build-time default of the wave-1 look; the inline script below applies this browser's choice before paint.
+const PPM_DESIGN_DEFAULT = resolvePpmDesign(process.env.PPM_DESIGN_V2, process.env.PPM_BRAND_ENABLED, null);
+const PPM_APPEARANCE_BOOTSTRAP = getPpmAppearanceBootstrapScript(
+  process.env.PPM_DESIGN_V2,
+  process.env.PPM_BRAND_ENABLED
+);
 const PLANE_APP_TITLE = "Plane | Simple, extensible, open-source project management tool.";
 
 export const links: LinksFunction = () => {
@@ -69,30 +87,59 @@ export const links: LinksFunction = () => {
   return [
     ...brandLinks,
     { rel: "stylesheet", href: globalStyles },
-    {
-      rel: "preload",
-      href: interVariableWoff2,
-      as: "font",
-      type: "font/woff2",
-      crossOrigin: "anonymous",
-    },
+    ...(IS_PPM_BRAND_ENABLED ? [plexSansCyrillicWoff2, plexSansLatinWoff2] : [interVariableWoff2]).map((href) => ({
+      rel: "preload" as const,
+      href,
+      as: "font" as const,
+      type: "font/woff2" as const,
+      crossOrigin: "anonymous" as const,
+    })),
   ];
 };
 
 export function Layout({ children }: { children: ReactNode }) {
   const isSessionRecorderEnabled = parseInt(process.env.VITE_ENABLE_SESSION_RECORDER || "0");
+  // UX1.1 R2: this browser's design (<html data-ppm-design>, set before paint; the build default while prerendering)
+  // picks next-themes' default, so a personal ppm_design rollback also restores the wave-0 dark default.
+  const isDesignV2 = usePpmDesignV2();
 
   return (
     <html
       data-ppm-brand={IS_PPM_BRAND_ENABLED ? "enabled" : "disabled"}
       data-ppm-shell={IS_PPM_SHELL_ENABLED ? "enabled" : "disabled"}
+      data-ppm-design={PPM_DESIGN_DEFAULT}
+      data-ppm-density="comfortable"
       lang={IS_PPM_SHELL_ENABLED ? "ru" : "en"}
       suppressHydrationWarning
     >
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="theme-color" content={IS_PPM_BRAND_ENABLED ? PPM_BRAND.themeColor : "#fff"} />
+        {/* theme-color of the build default. The pre-paint script right after re-colours these tags (attributes only,
+            never the element count) when this browser's design differs, hence suppressHydrationWarning. */}
+        {IS_PPM_BRAND_ENABLED && PPM_DESIGN_DEFAULT === "v2" ? (
+          <>
+            <meta
+              name="theme-color"
+              media="(prefers-color-scheme: light)"
+              content={PPM_THEME_COLOR_V2.light}
+              suppressHydrationWarning
+            />
+            <meta
+              name="theme-color"
+              media="(prefers-color-scheme: dark)"
+              content={PPM_THEME_COLOR_V2.dark}
+              suppressHydrationWarning
+            />
+          </>
+        ) : (
+          <meta
+            name="theme-color"
+            content={IS_PPM_BRAND_ENABLED ? PPM_BRAND.themeColor : "#fff"}
+            suppressHydrationWarning
+          />
+        )}
+        {IS_PPM_BRAND_ENABLED && <script dangerouslySetInnerHTML={{ __html: PPM_APPEARANCE_BOOTSTRAP }} />}
         {/* Meta info for PWA */}
         <meta name="application-name" content={IS_PPM_BRAND_ENABLED ? PPM_BRAND.name : "Plane"} />
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -108,7 +155,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <div id="editor-portal" />
         <ThemeProvider
           themes={["light", "dark", "light-contrast", "dark-contrast", "custom"]}
-          defaultTheme={IS_PPM_BRAND_ENABLED ? "dark" : "system"}
+          defaultTheme={IS_PPM_BRAND_ENABLED && !isDesignV2 ? "dark" : "system"}
         >
           {children}
         </ThemeProvider>
