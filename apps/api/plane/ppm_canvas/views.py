@@ -76,11 +76,13 @@ from .services import (
     reorder_canvas_boards,
     restore_canvas_board,
     save_canvas_snapshot,
+    search_project_pages,
     search_work_items,
     serialize_board,
     serialize_binding,
     serialize_content_source,
     serialize_git_source,
+    serialize_page_search_result,
     serialize_semantic_edge,
     serialize_work_item,
     export_work_items_csv,
@@ -789,6 +791,23 @@ class PpmProjectionSearchView(PpmSessionAPIView):
         serializer = PpmProjectionSearchSerializer(data=request.query_params)
         if not serializer.is_valid():
             return self.invalid_payload(request, serializer, code="PROJECTION_SEARCH_INVALID")
+        if serializer.validated_data["types"] == [PpmCanvasEntityType.PAGE]:
+            pages, next_cursor = search_project_pages(
+                project=project,
+                user=request.user,
+                query=serializer.validated_data["q"],
+                cursor=serializer.validated_data["cursor"],
+                limit=serializer.validated_data["limit"],
+            )
+            return Response(
+                {
+                    "results": [
+                        serialize_page_search_result(page=page, project=project, access=access) for page in pages
+                    ],
+                    "next_cursor": next_cursor,
+                },
+                status=status.HTTP_200_OK,
+            )
         work_items, next_cursor = search_work_items(
             project=project,
             user=request.user,

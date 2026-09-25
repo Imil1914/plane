@@ -162,8 +162,11 @@ async function attachJson(testInfo: TestInfo, name: string, value: unknown) {
 }
 
 async function drawConnection(page: Page) {
-  const noteInput = page.locator(".ppm-canvas-node--note input.ppm-canvas-node__title").last();
-  const noteCard = noteInput.locator('xpath=ancestor::*[contains(@class,"ppm-canvas-node")][1]');
+  // AF2.1 final-fix I-2: the v2 note (format "markdown") only renders `input.ppm-canvas-node__title` while it is
+  // tldraw's local editing shape (note-markdown.tsx NoteCardV2) — by the time this runs the note has left edit mode,
+  // so it is addressed the same way as the rest of the demo: the card's own `ppm-canvas-node--note` kind class
+  // (shape.tsx:290), scoped to the one note that carries this run's body marker.
+  const noteCard = page.locator(".ppm-canvas-node--note").filter({ hasText: noteMarker });
   const workItemCard = page.locator(".ppm-work-item-card").filter({ hasText: workItemTitle });
   const noteBox = await noteCard.boundingBox();
   const workItemBox = await workItemCard.boundingBox();
@@ -292,12 +295,26 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
     await expect(ownerPage.getByRole("main", { name: "Мозг проекта" })).toBeVisible();
     const initialCanvas = await getCanvas(ownerPage);
 
-    await ownerPage.getByRole("button", { name: "Добавить заметку", exact: true }).click();
-    const noteInput = ownerPage.getByRole("textbox", { name: "Новая заметка" }).last();
-    await noteInput.fill(noteTitle);
-    await ownerPage.getByRole("textbox", { name: "Напишите заметку в Markdown…" }).last().fill(noteMarker);
+    await ownerPage.getByRole("button", { name: "Документы и текст", exact: true }).click();
+    await ownerPage.getByRole("menuitem", { name: /^Заметка/ }).click();
+    // AF2.1 final-fix I-2: a new v2 note opens straight in edit mode (editor.setEditingShape, the controller's
+    // common solution) — its title field is aria-label "Заголовок" (canvas.note_title_placeholder, note-markdown.tsx
+    // :105-108), not the old v1 "Новая заметка" placeholder that every native note card showed regardless of edit
+    // state. The body field's aria-label ("Напишите заметку в Markdown…") is unchanged — the same key
+    // (canvas.note_body_placeholder) already labelled it before AF2.1, and old plain-format notes still on the
+    // long-lived ROBOT demo board render it too (NativeNodeCard, shape.tsx:781-791, always — not gated by edit
+    // state) — final-fix round 2, m-1: an unscoped query for that name is ambiguous (Playwright's strict mode) as
+    // soon as such a note exists. `.ppm-note-card[data-editing]` only the v2 NoteCardV2 renders (note-markdown.tsx),
+    // and only while `editing` — scoping to it addresses this note's own fields regardless of what else is on the
+    // board. Escaping afterwards leaves the note as the rendered card (`.ppm-canvas-node--note`, shape.tsx:290) the
+    // rest of this test (drag, drawConnection, reload) addresses by its body marker text — see drawConnection above.
+    const editingNote = ownerPage.locator(".ppm-note-card[data-editing]");
+    await editingNote.getByRole("textbox", { name: "Заголовок" }).fill(noteTitle);
+    await editingNote.getByRole("textbox", { name: "Напишите заметку в Markdown…" }).fill(noteMarker);
+    await ownerPage.keyboard.press("Escape");
 
-    await ownerPage.getByRole("button", { name: "Добавить задачу", exact: true }).click();
+    await ownerPage.getByRole("button", { name: "Из проекта", exact: true }).click();
+    await ownerPage.getByRole("menuitem", { name: /^Задача/ }).click();
     await ownerPage.getByPlaceholder("Поиск по названию или идентификатору…").fill(workItemTitle);
     await ownerPage.getByRole("button", { name: new RegExp(`Создать задачу.*${runId}`) }).click();
     const workItemCard = ownerPage.locator(".ppm-work-item-card").filter({ hasText: workItemTitle });
@@ -316,8 +333,8 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
     await stateSelect.selectOption(targetState.value);
     await expect(stateSelect).toHaveValue(targetState.value);
 
-    const noteCard = noteInput.locator('xpath=ancestor::*[contains(@class,"ppm-canvas-node")][1]');
-    const noteBox = await noteCard.boundingBox();
+    const noteCardBeforeDrag = ownerPage.locator(".ppm-canvas-node--note").filter({ hasText: noteMarker });
+    const noteBox = await noteCardBeforeDrag.boundingBox();
     if (!noteBox) throw new Error("The new Canvas note is not visible.");
     await ownerPage.mouse.move(noteBox.x + 8, noteBox.y + 8);
     await ownerPage.mouse.down();
@@ -343,8 +360,9 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
     expect(savedWorkItem).toBeDefined();
 
     await ownerPage.reload();
-    const reloadedNoteInput = ownerPage.locator(".ppm-canvas-node--note input.ppm-canvas-node__title").last();
-    await expect(reloadedNoteInput).toHaveValue(noteTitle);
+    // A reload starts with nothing in tldraw's local editing state, so the note is back to its rendered card
+    // (note-markdown.tsx h3.ppm-note-card__title) rather than the input a fresh addressable page would open into.
+    await expect(ownerPage.getByRole("heading", { name: noteTitle, exact: true })).toBeVisible();
     const reloadedCanvas = await getCanvas(ownerPage);
     const reloadedRecords = canvasRecords(reloadedCanvas);
     expect(reloadedRecords.filter((record) => record.type === "arrow")).toHaveLength(savedArrowCount);

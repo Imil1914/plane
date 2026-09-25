@@ -6,6 +6,7 @@ from .views import (
     PpmVaultEntryTransfersView,
     PpmVaultExportView,
     PpmVaultFileContentView,
+    PpmVaultFilePreviewView,
     PpmVaultFileUploadView,
     PpmVaultFolderCreateView,
     PpmVaultGraphView,
@@ -93,5 +94,10 @@ urlpatterns = [
         f"{PROJECT}entries/<uuid:entry_id>/file/",
         PpmVaultFileContentView.as_view(),
         name="ppm-vault-file-content",
+    ),
+    path(
+        f"{PROJECT}entries/<uuid:entry_id>/preview/",
+        PpmVaultFilePreviewView.as_view(),
+        name="ppm-vault-file-preview",
     ),
 ]

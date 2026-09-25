@@ -62,8 +62,33 @@ export const PPM_CANVAS_SEMANTIC_RELATION_TYPES = [
 ] as const;
 export type TPpmCanvasSemanticRelationType = (typeof PPM_CANVAS_SEMANTIC_RELATION_TYPES)[number];
 
-export const PPM_CANVAS_COLORS = ["yellow", "cyan", "green", "violet"] as const;
+// AF2.1: палитра PPM — нейтральный + 8 оттенков равной светлоты, в порядке панели «Цвет» (макеты K2/K3).
+// Прежние четыре значения входят в неё без изменений, поэтому старые доски читаются как есть
+// (PPM_CANVAS_LEGACY_COLOR_MAP — тождественное отображение, закреплено тестом af21-schema.test.ts).
+export const PPM_CANVAS_COLORS = [
+  "neutral",
+  "yellow",
+  "orange",
+  "terracotta",
+  "pink",
+  "violet",
+  "blue",
+  "cyan",
+  "green",
+] as const;
 export type TPpmCanvasColor = (typeof PPM_CANVAS_COLORS)[number];
+export const PPM_CANVAS_LEGACY_COLORS = ["yellow", "cyan", "green", "violet"] as const;
+export const PPM_CANVAS_LEGACY_COLOR_MAP = {
+  yellow: "yellow",
+  cyan: "cyan",
+  green: "green",
+  violet: "violet",
+} as const satisfies Record<(typeof PPM_CANVAS_LEGACY_COLORS)[number], TPpmCanvasColor>;
+
+/** Any stored colour → a palette colour: palette values pass through, anything else becomes `fallback`. */
+export function normalizePpmCanvasColor(value: unknown, fallback: TPpmCanvasColor): TPpmCanvasColor {
+  return isPpmCanvasColor(value) ? value : fallback;
+}
 export const PPM_CANVAS_GIT_PROVIDERS = ["github", "gitlab", "bitbucket", "gitea", "generic"] as const;
 export const PPM_CANVAS_GIT_OBJECT_TYPES = ["repository", "branch", "commit", "pull_request"] as const;
 
@@ -91,10 +116,15 @@ const sharedOwnedNodeFields = {
   body: z.string().max(50_000),
 };
 
+// AF2.1: заметки до AF2.1 — простой текст ("plain": показываются как раньше); новые — Markdown.
+export const PPM_CANVAS_NOTE_FORMATS = ["plain", "markdown"] as const;
+export type TPpmCanvasNoteFormat = (typeof PPM_CANVAS_NOTE_FORMATS)[number];
+
 export const ppmCanvasNoteSchema = z
   .object({
     ...sharedOwnedNodeFields,
     kind: z.literal("note"),
+    format: z.enum(PPM_CANVAS_NOTE_FORMATS).default("plain"),
   })
   .passthrough();
 
@@ -106,11 +136,15 @@ export const ppmCanvasDocumentNodeSchema = z
   })
   .passthrough();
 
-export const ppmCanvasChecklistItemSchema = z.object({
-  id: z.string().min(1).max(120),
-  text: z.string().max(1_000),
-  checked: z.boolean(),
-});
+export const ppmCanvasChecklistItemSchema = z
+  .object({
+    id: z.string().min(1).max(120),
+    text: z.string().max(1_000),
+    checked: z.boolean(),
+    // AF2.1: «Сделать задачами» links the item to the Plane task created from it (line B); unknown item fields survive.
+    work_item_id: z.string().uuid().nullable().optional(),
+  })
+  .passthrough();
 
 export const ppmCanvasChecklistSchema = z
   .object({
@@ -141,6 +175,12 @@ export const ppmCanvasTableSchema = z
   })
   .passthrough();
 
+// AF2.1: блок кода — тема подсветки, замок «только чтение», перенос строк. Язык — имя lowlight (common) или "text"
+// («Plain Text»); старые блоки получают значения по умолчанию при чтении.
+export const PPM_CANVAS_CODE_THEMES = ["light", "dark", "auto"] as const;
+export type TPpmCanvasCodeTheme = (typeof PPM_CANVAS_CODE_THEMES)[number];
+export const PPM_CANVAS_CODE_PLAIN_LANGUAGE = "text";
+
 export const ppmCanvasCodeSchema = z
   .object({
     ...sharedNodeFields,
@@ -149,6 +189,9 @@ export const ppmCanvasCodeSchema = z
     code: z.string().max(100_000),
     language: z.string().max(64),
     executable: z.literal(false),
+    theme: z.enum(PPM_CANVAS_CODE_THEMES).default("auto"),
+    locked: z.boolean().default(false),
+    wrap: z.boolean().default(false),
   })
   .passthrough();
 
@@ -646,6 +689,7 @@ export type TPpmCanvasOwnedNode = Extract<TPpmCanvasNode, { kind: TPpmCanvasOwne
 export type TPpmCanvasWorkItemRefNode = z.infer<typeof ppmCanvasWorkItemRefSchema>;
 export type TPpmCanvasWorkItemsViewNode = z.infer<typeof ppmCanvasWorkItemsViewSchema>;
 export type TPpmCanvasVaultFileRefNode = z.infer<typeof ppmCanvasVaultFileRefSchema>;
+export type TPpmCanvasPageRefNode = z.infer<typeof ppmCanvasPageRefSchema>;
 export type TPpmCanvasMediaNode = z.infer<
   typeof ppmCanvasPdfSchema | typeof ppmCanvasImageSchema | typeof ppmCanvasReferenceSchema
 >;
@@ -1214,14 +1258,20 @@ export type TPpmCanvasParseResult =
 export function createPpmCanvasNode({
   authorId,
   body = "",
+  color,
   kind,
+  noteFormat = "markdown",
   now = new Date().toISOString(),
   targetBoardId,
   title,
 }: {
   authorId: string;
   body?: string;
+  /** AF2.1: a palette colour chosen at creation (sticky-like cards); the kind default otherwise. */
+  color?: TPpmCanvasColor;
   kind: TPpmCanvasOwnedNodeKind;
+  /** AF2.1: new notes are Markdown; pass "plain" to create a note that renders exactly like a pre-AF2.1 one. */
+  noteFormat?: TPpmCanvasNoteFormat;
   now?: string;
   targetBoardId?: string;
   title: string;
@@ -1235,12 +1285,13 @@ export function createPpmCanvasNode({
     created_at: now,
     updated_at: now,
     visual: {
-      color: definition.defaultColor,
+      color: color ?? definition.defaultColor,
       width: definition.defaultWidth,
       height: definition.defaultHeight,
     },
   };
   const payload: Record<string, unknown> = { ...common };
+  if (kind === "note") payload.format = noteFormat;
   if (kind === "note" || kind === "document" || kind === "group" || kind === "frame") payload.body = body;
   if (kind === "document") payload.format = "markdown";
   if (kind === "checklist") payload.items = [{ id: createPortableId(), text: "", checked: false }];
@@ -1258,8 +1309,11 @@ export function createPpmCanvasNode({
   }
   if (kind === "code") {
     payload.code = body;
-    payload.language = "text";
+    payload.language = PPM_CANVAS_CODE_PLAIN_LANGUAGE;
     payload.executable = false;
+    payload.theme = "auto";
+    payload.locked = false;
+    payload.wrap = false;
   }
   if (kind === "board_link") {
     if (!targetBoardId) throw new Error("A board link requires a target board ID.");
@@ -1350,7 +1404,60 @@ export function createPpmVaultFileRefNode({
   });
 }
 
+type TPpmContentRefNodeInput = {
+  authorId: string;
+  binding: z.input<typeof ppmCanvasContentNodeBindingSchema>;
+  now?: string;
+  sourceUrl: string;
+  title: string;
+};
+
+// AF2.1: a «Документы» page (entity_type "page") always becomes the document card page_ref, whatever media kind the
+// caller guessed — editor.tsx passes contentNodeKind(...) = "reference" for pages (mime text/html, extension .page).
 export function createPpmContentRefNode({
+  authorId,
+  binding,
+  extension = null,
+  kind,
+  now = new Date().toISOString(),
+  sourceUrl,
+  title,
+}: TPpmContentRefNodeInput & {
+  extension?: string | null;
+  kind: "pdf" | "image" | "reference" | "page_ref";
+}): TPpmCanvasMediaNode | TPpmCanvasPageRefNode {
+  if (kind === "page_ref" || binding.entity_type === "page")
+    return createPpmPageRefNode({ authorId, binding, now, sourceUrl, title });
+  return createPpmMediaRefNode({ authorId, binding, extension, kind, now, sourceUrl, title });
+}
+
+function createPpmPageRefNode({
+  authorId,
+  binding,
+  now = new Date().toISOString(),
+  sourceUrl,
+  title,
+}: TPpmContentRefNodeInput): TPpmCanvasPageRefNode {
+  if (binding.entity_type !== "page") throw new Error("A document card requires a page binding.");
+  const definition = PPM_CANVAS_NODE_REGISTRY.page_ref;
+  return ppmCanvasNodeSchema.parse({
+    schema_version: PPM_CANVAS_SCHEMA_VERSION,
+    kind: "page_ref",
+    title,
+    source_url: sourceUrl,
+    binding,
+    author_id: authorId,
+    created_at: now,
+    updated_at: now,
+    visual: {
+      color: definition.defaultColor,
+      width: definition.defaultWidth,
+      height: definition.defaultHeight,
+    },
+  }) as TPpmCanvasPageRefNode;
+}
+
+function createPpmMediaRefNode({
   authorId,
   binding,
   extension,
@@ -1358,15 +1465,7 @@ export function createPpmContentRefNode({
   now = new Date().toISOString(),
   sourceUrl,
   title,
-}: {
-  authorId: string;
-  binding: z.input<typeof ppmCanvasContentNodeBindingSchema>;
-  extension: string | null;
-  kind: "pdf" | "image" | "reference";
-  now?: string;
-  sourceUrl: string;
-  title: string;
-}): TPpmCanvasMediaNode {
+}: TPpmContentRefNodeInput & { extension: string | null; kind: "pdf" | "image" | "reference" }): TPpmCanvasMediaNode {
   const definition = PPM_CANVAS_NODE_REGISTRY[kind];
   return ppmCanvasNodeSchema.parse({
     schema_version: PPM_CANVAS_SCHEMA_VERSION,
@@ -1974,7 +2073,9 @@ export function duplicatePpmCanvasNode<TNode extends TPpmCanvasOwnedNode>(
     created_at: now,
     updated_at: now,
   } as Record<string, unknown>;
-  if (node.kind === "checklist") duplicate.items = node.items.map((item) => ({ ...item, id: createPortableId() }));
+  if (node.kind === "checklist")
+    // A copied item is a new, unlinked item: the Plane task stays with the original.
+    duplicate.items = node.items.map(({ work_item_id: _workItemId, ...item }) => ({ ...item, id: createPortableId() }));
   if (node.kind === "table") {
     const columnIds = new Map(node.columns.map((column) => [column.id, createPortableId()]));
     duplicate.columns = node.columns.map((column) => ({ ...column, id: columnIds.get(column.id) }));

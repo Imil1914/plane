@@ -54,13 +54,13 @@ def open_private_object(object_key):
         return None
 
 
-def private_object_url(*, object_key, filename):
+def private_object_url(*, object_key, filename, disposition="inline"):
     if use_local_vault_storage():
         return None
     return S3Storage().generate_presigned_url(
         object_key,
         expiration=300,
-        disposition="inline",
+        disposition=disposition,
         filename=filename,
     )
 

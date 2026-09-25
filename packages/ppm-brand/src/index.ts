@@ -1,4 +1,5 @@
 import buildManifest from "../build-manifest.json";
+import { AF21_CANVAS_TRANSLATIONS } from "./translations/af21-canvas";
 import { UX11_CANVAS_TRANSLATIONS } from "./translations/ux11-canvas";
 import { UX11_SYSTEM_TRANSLATIONS } from "./translations/ux11-system";
 import { UX11_TASKS_TRANSLATIONS } from "./translations/ux11-tasks";
@@ -826,6 +827,7 @@ export const PPM_TRANSLATIONS = {
     ...UX11_SYSTEM_TRANSLATIONS.en,
     ...UX11_TASKS_TRANSLATIONS.en,
     ...UX11_CANVAS_TRANSLATIONS.en,
+    ...AF21_CANVAS_TRANSLATIONS.en,
   },
   ru: {
     "global.home": "Главная",
@@ -1635,6 +1637,7 @@ export const PPM_TRANSLATIONS = {
     ...UX11_SYSTEM_TRANSLATIONS.ru,
     ...UX11_TASKS_TRANSLATIONS.ru,
     ...UX11_CANVAS_TRANSLATIONS.ru,
+    ...AF21_CANVAS_TRANSLATIONS.ru,
   },
 } as const;
 

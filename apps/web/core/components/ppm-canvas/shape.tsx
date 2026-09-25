@@ -24,6 +24,7 @@ import {
   Copy,
   Download,
   ExternalLink,
+  Eye,
   FileText,
   FolderGit2,
   GitBranch,
@@ -65,6 +66,7 @@ import {
   isSamePpmOrchestratorProjection,
   isPpmMermaidSourceSafe,
   parseSerializedPpmCanvasNode,
+  PPM_CANVAS_NODE_REGISTRY,
   serializePpmCanvasNode,
   updatePpmCanvasNode,
   type TPpmCanvasBinding,
@@ -102,6 +104,18 @@ import {
 } from "./canvas-grammar";
 import { citationParts, isCitationStale, isExternalHref } from "./citation-format";
 import { LiveOpenLink, LiveSourceHeader, OwnNodeGlyph } from "./live-card";
+import { CodeBlockCard } from "./code-block";
+import { NoteCardV2 } from "./note-markdown";
+// ── AF2.1 B: (B3) карточка документа — превью description_html (уже санитизирован в loadPageHtml), дата изменения ──
+import { PpmCanvasContentActionsContext } from "./canvas-content-actions";
+import { formatPageUpdated, isPageContentReadable } from "./canvas-pages";
+// ── /AF2.1 B ──
+// ── AF2.1 B: (B5) «Доска задач»: перетаскивание карточек между колонками, развернуть ужатую доску ──
+import { isShrunkWorkItemsView, isWorkItemDrag, PPM_WORK_ITEM_DRAG_TYPE } from "./canvas-placement";
+// ── /AF2.1 B ──
+// ── AF2.1 B: (B6) чек-лист «Сделать задачами» ──
+import { checklistItemsToConvert, markConvertedItems } from "./canvas-checklist";
+// ── /AF2.1 B ──
 
 export const PPM_CANVAS_SHAPE_TYPE = "ppm-canvas-node" as const;
 
@@ -115,8 +129,13 @@ export type TPpmCanvasShape = TLBaseShape<
 >;
 
 const COLOR_CLASS: Record<TPpmCanvasNode["visual"]["color"], string> = {
+  blue: "ppm-canvas-node--blue",
   cyan: "ppm-canvas-node--cyan",
   green: "ppm-canvas-node--green",
+  neutral: "ppm-canvas-node--neutral",
+  orange: "ppm-canvas-node--orange",
+  pink: "ppm-canvas-node--pink",
+  terracotta: "ppm-canvas-node--terracotta",
   violet: "ppm-canvas-node--violet",
   yellow: "ppm-canvas-node--yellow",
 };
@@ -549,6 +568,28 @@ function NodeEditor({ node, shape }: { node: TPpmCanvasNode; shape: TPpmCanvasSh
     );
   }
 
+  // AF2.1 B2: блок кода K3 — только под грамматикой v2; v1 — прежний NativeNodeCard (textarea + поле «Язык»).
+  if (grammarV2 && node.kind === "code") {
+    return (
+      <CodeBlockCard
+        editor={editor}
+        node={node}
+        shape={shape}
+        onPatch={(patch) => updateNode(editor, shape, node, patch)}
+      />
+    );
+  }
+  // AF2.1 B1: новая заметка (format "markdown") — только под грамматикой v2; старые (plain) — как раньше (RB1).
+  if (grammarV2 && node.kind === "note" && node.format === "markdown") {
+    return (
+      <NoteCardV2
+        editor={editor}
+        node={node}
+        shape={shape}
+        onPatch={(patch) => updateNode(editor, shape, node, patch)}
+      />
+    );
+  }
   return <NativeNodeCard editor={editor} node={node} shape={shape} />;
 }
 
@@ -758,10 +799,18 @@ function NativeNodeCard({
               onPointerDown={stopEventPropagation}
             />
           )}
-          {node.kind === "checklist" && (
-            <ChecklistEditor editor={editor} node={node} readonly={readonly} shape={shape} />
-          )}
-          {node.kind === "table" && <TableEditor editor={editor} node={node} readonly={readonly} shape={shape} />}
+          {node.kind === "checklist" &&
+            (grammarV2 ? (
+              <ChecklistEditor editor={editor} node={node} readonly={readonly} shape={shape} />
+            ) : (
+              <ChecklistEditorV1 editor={editor} node={node} readonly={readonly} shape={shape} />
+            ))}
+          {node.kind === "table" &&
+            (grammarV2 ? (
+              <TableEditor editor={editor} node={node} readonly={readonly} shape={shape} />
+            ) : (
+              <TableEditorV1 editor={editor} node={node} readonly={readonly} shape={shape} />
+            ))}
           {node.kind === "code" && (
             <>
               <label className="ppm-canvas-code__language">
@@ -823,6 +872,43 @@ function ChecklistEditor({
   shape: TPpmCanvasShape;
 }) {
   const ppmT = usePpmTranslation();
+  // ── AF2.1 B: (B6) «Сделать задачами»: отмеченные пункты → задачи Plane, пункт помнит свою задачу ──
+  const grammarV2 = usePpmCanvasGrammarV2();
+  const contentActions = useContext(PpmCanvasContentActionsContext);
+  const projectionContext = useContext(PpmWorkItemProjectionContext);
+  const [converting, setConverting] = useState(false);
+  const pending = checklistItemsToConvert(node.items);
+  const taskIdentities = useMemo(() => {
+    const identities = new Map<string, TPpmWorkItemProjection["identity"]>();
+    for (const binding of projectionContext.bindingsByShapeId.values())
+      if (binding.entity_type === "work_item") identities.set(binding.entity_id, binding.source.identity);
+    return identities;
+  }, [projectionContext.bindingsByShapeId]);
+  // Пункт отмечается сразу, как его карточка легла на холст (одним сохранением с ней); пункты за время запросов
+  // могли поменять — берём свежий узел из редактора.
+  const markConverted = (itemId: string, workItemId: string) => {
+    const current = editor.getShape<TPpmCanvasShape>(shape.id);
+    const parsed = current ? parseSerializedPpmCanvasNode(current.props.node) : undefined;
+    if (!current || !parsed || (parsed.status !== "valid" && parsed.status !== "migrated")) return;
+    const latest = parsed.node;
+    if (latest.kind !== "checklist") return;
+    const items = markConvertedItems(latest.items, { [itemId]: workItemId });
+    if (items.some((item, index) => item !== latest.items[index])) updateNode(editor, current, latest, { items });
+  };
+  const convert = async () => {
+    if (converting || pending.length === 0) return;
+    setConverting(true);
+    try {
+      await contentActions.convertChecklistItems(
+        shape,
+        pending.map((item) => ({ id: item.id, text: item.text })),
+        markConverted
+      );
+    } finally {
+      setConverting(false);
+    }
+  };
+  // ── /AF2.1 B ──
   return (
     <div className="ppm-canvas-checklist">
       {node.items.map((item) => (
@@ -864,6 +950,7 @@ function ChecklistEditor({
             onKeyDown={stopEventPropagation}
             onPointerDown={stopEventPropagation}
           />
+          {grammarV2 && item.work_item_id && <ChecklistTaskLink identity={taskIdentities.get(item.work_item_id)} />}
           {!readonly && (
             <button
               type="button"
@@ -896,7 +983,57 @@ function ChecklistEditor({
           {ppmT("canvas.checklist_add_item")}
         </button>
       )}
+      {grammarV2 && !readonly && contentActions.canEdit && pending.length > 0 && (
+        <button
+          type="button"
+          className="ppm-canvas-checklist__convert"
+          aria-busy={converting || undefined}
+          disabled={converting}
+          onClick={(event) => {
+            event.stopPropagation();
+            void convert();
+          }}
+          onKeyDown={stopEventPropagation}
+          onPointerDown={stopEventPropagation}
+        >
+          {converting ? <LoaderCircle aria-hidden="true" /> : <ListTodo aria-hidden="true" />}
+          {fillCanvasTemplate(ppmT("canvas.checklist_make_tasks"), { count: pending.length })}
+        </button>
+      )}
     </div>
+  );
+}
+
+// AF2.1 B6: метка «Уже задача» у пункта. Если карточка задачи есть на этой доске — ссылка на задачу с её номером
+// (внутренняя ссылка PPM, в той же вкладке, как у карточек); иначе только значок с подписью для скринридера.
+function ChecklistTaskLink({ identity }: { identity?: TPpmWorkItemProjection["identity"] }) {
+  const ppmT = usePpmTranslation();
+  const label = ppmT("canvas.checklist_item_is_task");
+  const title = identity?.identifier ? `${label}: ${identity.identifier}` : label;
+  const content = (
+    <>
+      <ListTodo aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+      {identity?.identifier}
+    </>
+  );
+  if (!identity?.source_url)
+    return (
+      <span className="ppm-canvas-checklist__task" title={title}>
+        {content}
+      </span>
+    );
+  return (
+    <a
+      className="ppm-canvas-checklist__task"
+      href={identity.source_url}
+      title={title}
+      onClick={stopEventPropagation}
+      onKeyDown={stopEventPropagation}
+      onPointerDown={stopEventPropagation}
+    >
+      {content}
+    </a>
   );
 }
 
@@ -1051,6 +1188,233 @@ function TableEditor({
               }}
               onKeyDown={stopEventPropagation}
               onPointerDown={stopEventPropagation}
+            >
+              <Plus aria-hidden="true" /> {ppmT("canvas.table_add_column")}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChecklistEditorV1({
+  editor,
+  node,
+  readonly,
+  shape,
+}: {
+  editor: Editor;
+  node: Extract<TPpmCanvasOwnedNode, { kind: "checklist" }>;
+  readonly: boolean;
+  shape: TPpmCanvasShape;
+}) {
+  const ppmT = usePpmTranslation();
+  return (
+    <div className="ppm-canvas-checklist">
+      {node.items.map((item) => (
+        <label key={item.id}>
+          {/* AF2.1 F2: the only v1 change against UX1.1 — the clicks fix. tldraw intercepts native checkbox clicks
+              inside shapes, so the toggle is a button with checkbox semantics (as under v2). */}
+          <button
+            type="button"
+            // oxlint-disable-next-line jsx_a11y/prefer-tag-over-role
+            role="checkbox"
+            className="ppm-canvas-checklist__toggle"
+            aria-label={item.text || ppmT("canvas.checklist_item")}
+            aria-checked={item.checked}
+            disabled={readonly}
+            onClick={(event) => {
+              event.stopPropagation();
+              updateNode(editor, shape, node, {
+                items: node.items.map((current) =>
+                  current.id === item.id ? { ...current, checked: !item.checked } : current
+                ),
+              });
+            }}
+            onKeyDown={stopEventPropagation}
+            onPointerDown={stopEventPropagation}
+          >
+            {item.checked ? "✓" : ""}
+          </button>
+          <input
+            value={item.text}
+            disabled={readonly}
+            maxLength={1_000}
+            onChange={(event) =>
+              updateNode(editor, shape, node, {
+                items: node.items.map((current) =>
+                  current.id === item.id ? { ...current, text: event.currentTarget.value } : current
+                ),
+              })
+            }
+            onKeyDown={stopEventPropagation}
+            onPointerDown={stopEventPropagation}
+          />
+          {!readonly && (
+            <button
+              type="button"
+              aria-label={ppmT("canvas.node_remove")}
+              onClick={stopEventPropagation}
+              onKeyDown={(event) =>
+                runCanvasKeyboardAction(event, () =>
+                  updateNode(editor, shape, node, { items: node.items.filter((current) => current.id !== item.id) })
+                )
+              }
+              onPointerDown={(event) =>
+                runCanvasPointerAction(event, () =>
+                  updateNode(editor, shape, node, { items: node.items.filter((current) => current.id !== item.id) })
+                )
+              }
+            >
+              <Trash2 aria-hidden="true" />
+            </button>
+          )}
+        </label>
+      ))}
+      {!readonly && (
+        <button
+          type="button"
+          onClick={stopEventPropagation}
+          onKeyDown={(event) =>
+            runCanvasKeyboardAction(event, () =>
+              updateNode(editor, shape, node, {
+                items: [...node.items, { id: crypto.randomUUID(), text: "", checked: false }],
+              })
+            )
+          }
+          onPointerDown={(event) =>
+            runCanvasPointerAction(event, () =>
+              updateNode(editor, shape, node, {
+                items: [...node.items, { id: crypto.randomUUID(), text: "", checked: false }],
+              })
+            )
+          }
+        >
+          <Plus aria-hidden="true" />
+          {ppmT("canvas.checklist_add_item")}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function TableEditorV1({
+  editor,
+  node,
+  readonly,
+  shape,
+}: {
+  editor: Editor;
+  node: Extract<TPpmCanvasOwnedNode, { kind: "table" }>;
+  readonly: boolean;
+  shape: TPpmCanvasShape;
+}) {
+  const ppmT = usePpmTranslation();
+  return (
+    <div className="ppm-canvas-table">
+      <table>
+        <thead>
+          <tr>
+            {node.columns.map((column) => (
+              <th key={column.id}>
+                <input
+                  disabled={readonly}
+                  maxLength={160}
+                  value={column.label}
+                  onChange={(event) =>
+                    updateNode(editor, shape, node, {
+                      columns: node.columns.map((current) =>
+                        current.id === column.id ? { ...current, label: event.currentTarget.value } : current
+                      ),
+                    })
+                  }
+                  onKeyDown={stopEventPropagation}
+                  onPointerDown={stopEventPropagation}
+                />
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {node.rows.map((row) => (
+            <tr key={row.id}>
+              {node.columns.map((column) => (
+                <td key={column.id}>
+                  <input
+                    disabled={readonly}
+                    maxLength={5_000}
+                    value={row.cells[column.id] ?? ""}
+                    onChange={(event) =>
+                      updateNode(editor, shape, node, {
+                        rows: node.rows.map((current) =>
+                          current.id === row.id
+                            ? { ...current, cells: { ...current.cells, [column.id]: event.currentTarget.value } }
+                            : current
+                        ),
+                      })
+                    }
+                    onKeyDown={stopEventPropagation}
+                    onPointerDown={stopEventPropagation}
+                  />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!readonly && (
+        <div className="ppm-canvas-table__actions">
+          <button
+            type="button"
+            onClick={stopEventPropagation}
+            onKeyDown={(event) =>
+              runCanvasKeyboardAction(event, () =>
+                updateNode(editor, shape, node, {
+                  rows: [
+                    ...node.rows,
+                    {
+                      id: crypto.randomUUID(),
+                      cells: Object.fromEntries(node.columns.map((column) => [column.id, ""])),
+                    },
+                  ],
+                })
+              )
+            }
+            onPointerDown={(event) =>
+              runCanvasPointerAction(event, () =>
+                updateNode(editor, shape, node, {
+                  rows: [
+                    ...node.rows,
+                    {
+                      id: crypto.randomUUID(),
+                      cells: Object.fromEntries(node.columns.map((column) => [column.id, ""])),
+                    },
+                  ],
+                })
+              )
+            }
+          >
+            <Plus aria-hidden="true" /> {ppmT("canvas.table_add_row")}
+          </button>
+          {node.columns.length < 20 && (
+            <button
+              type="button"
+              onClick={stopEventPropagation}
+              onKeyDown={(event) =>
+                runCanvasKeyboardAction(event, () =>
+                  updateNode(editor, shape, node, {
+                    columns: [...node.columns, { id: crypto.randomUUID(), label: ppmT("canvas.table_add_column") }],
+                  })
+                )
+              }
+              onPointerDown={(event) =>
+                runCanvasPointerAction(event, () =>
+                  updateNode(editor, shape, node, {
+                    columns: [...node.columns, { id: crypto.randomUUID(), label: ppmT("canvas.table_add_column") }],
+                  })
+                )
+              }
             >
               <Plus aria-hidden="true" /> {ppmT("canvas.table_add_column")}
             </button>
@@ -1567,7 +1931,8 @@ function WorkItemsViewNode({
   const editor = useEditor();
   const projectionContext = useContext(PpmWorkItemProjectionContext);
   const readonly = editor.getInstanceState().isReadonly;
-  const compact = usePpmCanvasGrammarV2();
+  // AF2.1 B5 (RB14): под v2 — полный канбан волны 1; прежняя заглушка и тихое ужатие доски удалены.
+  const grammarV2 = usePpmCanvasGrammarV2();
   const [response, setResponse] = useState<TPpmWorkItemsViewResponse>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
@@ -1579,15 +1944,6 @@ function WorkItemsViewNode({
     () => ({ ...node.filters, sort: node.sort, limit: 100 }),
     [node.filters, node.sort]
   );
-
-  useEffect(() => {
-    if (!compact || !projectionContext.canEdit || (shape.props.w <= 420 && shape.props.h <= 220)) return;
-    editor.updateShape<TPpmCanvasShape>({
-      id: shape.id,
-      type: shape.type,
-      props: { w: 360, h: 160 },
-    });
-  }, [compact, editor, projectionContext.canEdit, shape.id, shape.props.h, shape.props.w, shape.type]);
 
   useEffect(() => setSearchDraft(node.filters.query), [node.filters.query]);
 
@@ -1699,31 +2055,45 @@ function WorkItemsViewNode({
 
   const groups = groupWorkItems(node.group_by, response, ppmT);
 
-  if (compact) {
-    return (
-      <div className="ppm-work-items-view ppm-work-items-view--compact" onPointerDown={stopEventPropagation}>
-        <span>{ppmT("canvas.tasks_panel")}</span>
-        <strong>{node.title}</strong>
-        <small>
-          {response?.summary.total ?? 0} {ppmT("canvas.work_items_view_total")}
-        </small>
-        <button type="button" onClick={projectionContext.onOpenTasks}>
-          {ppmT("canvas.open_backlog")}
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div
       className="ppm-work-items-view"
       data-layout={node.layout}
-      onPointerDown={stopEventPropagation}
+      onPointerDown={(event) => {
+        // RB14: под v2 подпись «Доска задач» — ручка: выделить и перетащить карточку; остальное — клики канбана.
+        if (grammarV2 && (event.target as HTMLElement).closest("[data-ppm-drag-handle]")) return;
+        stopEventPropagation(event);
+      }}
       onWheelCapture={stopEventPropagation}
     >
       <header className="ppm-work-items-view__header">
+        {grammarV2 && !readonly && isShrunkWorkItemsView(shape.props) && (
+          // Доску, которую прежний эффект ужал до 360×160, разворачивает только пользователь. Кнопка — первой в шапке:
+          // шапка не переносится, а overflow карточки срезал бы её в конце ряда действий.
+          <button
+            type="button"
+            className="ppm-work-items-view__backlog ppm-work-items-view__expand"
+            onClick={() => {
+              const { defaultHeight: h, defaultWidth: w } = PPM_CANVAS_NODE_REGISTRY.work_items_view;
+              editor.updateShape<TPpmCanvasShape>({
+                id: shape.id,
+                type: shape.type,
+                props: {
+                  h,
+                  w,
+                  node: serializePpmCanvasNode(
+                    updatePpmCanvasNode(node, { visual: { ...node.visual, height: h, width: w } })
+                  ),
+                },
+              });
+            }}
+            onPointerDown={stopEventPropagation}
+          >
+            {ppmT("canvas.work_items_view_expand")}
+          </button>
+        )}
         <div className="ppm-work-items-view__identity">
-          <span>{ppmT("canvas.work_items_view")}</span>
+          <span data-ppm-drag-handle={grammarV2 || undefined}>{ppmT("canvas.work_items_view")}</span>
           <input
             aria-label={ppmT("canvas.work_items_view_title")}
             disabled={readonly}
@@ -1740,6 +2110,16 @@ function WorkItemsViewNode({
           <span>{ppmT("canvas.work_items_view_progress")}</span>
         </div>
         <div className="ppm-work-items-view__actions">
+          {grammarV2 && (
+            <button
+              type="button"
+              className="ppm-work-items-view__backlog"
+              onClick={projectionContext.onOpenTasks}
+              onPointerDown={stopEventPropagation}
+            >
+              {ppmT("canvas.open_backlog")}
+            </button>
+          )}
           <button
             type="button"
             data-active={node.layout === "kanban" || undefined}
@@ -1977,11 +2357,19 @@ function WorkItemsViewNode({
               className="ppm-work-items-view__group"
               data-drag-target={draggedId && group.stateId ? true : undefined}
               key={group.id}
-              onDragOver={(event) => {
-                if (draggedId && group.stateId) event.preventDefault();
-              }}
-              onDrop={(event) => {
+              // AF2.1 B5: tldraw глушит dragover/drop нативными слушателями своего контейнера (preventDefault, stop и
+              // повторная отправка на .tl-canvas), всплытие React до колонки не доходило — перенос не срабатывал ни в
+              // одном облике. Ловим в фазе захвата и только своё перетаскивание карточки: файлы идут на холст как раньше.
+              onDragOverCapture={(event) => {
+                if (!isWorkItemDrag(event.dataTransfer.types)) return;
                 event.preventDefault();
+                event.stopPropagation();
+                event.dataTransfer.dropEffect = draggedId && group.stateId ? "move" : "none";
+              }}
+              onDropCapture={(event) => {
+                if (!isWorkItemDrag(event.dataTransfer.types)) return;
+                event.preventDefault();
+                event.stopPropagation();
                 const source = response?.results.find((item) => item.identity.entity_id === draggedId);
                 if (!source || !group.stateId || source.display.state?.id === group.stateId) return;
                 const state = response?.work_item_options.states.find((item) => item.id === group.stateId);
@@ -2009,6 +2397,7 @@ function WorkItemsViewNode({
                       setDraggedId(item.identity.entity_id);
                       event.dataTransfer.effectAllowed = "move";
                       event.dataTransfer.setData("text/plain", item.identity.entity_id);
+                      event.dataTransfer.setData(PPM_WORK_ITEM_DRAG_TYPE, item.identity.entity_id);
                     }}
                     onPatch={patchSource}
                     options={response?.work_item_options ?? projectionContext.options}
@@ -2430,7 +2819,7 @@ function WorkItemProjectionCard({
             </a>
           )
         )}
-        {identity.source_url && (
+        {grammarV2 && identity.source_url && (
           <button
             type="button"
             className="ppm-work-item-card__copy"
@@ -2485,6 +2874,35 @@ function ContentProjectionCard({
   const fallbackTitle = node.title;
   const fallbackUrl = node.source_url;
   const grammarV2 = usePpmCanvasGrammarV2();
+  // ── AF2.1 B: (B3) превью документа — HTML description_html лениво, по видимости карточки ──
+  const contentActions = useContext(PpmCanvasContentActionsContext);
+  const { currentLocale } = useTranslation();
+  const pageId = binding?.entity_type === "page" ? binding.entity_id : undefined;
+  const pageVersion = binding?.source_version ?? null;
+  // Fix 2 (раунд 1): доступ мог быть отозван или документ удалён между привязкой и отрисовкой — тогда не грузим и
+  // не показываем превью, а закешированный HTML сбрасываем, а не оставляем последнее известное содержимое.
+  const readable = binding
+    ? isPageContentReadable(binding.source.display.source_status, binding.source.capabilities.read)
+    : false;
+  const cardEditor = useEditor();
+  // M8 (раунд 1): камеру (useValue) слушают только карточки документа под v2 — остальным нечего в ней смотреть.
+  const visible = useLazyPreview(cardEditor, shape.id, grammarV2 && pageId !== undefined);
+  const [pageHtml, setPageHtml] = useState<string | null>(null);
+  useEffect(() => {
+    if (!grammarV2 || !pageId || !visible || !readable) {
+      setPageHtml(null);
+      return;
+    }
+    let active = true;
+    void contentActions.loadPageHtml(pageId, pageVersion).then((html) => {
+      if (active) setPageHtml(html);
+      return undefined;
+    });
+    return () => {
+      active = false;
+    };
+  }, [contentActions, grammarV2, pageId, pageVersion, readable, visible]);
+  // ── /AF2.1 B ──
 
   if (!binding) {
     return (
@@ -2492,7 +2910,12 @@ function ContentProjectionCard({
         <span className="ppm-canvas-node__kind">
           {ppmT(CONTENT_SOURCE_LABELS[node.binding?.entity_type ?? "vault_file"])}
         </span>
-        <strong>{fallbackTitle}</strong>
+        {/* Fix 2 (раунд 1): под v2, пока идёт загрузка/после отказа — нейтральная подпись, не заголовок из снимка
+            доски (он мог принадлежать документу, ставшему с тех пор приватным или удалённому). Под v1 разметка
+            карточки прежняя (без вложенных подписей) — заголовок из снимка остаётся, как в волне 0. */}
+        <strong>
+          {grammarV2 && node.binding?.entity_type === "page" ? ppmT("canvas.kind_document") : fallbackTitle}
+        </strong>
         <button type="button" onClick={projectionContext.onRefresh} onPointerDown={stopEventPropagation}>
           <RefreshCw aria-hidden="true" />
           {ppmT("canvas.refresh_sources")}
@@ -2518,7 +2941,9 @@ function ContentProjectionCard({
       {grammarV2 ? (
         <LiveSourceHeader
           icon={binding.entity_type === "page" ? FileText : binding.entity_type === "attachment" ? Paperclip : Archive}
-          identifier={display.extension ? display.extension.slice(1).toUpperCase() : null}
+          identifier={
+            binding.entity_type === "page" ? null : display.extension ? display.extension.slice(1).toUpperCase() : null
+          }
           source={liveSource}
           sourceLabel={ppmT(LIVE_SOURCE_LABEL_KEYS[liveSource])}
         />
@@ -2531,10 +2956,28 @@ function ContentProjectionCard({
       >
         {display.title || fallbackTitle}
       </strong>
-      {display.excerpt && <p>{display.excerpt}</p>}
+      {grammarV2 && binding.entity_type === "page" && readable && pageHtml ? (
+        <div
+          className="ppm-live-card__page-preview"
+          // @ts-expect-error -- `inert` — валидный DOM-атрибут, но @types/react 18 его пока не типизирует (M9/пункт 9,
+          // раунд 2): ссылки внутри description_html выпадают из tab-порядка и дерева доступности, не только из
+          // pointer-событий (для этого уже была pointer-events: none) — открыть документ можно только «Открыть ↗».
+          inert=""
+          // oxlint-disable-next-line react/no-danger -- pageHtml прошёл sanitizeCanvasHtml один раз в loadPageHtml
+          dangerouslySetInnerHTML={{ __html: pageHtml }}
+        />
+      ) : (
+        display.excerpt && <p>{display.excerpt}</p>
+      )}
       {grammarV2 ? (
         // Kept even when empty: the card grid (canvas-v2.css .ppm-live-card) places rows by position.
-        <span className="ppm-canvas-node__vault-meta ppm-live-card__version">{liveMeta}</span>
+        <span className="ppm-canvas-node__vault-meta ppm-live-card__version">
+          {binding.entity_type === "page"
+            ? readable
+              ? (formatPageUpdated(binding.source_version, currentLocale, ppmT("canvas.page_updated")) ?? "")
+              : ""
+            : liveMeta}
+        </span>
       ) : (
         <span className="ppm-canvas-node__vault-meta">
           {display.extension ? `${display.extension.slice(1).toUpperCase()} · ` : ""}
@@ -2543,6 +2986,33 @@ function ContentProjectionCard({
       )}
       {display.source_status === "deleted" && <p>{ppmT("canvas.source_unavailable")}</p>}
       <footer>
+        {/* ── AF2.1 B: (B5) «Просмотр» и «Скачать» у файлов (у документа — своё «Открыть»); v1 без новых кнопок ── */}
+        {grammarV2 &&
+          binding.entity_type !== "page" &&
+          display.source_status !== "deleted" &&
+          display.source_status !== "quarantined" && (
+            <>
+              <button
+                type="button"
+                className="ppm-live-card__action"
+                onClick={() => contentActions.previewFile(binding)}
+                onPointerDown={stopEventPropagation}
+              >
+                <Eye aria-hidden="true" />
+                {ppmT("canvas.file_preview")}
+              </button>
+              <button
+                type="button"
+                className="ppm-live-card__action"
+                onClick={() => void contentActions.downloadFile(binding)}
+                onPointerDown={stopEventPropagation}
+              >
+                <Download aria-hidden="true" />
+                {ppmT("canvas.file_download")}
+              </button>
+            </>
+          )}
+        {/* ── /AF2.1 B ── */}
         {(identity.source_url || fallbackUrl) &&
           display.source_status !== "deleted" &&
           (grammarV2 ? (
@@ -2601,6 +3071,9 @@ function MediaProjectionCard({
   const visible = useLazyPreview(editor, shape.id);
   const previewUrl = binding?.source.display.preview_url;
   const grammarV2 = usePpmCanvasGrammarV2();
+  // ── AF2.1 B: (B5) «Просмотр» и «Скачать» ──
+  const contentActions = useContext(PpmCanvasContentActionsContext);
+  // ── /AF2.1 B ──
   useEffect(() => setPreviewError(false), [previewUrl]);
 
   if (!binding) {
@@ -2619,6 +3092,12 @@ function MediaProjectionCard({
   const { display, identity } = binding.source;
   const unavailable = display.source_status === "deleted" || display.source_status === "quarantined";
   const liveSource = liveSourceForEntity(binding.entity_type);
+  // RB7: /pdf/ Хранилища — по идентичности источника (vaultService.pdfUrl), а не из сырого preview_url.
+  const vaultPdfSrc =
+    grammarV2 && binding.entity_type === "vault_file" && node.kind === "pdf"
+      ? contentActions.vaultPdfUrl(binding)
+      : null;
+  const vaultPdf = Boolean(vaultPdfSrc);
   return (
     <div
       className="ppm-canvas-media"
@@ -2665,8 +3144,9 @@ function MediaProjectionCard({
           <iframe
             loading="lazy"
             referrerPolicy="no-referrer"
-            sandbox=""
-            src={previewUrl}
+            // RB7: PDF Хранилища под v2 — /pdf/ без песочницы (просмотрщик в песочнице не работает); вложения — как раньше.
+            sandbox={vaultPdf ? undefined : ""}
+            src={vaultPdfSrc ? `${vaultPdfSrc}#toolbar=0&view=FitH` : previewUrl}
             title={display.title}
             onError={() => setPreviewError(true)}
           />
@@ -2679,6 +3159,30 @@ function MediaProjectionCard({
         <p className="ppm-work-item-card__error">{projectionContext.errorsByShapeId.get(shape.id)}</p>
       )}
       <footer>
+        {/* ── AF2.1 B: (B5) «Просмотр» и «Скачать» — читателю тоже; v1 без новых кнопок ── */}
+        {grammarV2 && !unavailable && (
+          <>
+            <button
+              type="button"
+              className="ppm-live-card__action"
+              onClick={() => contentActions.previewFile(binding)}
+              onPointerDown={stopEventPropagation}
+            >
+              <Eye aria-hidden="true" />
+              {ppmT("canvas.file_preview")}
+            </button>
+            <button
+              type="button"
+              className="ppm-live-card__action"
+              onClick={() => void contentActions.downloadFile(binding)}
+              onPointerDown={stopEventPropagation}
+            >
+              <Download aria-hidden="true" />
+              {ppmT("canvas.file_download")}
+            </button>
+          </>
+        )}
+        {/* ── /AF2.1 B ── */}
         {identity.source_url &&
           !unavailable &&
           (grammarV2 ? (
@@ -2890,17 +3394,20 @@ function DeckNode({ node, shape }: { node: Extract<TPpmCanvasNode, { kind: "deck
   );
 }
 
-function useLazyPreview(editor: Editor, shapeId: TPpmCanvasShape["id"]) {
+// M8 (раунд 1): `enabled` по умолчанию true — старые вызовы (медиа-карточки) ведут себя как прежде; страница
+// подписывается на камеру только пока это нужно (grammarV2 и это вообще документ), а не всегда.
+function useLazyPreview(editor: Editor, shapeId: TPpmCanvasShape["id"], enabled = true) {
   const [visible, setVisible] = useState(false);
   const nearViewport = useValue(
     `ppm canvas media preview ${shapeId}`,
     () => {
+      if (!enabled) return false;
       const shapeBounds = editor.getShapePageBounds(shapeId);
       if (!shapeBounds) return false;
       const pageMargin = 240 / Math.max(editor.getZoomLevel(), 0.05);
       return editor.getViewportPageBounds().clone().expandBy(pageMargin).collides(shapeBounds);
     },
-    [editor, shapeId]
+    [editor, enabled, shapeId]
   );
 
   useEffect(() => {

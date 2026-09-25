@@ -94,6 +94,8 @@ describe("canvas status line (UX1.1 C1)", () => {
     expect(isCanvasCommandAllowedReadOnly("add-note", true)).toBe(false);
     expect(isCanvasCommandAllowedReadOnly("open-tasks", true)).toBe(true);
     expect(isCanvasCommandAllowedReadOnly("draw-rectangle", true)).toBe(false);
+    // AF2.1 F2: the tasks panel is a v2 tool; v1 keeps the UX1.1 read-only set.
+    expect(isCanvasCommandAllowedReadOnly("open-tasks", false)).toBe(false);
   });
 
   it("publishes zoom per board and skips unchanged values", () => {

@@ -54,6 +54,11 @@ const extraFiles = [
 const customCssFiles = [
   "apps/web/core/components/ppm-canvas/canvas.css",
   "apps/web/core/components/ppm-canvas/canvas-v2.css",
+  // AF2.1 T3: the line R and B stylesheets define their own ppm-canvas-* classes (rail/toolkit, note/code/file
+  // cards) that the scoped scanner below also reads from apps/web/core/components/ppm-canvas/**; without them here
+  // those classes were unknown to the audit and printed as "notes" even though they are real, scanned CSS.
+  "apps/web/core/components/ppm-canvas/canvas-toolkit.css",
+  "apps/web/core/components/ppm-canvas/canvas-content.css",
   "apps/web/styles/globals.css",
   "apps/web/styles/power-k.css",
   "apps/web/styles/emoji.css",

@@ -1,0 +1,590 @@
+/*
+ * AF2.1 line R: grouped rail (K1), style toolbar (K2/K3), quick connect «+» (K2), PPM palette for cards.
+ * Every selector starts with :where(html[data-ppm-design="v2"]) — облик v1 не меняется (af21-foundation.test.ts).
+ * Created empty by F2; imported after canvas-v2.css.
+ */
+
+/* R1 · Рейка v2 (K1): плавающая панель слева на холсте; колонка рейки сетки рабочего пространства не нужна. */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-workspace,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-workspace[data-rail-expanded] {
+  --ppm-canvas-rail-width: 0px;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit {
+  position: absolute;
+  z-index: 360;
+  top: calc(3.25rem + var(--ppm-canvas-overlay-inset, 1rem));
+  left: var(--ppm-canvas-overlay-inset, 1rem);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-rail {
+  display: flex;
+  max-height: calc(100vh - 12rem);
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.25rem;
+  overflow-y: auto;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  background: var(--ppm-color-layer-1, var(--bg-layer-1));
+  box-shadow: var(--ppm-shadow-popover, 0 0.4rem 1.4rem rgb(0 0 0 / 0.18));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-rail__tool {
+  position: relative;
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  place-items: center;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-rail__tool:hover:not(:disabled) {
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-rail__tool[data-active] {
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-layer-1-selected, var(--bg-layer-1-selected));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-rail__tool:focus-visible,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-menu button:focus-visible {
+  outline: 2px solid var(--ppm-color-focus, var(--border-accent-strong));
+  outline-offset: -2px;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-rail__tool:disabled {
+  opacity: 0.45;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-rail__tool > svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  stroke-width: 1.5;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-rail__tool > kbd {
+  position: absolute;
+  right: 0.125rem;
+  bottom: 0;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font: 500 0.6875rem/1 var(--ppm-font-mono, monospace);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-rail__corner {
+  position: absolute;
+  right: 0.1875rem;
+  bottom: 0.1875rem;
+  width: 0;
+  height: 0;
+  border-bottom: 0.25rem solid currentColor;
+  border-left: 0.25rem solid transparent;
+  opacity: 0.7;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-rail__divider {
+  height: 1px;
+  flex: none;
+  margin: 0.25rem 0.375rem;
+  background: var(--ppm-color-border, var(--border-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-menu {
+  position: absolute;
+  left: calc(100% + 0.5rem);
+  display: grid;
+  /* K1: 300–320px — at 18rem hints like «Markdown и формулы, живёт на доске» wrap to a second line. */
+  width: 20rem;
+  /* M-4: the rail sits `--ppm-canvas-overlay-inset` (1rem) from the left edge and is ~2.875rem wide itself (0.25rem
+     padding + 2.25rem tool + border), then this menu opens 0.5rem further right — at 375px a bare 20rem overflows
+     the viewport by ~13px. Cap it to what is left, minus a matching right-hand margin; list items already wrap
+     (`minmax(0, 1fr)` grid column below, no nowrap outside the «Фигуры» shape-name grid). */
+  max-width: calc(100vw - (var(--ppm-canvas-overlay-inset, 1rem) * 2) - 3.375rem);
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-lg, 0.75rem);
+  background: var(--ppm-color-surface-2, var(--bg-surface-2));
+  box-shadow: var(--ppm-shadow-popover, 0 0.4rem 1.4rem rgb(0 0 0 / 0.18));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-menu > header {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.625rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-menu__icon {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  background: var(--ppm-color-layer-1, var(--bg-layer-1));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-menu > header strong,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-menu__items strong {
+  display: block;
+  color: var(--ppm-color-text, var(--txt-primary));
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-menu small,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-menu em {
+  display: block;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+  font-style: normal;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-menu__items {
+  display: grid;
+  padding: 0.25rem;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  background: var(--ppm-color-layer-1, var(--bg-layer-1));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-menu[data-layout="grid"] .ppm-canvas-toolkit-menu__items {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-menu__items > button {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  text-align: left;
+}
+
+:where(html[data-ppm-design="v2"])
+  .ppm-canvas-toolkit-menu[data-layout="grid"]
+  .ppm-canvas-toolkit-menu__items
+  > button {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding: 0.5rem 0;
+  text-align: center;
+}
+
+/* K1 «Фигуры»: 11px labels on one line — «Параллелограмм» and «Прямоугольник» fit a third of the menu. */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-menu[data-layout="grid"] .ppm-canvas-toolkit-menu__items strong {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-menu__items > button:hover {
+  background: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-toolkit-menu__items > button > svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-geo-glyph {
+  width: 1.75rem !important;
+  height: 1.25rem !important;
+}
+
+/* R2 · Палитра PPM (K2/K3): нейтральный + 8 оттенков равной светлоты. Совпадает с PPM_PALETTE_HEX. */
+:where(html[data-ppm-design="v2"]) {
+  --ppm-palette-neutral-fill: #ffffff;
+  --ppm-palette-neutral-stroke: #847f7a;
+  --ppm-palette-yellow-fill: #fbebb2;
+  --ppm-palette-yellow-stroke: #847020;
+  --ppm-palette-orange-fill: #fddfbe;
+  --ppm-palette-orange-stroke: #9d671c;
+  --ppm-palette-terracotta-fill: #ffdacd;
+  --ppm-palette-terracotta-stroke: #a7593d;
+  --ppm-palette-pink-fill: #fbdae8;
+  --ppm-palette-pink-stroke: #a0557b;
+  --ppm-palette-violet-fill: #e8dffc;
+  --ppm-palette-violet-stroke: #7c61a8;
+  --ppm-palette-blue-fill: #d7e8fe;
+  --ppm-palette-blue-stroke: #4773ab;
+  --ppm-palette-cyan-fill: #c9efee;
+  --ppm-palette-cyan-stroke: #2a8080;
+  --ppm-palette-green-fill: #d0f0d5;
+  --ppm-palette-green-stroke: #428252;
+}
+
+/* tokens-v2.css метит тёмную тему через [data-theme*="dark"] на <html> (не класс .dark) — тот же признак здесь;
+   attribute-селектор вынесен из :where(), чтобы не ломать v2-only guard af21-foundation.test.ts (требует ровно
+   :where(html[data-ppm-design="v2"]) в начале правила — как :where(html[data-ppm-design="v2"])[data-theme*="dark"]
+   в tokens-v2.css). */
+:where(html[data-ppm-design="v2"])[data-theme*="dark"] {
+  --ppm-palette-neutral-fill: #24221f;
+  --ppm-palette-neutral-stroke: #a39e98;
+  --ppm-palette-yellow-fill: #3d3520;
+  --ppm-palette-yellow-stroke: #d6b958;
+  --ppm-palette-orange-fill: #40301f;
+  --ppm-palette-orange-stroke: #e0a45c;
+  --ppm-palette-terracotta-fill: #42281f;
+  --ppm-palette-terracotta-stroke: #e5886a;
+  --ppm-palette-pink-fill: #3f2530;
+  --ppm-palette-pink-stroke: #e08ab2;
+  --ppm-palette-violet-fill: #2f2a42;
+  --ppm-palette-violet-stroke: #b7a3eb;
+  --ppm-palette-blue-fill: #23304a;
+  --ppm-palette-blue-stroke: #8fb3ea;
+  --ppm-palette-cyan-fill: #1f3a3a;
+  --ppm-palette-cyan-stroke: #6cc7c5;
+  --ppm-palette-green-fill: #243a29;
+  --ppm-palette-green-stroke: #86c796;
+}
+
+/* Карточки PPM (UX1.1: нейтральная подложка, цвет — подсказка): цвет палитры — глиф типа и полоса сверху. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--neutral {
+  --ppm-card-accent: transparent;
+}
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--yellow {
+  --ppm-card-accent: var(--ppm-palette-yellow-stroke);
+}
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--orange {
+  --ppm-card-accent: var(--ppm-palette-orange-stroke);
+}
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--terracotta {
+  --ppm-card-accent: var(--ppm-palette-terracotta-stroke);
+}
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--pink {
+  --ppm-card-accent: var(--ppm-palette-pink-stroke);
+}
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--violet {
+  --ppm-card-accent: var(--ppm-palette-violet-stroke);
+}
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--blue {
+  --ppm-card-accent: var(--ppm-palette-blue-stroke);
+}
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--cyan {
+  --ppm-card-accent: var(--ppm-palette-cyan-stroke);
+}
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--green {
+  --ppm-card-accent: var(--ppm-palette-green-stroke);
+}
+
+/* Секции (group/frame) рисуют свои засечки через ::before и держат box-shadow:none (C4, canvas-v2.css) — не трогаем. */
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-canvas-node:not(.ppm-canvas-node--group):not(.ppm-canvas-node--frame) {
+  box-shadow: inset 0 3px 0 var(--ppm-card-accent, transparent);
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node .ppm-canvas-node__type-icon {
+  color: var(--ppm-card-accent, var(--ppm-color-icon-subtle, var(--txt-tertiary)));
+}
+
+/* R3 · Панель стилей (K2/K3): строка кнопок, над ней — панель цвета/формы/«ещё». */
+/* tldraw's .tlui-menu scrolls (overflow-y: auto) and would clip the shadows of the row and the panel.
+   column-reverse: the row comes first in the DOM (Tab order), the open panel is still drawn above it (K2). */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar .tlui-buttons__horizontal {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: stretch;
+  gap: 0.375rem;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* margin: 0 — tldraw pulls .tlui-buttons__horizontal children together by -2px. */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar__row,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar__panel {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0.25rem;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-layer-1, var(--bg-layer-1));
+  box-shadow: var(--ppm-shadow-popover, 0 0.4rem 1.4rem rgb(0 0 0 / 0.18));
+  font-size: 0.8125rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar__panel {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0.625rem 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar__panel > header {
+  display: flex;
+  justify-content: space-between;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar__swatches,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar__shapes,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar__choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar button {
+  display: inline-flex;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0 0.375rem;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+/* K2: round 24px swatches — `button.` outranks the generic toolbar button rule above. */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar button.ppm-canvas-style-toolbar__swatch {
+  width: 1.5rem;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1.5px solid;
+  border-radius: 50%;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar__swatch[aria-pressed="true"] {
+  outline: 2px solid var(--ppm-color-text, var(--txt-primary));
+  outline-offset: 2px;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar button:hover {
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+/* Pressed ≠ hover (K2/K3): the chosen option is darker, semibold and in the primary text colour. The palette has no
+   --ppm-color-text-primary: --ppm-color-text is it (#1d1a17 light, #f2f0ed dark). */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar button[aria-pressed="true"],
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar button[aria-expanded="true"] {
+  color: var(--ppm-color-text, #1d1a17);
+  background: var(--ppm-color-layer-1-selected, var(--bg-layer-1-selected));
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar button:focus-visible {
+  outline: 2px solid var(--ppm-color-focus, var(--border-accent-strong));
+  outline-offset: -2px;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar button > svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+/* K3 «Ж»: a bold letter, not an icon (bold when pressed too — `button.` outranks the pressed rule). */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar button.ppm-canvas-style-toolbar__bold {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar__dot {
+  width: 1rem;
+  height: 1rem;
+  border: 1.5px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  border-radius: 50%;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar__sizes {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 0.25rem;
+  border-inline: 1px solid var(--ppm-color-border, var(--border-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar__label {
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+}
+
+/* K3: S/M/L in one bordered group; --ppm-color-border-control is ≥ 3:1 on the toolbar (3.96 light, 3.14 dark). */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar__segmented {
+  display: inline-flex;
+  gap: 0.125rem;
+  padding: 0.125rem;
+  border: 1px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-style-toolbar__segmented > button {
+  min-width: 1.5rem;
+  height: 1.375rem;
+  padding: 0;
+  border-radius: 0.25rem;
+}
+
+/* R4 · «+» продолжения (K2): кружки 20 px на серединах сторон (у открытого меню — 24 px, залитый), меню «Продолжить»,
+   пунктир перетаскивания. Позиции пишет canvas-quick-connect.tsx (transform). Слои: «+» и пунктир — над слоем tldraw
+   (300) и под панелями Холста (инспектор 320 и выше), меню — всплывающее, над панелью стилей (400). */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-connect {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-handle {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 305;
+  top: 0;
+  left: 0;
+  display: grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  place-items: center;
+  border: 1.5px solid var(--ppm-color-accent, var(--bg-accent-primary));
+  border-radius: 50%;
+  color: var(--ppm-color-accent-text, var(--txt-accent-primary));
+  background: var(--ppm-color-layer-1, var(--bg-layer-1));
+  transform: translate(-50%, -50%);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-handle:hover,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-handle[data-active] {
+  color: var(--ppm-color-on-accent, #fff);
+  background: var(--ppm-color-accent, var(--bg-accent-primary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-handle[data-active] {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-handle:focus-visible {
+  outline: 2px solid var(--ppm-color-focus, var(--border-accent-strong));
+  outline-offset: 2px;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-handle > svg {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-handle[data-active] > svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-connect__drag {
+  position: absolute;
+  z-index: 305;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-connect__drag line {
+  stroke: var(--ppm-color-link, var(--txt-secondary));
+  stroke-dasharray: 4 3;
+  stroke-width: 1.5;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-picker {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 410;
+  top: 0;
+  left: 0;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem 0.75rem;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-layer-1, var(--bg-layer-1));
+  box-shadow: var(--ppm-shadow-popover, 0 0.4rem 1.4rem rgb(0 0 0 / 0.18));
+  font-size: 0.8125rem;
+}
+
+/* The menu takes the focus only so a click on its padding keeps it open (focusout); its items show the focus ring. */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-picker:focus {
+  outline: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-picker > strong {
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1rem;
+}
+
+/* Five 40 px buttons per row: «ещё» wraps the other shapes onto a second row, the menu keeps its width. */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-picker__shapes {
+  display: flex;
+  max-width: 13.5rem;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-picker__shapes > button {
+  display: grid;
+  width: 2.5rem;
+  height: 2.25rem;
+  padding: 0;
+  place-items: center;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-picker__shapes > button:hover,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-picker__shapes > button[data-active] {
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-picker__shapes > button:focus-visible {
+  outline: 2px solid var(--ppm-color-focus, var(--border-accent-strong));
+  outline-offset: -2px;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-picker__shapes > button > svg:not(.ppm-canvas-geo-glyph) {
+  width: 1rem;
+  height: 1rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-picker > small {
+  max-width: 13.5rem;
+  overflow: hidden;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-quick-picker > small > strong {
+  color: var(--ppm-color-text, var(--txt-primary));
+  font-weight: 500;
+}
+
+/* R5 · «Задачи и бэклог» (v2): под пилюлей «Доска», на месте инспектора (инспектор скрыт, пока панель открыта). */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-work-item-picker--panel {
+  z-index: 320;
+  top: calc(var(--ppm-canvas-overlay-inset, 1rem) + 2.75rem);
+  right: var(--ppm-canvas-overlay-inset, 1rem);
+  bottom: var(--ppm-canvas-overlay-inset, 1rem);
+  width: min(var(--ppm-inspector-width, 19rem), calc(100% - 2rem));
+  max-height: none;
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  box-shadow: var(--ppm-shadow-popover, 0 0.4rem 1.4rem rgb(0 0 0 / 0.18));
+}

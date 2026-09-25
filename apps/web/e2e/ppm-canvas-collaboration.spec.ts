@@ -3,6 +3,47 @@ import type { Browser, BrowserContext, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { AxeBuilder } from "@axe-core/playwright";
 
+// AF2.1 R5: design v2 (default) groups the rail — «Заметка» lives in «Документы и текст».
+async function addCanvasNote(page: Page) {
+  await page.getByRole("button", { name: /^(Документы и текст|Documents and text)$/ }).click();
+  await page.getByRole("menuitem", { name: /^(Заметка|Note)/ }).click();
+}
+
+// AF2.1 final-fix I-2: a new v2 note opens straight in edit mode (editor.setEditingShape — the controller's common
+// solution for groups 1/2), so right after addCanvasNote its own title/body fields are already on screen, labelled
+// by canvas.note_title_placeholder / canvas.note_body_placeholder (note-markdown.tsx:105-117; exact en/ru strings
+// verified against af21-canvas.ts and packages/ppm-brand/src/index.ts). Only the shape actually being edited (tldraw
+// tracks editingShapeId per client) renders them, so a plain textbox query — no .last() — addresses the right note.
+function noteTitleField(page: Page) {
+  return page.getByRole("textbox", { name: /^(Заголовок|Title)$/ });
+}
+
+// (No collaboration test here fills the body — canvas.note_body_placeholder — only the title; the body field's
+// aria-label "Напишите заметку в Markdown…" / "Write a note in Markdown…" is unchanged from before AF2.1, shared by
+// NoteCardV2 and the legacy NativeNodeCard, per packages/ppm-brand/src/index.ts and shape.tsx:781/791.)
+
+// Once a note leaves edit mode it redraws as a rendered card (note-markdown.tsx: h3.ppm-note-card__title,
+// div.ppm-note-markdown — classes confirmed against the component and shape.tsx's NoteCardV2 branch), so a
+// participant who never opened it for editing (or a page that reloaded) reads it here, addressed by its own unique
+// test title rather than DOM order — the collaboration board is long-lived and can carry notes from earlier runs.
+function noteHeading(page: Page, title: string) {
+  return page.getByRole("heading", { name: title, exact: true });
+}
+
+// Leaves tldraw's editing state (note-markdown.tsx onSourceKeyDown: Escape → editor.complete() when this shape is
+// the one being edited) so the note redraws as the rendered card above and the edit is no longer mid-keystroke
+// before the test reads it back, on this page or another participant's.
+async function finishEditingCanvasNote(page: Page) {
+  await page.keyboard.press("Escape");
+}
+
+// Re-enters edit on a note this page has not edited before — double-click, the same gesture the note-markdown.tsx
+// header comment documents ("двойной клик или Enter — правка") — so its title/body fields appear for this
+// participant too. `currentTitle` is whatever this page currently renders for the note (its last known value).
+async function reopenCanvasNote(page: Page, currentTitle: string) {
+  await noteHeading(page, currentTitle).dblclick();
+}
+
 const baseURL = process.env.PPM_E2E_BASE_URL ?? "http://localhost:3000";
 const apiBaseURL = process.env.PPM_E2E_API_BASE_URL ?? baseURL;
 const currentUserURL = new URL("/api/users/me/", apiBaseURL).href;
@@ -95,24 +136,20 @@ test("project lead and member share one board without reload", async ({ browser 
     expect((await getCanvas(member.page)).access).toBe("edit");
 
     const noteTitle = `AF1.2 two-role smoke ${runId}`;
-    await owner.page.getByRole("button", { name: /Добавить заметку ⇧N|Add note ⇧N/ }).click();
-    await owner.page
-      .getByRole("textbox", { name: /Новая заметка|New note/ })
-      .last()
-      .fill(noteTitle);
+    await addCanvasNote(owner.page);
+    await noteTitleField(owner.page).fill(noteTitle);
+    await finishEditingCanvasNote(owner.page);
     await expect.poll(async () => (await getCanvas(owner.page)).version).toBeGreaterThan(initial.version);
-    await expect(member.page.getByRole("textbox", { name: /Новая заметка|New note/ }).last()).toHaveValue(noteTitle);
+    // The member never opened this note for editing — their view is the rendered card, not a live input.
+    await expect(noteHeading(member.page, noteTitle)).toBeVisible();
 
     const ownerVersion = (await getCanvas(owner.page)).version;
     const memberSavedTitle = `AF1.2 member saved ${runId}`;
-    await member.page
-      .getByRole("textbox", { name: /Новая заметка|New note/ })
-      .last()
-      .fill(memberSavedTitle);
+    await reopenCanvasNote(member.page, noteTitle);
+    await noteTitleField(member.page).fill(memberSavedTitle);
+    await finishEditingCanvasNote(member.page);
     await expect.poll(async () => (await getCanvas(member.page)).version).toBeGreaterThan(ownerVersion);
-    await expect(owner.page.getByRole("textbox", { name: /Новая заметка|New note/ }).last()).toHaveValue(
-      memberSavedTitle
-    );
+    await expect(noteHeading(owner.page, memberSavedTitle)).toBeVisible();
 
     const baseVersion = (await getCanvas(owner.page)).version;
     const memberTitle = `AF1.2 stale member ${runId}`;
@@ -130,15 +167,11 @@ test("project lead and member share one board without reload", async ({ browser 
       await route.continue();
     });
     try {
-      await member.page
-        .getByRole("textbox", { name: /Новая заметка|New note/ })
-        .last()
-        .fill(memberTitle);
+      await reopenCanvasNote(member.page, memberSavedTitle);
+      await noteTitleField(member.page).fill(memberTitle);
       await expect.poll(() => memberSaveSeen).toBe(true);
-      await owner.page
-        .getByRole("textbox", { name: /Новая заметка|New note/ })
-        .last()
-        .fill(ownerTitle);
+      await reopenCanvasNote(owner.page, memberSavedTitle);
+      await noteTitleField(owner.page).fill(ownerTitle);
       await expect.poll(async () => (await getCanvas(owner.page)).version).toBeGreaterThan(baseVersion);
     } finally {
       releaseMemberSave?.();
@@ -172,11 +205,9 @@ test("offline note is saved after reconnect without another edit", async ({ brow
     await expect(owner.page.locator(".ppm-canvas-shell")).toHaveAttribute("data-ppm-canvas-mode", "edit");
     await owner.context.setOffline(true);
     await expect(owner.page.locator('.ppm-canvas-presence[data-status="offline"]')).toBeVisible();
-    await owner.page.getByRole("button", { name: /Добавить заметку ⇧N|Add note ⇧N/ }).click();
-    await owner.page
-      .getByRole("textbox", { name: /Новая заметка|New note/ })
-      .last()
-      .fill(noteTitle);
+    await addCanvasNote(owner.page);
+    await noteTitleField(owner.page).fill(noteTitle);
+    await finishEditingCanvasNote(owner.page);
     await expect(owner.page.locator('.ppm-canvas-status__notice[data-status="error"]')).toBeVisible();
     expect((await getCanvas(member.page)).version).toBe(initialVersion);
     expect(
@@ -194,7 +225,7 @@ test("offline note is saved after reconnect without another edit", async ({ brow
     await expect
       .poll(async () => (await getCanvas(member.page)).version, { timeout: 25_000 })
       .toBeGreaterThan(initialVersion);
-    await expect(member.page.getByRole("textbox", { name: /Новая заметка|New note/ }).last()).toHaveValue(noteTitle);
+    await expect(noteHeading(member.page, noteTitle)).toBeVisible();
   } finally {
     if (ownerContext) await ownerContext.setOffline(false);
     await closeContext(memberContext);
@@ -219,11 +250,8 @@ test("failed HTTP saves retry in the background while presence remains online", 
       else await route.continue();
     });
 
-    await owner.page.getByRole("button", { name: /Добавить заметку ⇧N|Add note ⇧N/ }).click();
-    await owner.page
-      .getByRole("textbox", { name: /Новая заметка|New note/ })
-      .last()
-      .fill(noteTitle);
+    await addCanvasNote(owner.page);
+    await noteTitleField(owner.page).fill(noteTitle);
     await expect(owner.page.locator('.ppm-canvas-status__notice[data-status="error"]')).toBeVisible();
     await expect(owner.page.locator('.ppm-canvas-presence[data-status="online"]')).toBeVisible();
     await expect
@@ -250,11 +278,9 @@ test("offline draft survives a closed browser context and requires explicit rest
 
     await owner.context.setOffline(true);
     await expect(owner.page.locator('.ppm-canvas-presence[data-status="offline"]')).toBeVisible();
-    await owner.page.getByRole("button", { name: /Добавить заметку ⇧N|Add note ⇧N/ }).click();
-    await owner.page
-      .getByRole("textbox", { name: /Новая заметка|New note/ })
-      .last()
-      .fill(noteTitle);
+    await addCanvasNote(owner.page);
+    await noteTitleField(owner.page).fill(noteTitle);
+    await finishEditingCanvasNote(owner.page);
     await expect(owner.page.locator('.ppm-canvas-status__notice[data-status="error"]')).toBeVisible();
     await expect
       .poll(() =>
@@ -300,7 +326,8 @@ test("offline draft survives a closed browser context and requires explicit rest
     await resumedPage.getByRole("button", { name: "Восстановить черновик" }).click();
     expect((await replayRequest).postDataJSON().client_operation_id).toBe(pendingOperationId);
     await expect.poll(async () => (await getCanvas(resumedPage)).version).toBeGreaterThan(initialVersion);
-    await expect(resumedPage.getByRole("textbox", { name: /Новая заметка|New note/ }).last()).toHaveValue(noteTitle);
+    // resumedPage is a fresh load in a brand-new context — it never entered edit on this note either.
+    await expect(noteHeading(resumedPage, noteTitle)).toBeVisible();
     await expect
       .poll(() =>
         resumedPage.evaluate(
@@ -337,12 +364,15 @@ test("lost save response replays the same operation before saving later local ed
       }
       await route.abort("failed");
     });
-    await owner.page.getByRole("button", { name: /Добавить заметку ⇧N|Add note ⇧N/ }).click();
-    const note = owner.page.getByRole("textbox", { name: /Новая заметка|New note/ }).last();
+    await addCanvasNote(owner.page);
+    // Still the same shape's own editing session throughout — nothing here reads the rendered card in between, so
+    // there is no need to leave edit mode and re-enter it for the second fill.
+    const note = noteTitleField(owner.page);
     await note.fill(firstTitle);
     await expect(owner.page.locator('.ppm-canvas-status__notice[data-status="error"]')).toBeVisible();
     await expect.poll(async () => (await getCanvas(owner.page)).version).toBe(initialVersion + 1);
     await note.fill(laterTitle);
+    await finishEditingCanvasNote(owner.page);
     await expect
       .poll(() =>
         owner.page.evaluate(
@@ -369,7 +399,7 @@ test("lost save response replays the same operation before saving later local ed
     expect((await getCanvas(resumedPage)).version).toBe(initialVersion + 1);
     await resumedPage.getByRole("button", { name: "Проверить сохранение" }).click();
     await expect.poll(async () => (await getCanvas(resumedPage)).version).toBe(initialVersion + 2);
-    await expect(resumedPage.getByRole("textbox", { name: /Новая заметка|New note/ }).last()).toHaveValue(laterTitle);
+    await expect(noteHeading(resumedPage, laterTitle)).toBeVisible();
   } finally {
     await closeContext(resumedContext);
     await closeContext(ownerContext);
@@ -407,11 +437,9 @@ test("offline draft survives a full browser process restart with a persistent pr
     await expect(page.locator(".ppm-canvas-shell")).toHaveAttribute("data-ppm-canvas-mode", "edit");
     await persistentContext.setOffline(true);
     await expect(page.locator('.ppm-canvas-presence[data-status="offline"]')).toBeVisible();
-    await page.getByRole("button", { name: /Добавить заметку ⇧N|Add note ⇧N/ }).click();
-    await page
-      .getByRole("textbox", { name: /Новая заметка|New note/ })
-      .last()
-      .fill(noteTitle);
+    await addCanvasNote(page);
+    await noteTitleField(page).fill(noteTitle);
+    await finishEditingCanvasNote(page);
     await expect
       .poll(() =>
         page.evaluate(
@@ -433,7 +461,8 @@ test("offline draft survives a full browser process restart with a persistent pr
     expect((await getCanvas(page)).version).toBe(initialVersion);
     await page.getByRole("button", { name: "Восстановить черновик" }).click();
     await expect.poll(async () => (await getCanvas(page)).version).toBeGreaterThan(initialVersion);
-    await expect(page.getByRole("textbox", { name: /Новая заметка|New note/ }).last()).toHaveValue(noteTitle);
+    // A relaunched persistent profile is a fresh load too — no local editing state survives the restart.
+    await expect(noteHeading(page, noteTitle)).toBeVisible();
   } finally {
     await closeContext(persistentContext);
     // The profile contains a synthetic authenticated session; do not leave it in test-results.
@@ -458,11 +487,8 @@ test("offline draft after context recreation cannot replace a newer team version
     await expect(owner.page.locator(".ppm-canvas-shell")).toHaveAttribute("data-ppm-canvas-mode", "edit");
     await owner.context.setOffline(true);
     await expect(owner.page.locator('.ppm-canvas-presence[data-status="offline"]')).toBeVisible();
-    await owner.page.getByRole("button", { name: /Добавить заметку ⇧N|Add note ⇧N/ }).click();
-    await owner.page
-      .getByRole("textbox", { name: /Новая заметка|New note/ })
-      .last()
-      .fill(offlineTitle);
+    await addCanvasNote(owner.page);
+    await noteTitleField(owner.page).fill(offlineTitle);
     await expect(owner.page.locator('.ppm-canvas-status__notice[data-status="error"]')).toBeVisible();
     await expect
       .poll(() =>
@@ -480,11 +506,8 @@ test("offline draft after context recreation cannot replace a newer team version
     ownerContext = undefined;
 
     const initialVersion = (await getCanvas(member.page)).version;
-    await member.page.getByRole("button", { name: /Добавить заметку ⇧N|Add note ⇧N/ }).click();
-    await member.page
-      .getByRole("textbox", { name: /Новая заметка|New note/ })
-      .last()
-      .fill(teamTitle);
+    await addCanvasNote(member.page);
+    await noteTitleField(member.page).fill(teamTitle);
     await expect.poll(async () => (await getCanvas(member.page)).version).toBeGreaterThan(initialVersion);
 
     resumedContext = await browser.newContext({
@@ -533,16 +556,10 @@ test("two offline tabs keep separate drafts and recovering one preserves the oth
     await owner.context.setOffline(true);
     await expect(owner.page.locator('.ppm-canvas-presence[data-status="offline"]')).toBeVisible();
     await expect(secondPage.locator('.ppm-canvas-presence[data-status="offline"]')).toBeVisible();
-    await owner.page.getByRole("button", { name: /Добавить заметку ⇧N|Add note ⇧N/ }).click();
-    await owner.page
-      .getByRole("textbox", { name: /Новая заметка|New note/ })
-      .last()
-      .fill(firstTitle);
-    await secondPage.getByRole("button", { name: /Добавить заметку ⇧N|Add note ⇧N/ }).click();
-    await secondPage
-      .getByRole("textbox", { name: /Новая заметка|New note/ })
-      .last()
-      .fill(secondTitle);
+    await addCanvasNote(owner.page);
+    await noteTitleField(owner.page).fill(firstTitle);
+    await addCanvasNote(secondPage);
+    await noteTitleField(secondPage).fill(secondTitle);
     await expect
       .poll(() =>
         owner.page.evaluate(
@@ -619,18 +636,12 @@ test("offline draft conflicts with a newer team save without overwriting it", as
     await expect(owner.page.locator(".ppm-canvas-shell")).toHaveAttribute("data-ppm-canvas-mode", "edit");
     await owner.context.setOffline(true);
     await expect(owner.page.locator('.ppm-canvas-presence[data-status="offline"]')).toBeVisible();
-    await owner.page.getByRole("button", { name: /Добавить заметку ⇧N|Add note ⇧N/ }).click();
-    await owner.page
-      .getByRole("textbox", { name: /Новая заметка|New note/ })
-      .last()
-      .fill(offlineTitle);
+    await addCanvasNote(owner.page);
+    await noteTitleField(owner.page).fill(offlineTitle);
     await expect(owner.page.locator('.ppm-canvas-status__notice[data-status="error"]')).toBeVisible();
 
-    await member.page.getByRole("button", { name: /Добавить заметку ⇧N|Add note ⇧N/ }).click();
-    await member.page
-      .getByRole("textbox", { name: /Новая заметка|New note/ })
-      .last()
-      .fill(teamTitle);
+    await addCanvasNote(member.page);
+    await noteTitleField(member.page).fill(teamTitle);
     await expect.poll(async () => (await getCanvas(member.page)).version).toBeGreaterThan(initialVersion);
 
     await owner.context.setOffline(false);
@@ -662,7 +673,7 @@ test("project guest can read the board but cannot edit it", async ({ browser }) 
     await openCanvas(guest.page);
     expect((await getCanvas(guest.page)).access).toBe("read");
     await expect(guest.page.locator(".ppm-canvas-shell")).toHaveAttribute("data-ppm-canvas-mode", "read");
-    await expect(guest.page.getByRole("button", { name: /Добавить заметку ⇧N|Add note ⇧N/ })).toHaveCount(0);
+    await expect(guest.page.getByRole("button", { name: /^(Документы и текст|Documents and text)$/ })).toHaveCount(0);
     const initial = await getCanvas(guest.page);
     await guest.page.keyboard.press("Shift+N");
     await expect(guest.page.locator(".ppm-canvas-shell")).toHaveAttribute("data-ppm-canvas-mode", "read");

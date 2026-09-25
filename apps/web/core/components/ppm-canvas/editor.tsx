@@ -35,6 +35,7 @@ import {
   Tldraw,
   createShapeId,
   GeoShapeGeoStyle,
+  renderPlaintextFromRichText,
   useEditor,
   useValue,
   type Editor,
@@ -43,12 +44,14 @@ import {
   type TLArrowBinding,
   type TLArrowShape,
   type TLGroupShape,
+  type TLShape,
   type TLShapeId,
 } from "tldraw";
 import { useTheme } from "next-themes";
 import {
   PPM_CANVAS_AUTOSAVE_DELAY_MS,
   PPM_CANVAS_GIT_OBJECT_TYPES,
+  PPM_CANVAS_NODE_REGISTRY,
   PPM_CANVAS_SCHEMA_VERSION,
   createPpmCanvasBoardExport,
   createPpmAgentAnswerNode,
@@ -85,8 +88,11 @@ import {
   type TPpmWorkItemsViewResponse,
 } from "@ppm/canvas";
 import type { TPpmTranslationKey } from "@ppm/brand";
-import { EFileAssetType } from "@plane/types";
+import { useTranslation } from "@plane/i18n";
+import { EFileAssetType, EPageAccess } from "@plane/types";
 import { resolveGeneralTheme } from "@plane/utils";
+import { formatPpmTimeAgo } from "@/helpers/ppm-time-ago.helper";
+import { useFileSize } from "@/hooks/use-file-size";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { usePpmDesignV2 } from "@/lib/ppm-design";
 import { PpmCanvasService, PpmCanvasServiceError } from "@/services/ppm-canvas.service";
@@ -94,7 +100,6 @@ import { FileService } from "@/services/file.service";
 import { PpmVaultService } from "@/services/ppm-vault.service";
 import {
   PPM_CANVAS_SHAPE_TYPE,
-  PpmCanvasNodeShapeUtil,
   PpmCanvasBoardNavigationContext,
   PpmWorkItemProjectionContext,
   expandOrchestratorRun,
@@ -124,7 +129,12 @@ import {
 import { canvasSaveRetryDelayMs, shouldRetryCanvasSave } from "./board-save-retry";
 import { isBlockingCanvasStatus } from "./board-workspace-state";
 import { PpmCanvasInspector } from "./canvas-inspector";
-import { PpmCanvasGrammarContext, isCanvasGrammarV2 } from "./canvas-grammar";
+import {
+  PpmCanvasGrammarContext,
+  fillCanvasTemplate,
+  isCanvasGrammarV2,
+  usePpmCanvasGrammarV2,
+} from "./canvas-grammar";
 import { PpmSemanticEdgeFocusContext, PpmSemanticEdgesContext, PpmSemanticEdgesLayer } from "./semantic-edges-layer";
 import { SEMANTIC_RELATION_LABELS, sameSemanticEdges } from "./semantic-edge-style";
 import {
@@ -134,18 +144,111 @@ import {
   type TPpmDesktopImportPlan,
   type TPpmDesktopImportReport,
 } from "./desktop-import";
+// ── AF2.1 R: rail overlays and the tldraw palette (canvas-toolkit.css) ──
+import { PpmCanvasQuickConnect } from "./canvas-quick-connect";
+import { PpmCanvasStyleToolbar } from "./canvas-style-toolbar";
+import { getPpmCanvasShapeUtils } from "./canvas-tldraw-theme";
+import { createPpmSticky } from "./canvas-toolkit-actions";
+import { geoLabelKey, isCountedCanvasShape } from "./canvas-toolkit-model";
+// ── /AF2.1 R ──
+// ── AF2.1 B: imports of line B (canvas-external-content.ts, note/code/file modules) ──
+import { useAppRouter } from "@/hooks/use-app-router";
+import { ProjectPageService } from "@/services/page/project-page.service";
+import type { TPpmVaultEntry } from "@/services/ppm-vault.service";
+import { PpmCanvasContentActionsContext, type TPpmCanvasContentActions } from "./canvas-content-actions";
+import {
+  attachFilesToWorkItem,
+  dropHintKey,
+  registerPpmCanvasExternalContent,
+  type TPpmCanvasExternalContentDeps,
+  type TPpmWorkItemAttachMemory,
+} from "./canvas-external-content";
+import { PPM_VAULT_ACCEPT, PPM_VAULT_MAX_UPLOAD_BYTES } from "./canvas-file-kind";
+import { markdownToPageHtml, sanitizeCanvasHtml } from "./canvas-markdown";
+import { PpmCanvasPagePicker } from "./canvas-page-picker";
+import { pageCreateStep, type TUnplacedPageSource } from "./canvas-pages";
+import {
+  findSpotBeside,
+  noteSourceStep,
+  rectInside,
+  unplacedSourceKey,
+  type TPlacementRect,
+  type TUnplacedNoteSource,
+} from "./canvas-placement";
+// (B5) просмотр и скачивание файловых карточек
+import {
+  downloadCanvasFile,
+  isFromCanvasModal,
+  PPM_CANVAS_GIT_LINK_PARAMS,
+  PPM_CANVAS_VAULT_LINK_PARAMS,
+  PpmFilePreviewDialog,
+  syncCanvasEditorFocus,
+  takeCanvasLinkParams,
+  vaultPdfUrl,
+  type TCanvasContentNotice,
+  type TCanvasDownloadResult,
+} from "./file-preview";
+// (final) «Из проекта → Файл/Git-объект»; новая заметка v2 — сразу в правке
+import {
+  boundCardId,
+  openProjectCodePage,
+  PpmCanvasProjectSourcesContext,
+  PpmCanvasVaultPicker,
+  runProjectSourceCommand,
+  settleCanvasSave,
+  vaultFilesOf,
+  type TPpmCanvasProjectSources,
+} from "./canvas-vault-picker";
+import { createNoteInEditMode } from "./note-markdown";
+// (B6) чек-лист «Сделать задачами»; перенос старых картинок data: в Хранилище (RB13)
+import {
+  convertChecklistItemsToTasks,
+  createChecklistTaskMemory,
+  describeChecklistConversion,
+} from "./canvas-checklist";
+import {
+  applyInlineImageMoves,
+  collectInlineImageUses,
+  describeInlineImages,
+  describeInlineMigration,
+  dismissInlineImages,
+  findInlineImageAssets,
+  inlineImageFile,
+  inlineImagePlanKey,
+  inlineImagesActionable,
+  inlineImagesCount,
+  inlineUploadErrorMessage,
+  isCanvasToolIdle,
+  isInlineImagesDismissed,
+  planInlineImageMigration,
+  prepareInlineImageMoves,
+  readInlineMoveMemory,
+  showsInlineImage,
+  waitForCanvasIdle,
+  writeInlineMoveMemory,
+  type TInlineImagePlan,
+  type TInlineMoveMemory,
+} from "./canvas-image-migration";
+// ── /AF2.1 B ──
 // oxlint-disable-next-line import/no-unassigned-import -- tldraw owns the canvas interaction styles
 import "tldraw/tldraw.css";
 // oxlint-disable-next-line import/no-unassigned-import -- PPM theme is intentionally scoped to this route
 import "./canvas.css";
 // oxlint-disable-next-line import/no-unassigned-import -- UX1.1: v2 look, every rule scoped to html[data-ppm-design="v2"]
 import "./canvas-v2.css";
+// oxlint-disable-next-line import/no-unassigned-import -- AF2.1 line R: rail, style toolbar, «+», palette (v2 only)
+import "./canvas-toolkit.css";
+// oxlint-disable-next-line import/no-unassigned-import -- AF2.1 line B: note, code, document and file cards (v2 only)
+import "./canvas-content.css";
 
 type TPpmCanvasEditorProps = {
   authorId: string;
   boardId: string;
   boards: TPpmCanvasBoard[];
   canEdit: boolean;
+  // Мультидоска: workspace.tsx держит смонтированными редакторы всех открытых вкладок. «В фокусе» (вставка/копирование,
+  // горячие клавиши tldraw), брошенные файлы и ссылки «На холст» — только у активной. Одна доска (minimal) — всегда true.
+  isActive?: boolean;
   onEditabilityChange?: (boardId: string, editable: boolean) => void;
   onOpenBoard: (boardId: string) => void;
   onOrchestratorRunVersionsChange?: (boardId: string, versions: Record<string, string>) => void;
@@ -210,7 +313,9 @@ const HIDDEN_TLDRAW_UI: TLComponents = {
 export default function PpmCanvasEditor({
   authorId,
   boardId,
+  boards,
   canEdit,
+  isActive = true,
   onEditabilityChange,
   onOpenBoard,
   onOrchestratorRunVersionsChange,
@@ -228,6 +333,12 @@ export default function PpmCanvasEditor({
   const ppmT = usePpmTranslation();
   const designV2 = usePpmDesignV2();
   const grammarV2 = isCanvasGrammarV2(designV2, statusPlacement);
+  // Мультидоска: для стабильных обработчиков (handleFileDrop); внешний контент получает isActive через свои deps.
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
+  // ── AF2.1 R: tldraw shape utils (+ PPM palette for native shapes under v2). Stable per mount: grammarV2 is fixed. ──
+  const shapeUtils = useMemo(() => getPpmCanvasShapeUtils(grammarV2), [grammarV2]);
+  // ── /AF2.1 R ──
   const service = useMemo(() => new PpmCanvasService(), []);
   const fileService = useMemo(() => new FileService(), []);
   const vaultService = useMemo(() => new PpmVaultService(), []);
@@ -1005,15 +1116,22 @@ export default function PpmCanvasEditor({
   }, [boardId, effectiveCanEdit, onEditabilityChange]);
 
   useEffect(() => {
-    if (!editor || !effectiveCanEdit || syncStatus !== "saved") return;
-    const parameters = new URLSearchParams(window.location.search);
-    const entryId = parameters.get("ppm_vault_entry");
-    const title = parameters.get("ppm_vault_title");
-    const extension = parameters.get("ppm_vault_extension");
-    const sourceVersion = parameters.get("ppm_vault_version");
-    const sourceUrl = parameters.get("ppm_vault_url");
+    // Мультидоска: «На холст» со страниц Хранилища и кода (?ppm_vault_*/?ppm_git_*) кладёт карточку на доску, которую
+    // видно, — не на каждую открытую вкладку (все они смонтированы и читают тот же адрес).
+    if (!editor || !isActive || !effectiveCanEdit || syncStatus !== "saved") return;
+    const link = takeCanvasLinkParams(window.location.search, PPM_CANVAS_VAULT_LINK_PARAMS);
+    const {
+      ppm_vault_entry: entryId,
+      ppm_vault_extension: extension,
+      ppm_vault_title: title,
+      ppm_vault_url: sourceUrl,
+      ppm_vault_version: sourceVersion,
+    } = link.values;
     if (!entryId || !title || !extension || !sourceVersion || !sourceUrl) return;
     const projectionKey = `${boardId}:${entryId}:${sourceVersion}`;
+    // Ссылку забираем из адреса синхронно, ДО первого await: ни повтор эффекта (смена вкладки или статуса, A→B→A), ни
+    // редактор другой вкладки её уже не увидят — второй привязки и второй карточки не будет. Не вышло — не трогаем вовсе.
+    if (!replaceCanvasSearch(link.search)) return;
     if (processedVaultProjectionRef.current === projectionKey) return;
 
     const addProjection = async () => {
@@ -1027,16 +1145,6 @@ export default function PpmCanvasEditor({
         });
         await createContentProjectionShape(binding);
         processedVaultProjectionRef.current = projectionKey;
-        for (const key of [
-          "ppm_vault_entry",
-          "ppm_vault_title",
-          "ppm_vault_extension",
-          "ppm_vault_version",
-          "ppm_vault_url",
-        ])
-          parameters.delete(key);
-        const query = parameters.toString();
-        window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
       } catch {
         setFileDropError(ppmT("canvas.source_action_error"));
       }
@@ -1047,6 +1155,7 @@ export default function PpmCanvasEditor({
     createContentProjectionShape,
     editor,
     effectiveCanEdit,
+    isActive,
     ppmT,
     projectId,
     service,
@@ -1055,13 +1164,14 @@ export default function PpmCanvasEditor({
   ]);
 
   useEffect(() => {
-    if (!editor || !effectiveCanEdit || syncStatus !== "saved") return;
-    const parameters = new URLSearchParams(window.location.search);
-    const sourceId = parameters.get("ppm_git_id");
-    const objectType = parameters.get("ppm_git_type");
+    if (!editor || !isActive || !effectiveCanEdit || syncStatus !== "saved") return;
+    const link = takeCanvasLinkParams(window.location.search, PPM_CANVAS_GIT_LINK_PARAMS);
+    const { ppm_git_id: sourceId, ppm_git_type: objectType } = link.values;
     if (!sourceId || !objectType) return;
     if (!PPM_CANVAS_GIT_OBJECT_TYPES.some((value) => value === objectType)) return;
     const projectionKey = `${boardId}:${sourceId}:${objectType}`;
+    // Как у Хранилища выше: ссылка забирается из адреса синхронно, до первого await.
+    if (!replaceCanvasSearch(link.search)) return;
     if (processedGitProjectionRef.current === projectionKey) return;
 
     const addProjection = async () => {
@@ -1075,24 +1185,23 @@ export default function PpmCanvasEditor({
         });
         await createGitProjectionShape(binding);
         processedGitProjectionRef.current = projectionKey;
-        for (const key of [
-          "ppm_git_id",
-          "ppm_git_title",
-          "ppm_git_provider",
-          "ppm_git_repository",
-          "ppm_git_type",
-          "ppm_git_url",
-          "ppm_git_work_item",
-        ])
-          parameters.delete(key);
-        const query = parameters.toString();
-        window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
       } catch {
         setFileDropError(ppmT("canvas.source_action_error"));
       }
     };
     void addProjection();
-  }, [boardId, createGitProjectionShape, editor, effectiveCanEdit, ppmT, projectId, service, syncStatus, workspaceId]);
+  }, [
+    boardId,
+    createGitProjectionShape,
+    editor,
+    effectiveCanEdit,
+    isActive,
+    ppmT,
+    projectId,
+    service,
+    syncStatus,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     if (!editor) return;
@@ -1289,7 +1398,7 @@ export default function PpmCanvasEditor({
   );
 
   const createProjectionShape = useCallback(
-    async (binding: TPpmCanvasWorkItemBinding) => {
+    async (binding: TPpmCanvasWorkItemBinding, placement?: { x: number; y: number }) => {
       const activeEditor = editorRef.current;
       if (!activeEditor) {
         await service.cancelPendingBinding(workspaceId, projectId, boardId, binding.binding_id).catch(() => undefined);
@@ -1305,7 +1414,10 @@ export default function PpmCanvasEditor({
         },
       });
       const id = binding.shape_id as TLShapeId;
-      const position = findFreeNodePosition(activeEditor, node.visual.width, node.visual.height);
+      // AF2.1 B1: «Сделать задачей» кладёт карточку рядом с источником; остальные пути — как раньше.
+      const position = placement
+        ? { ...placement, inViewport: true }
+        : findFreeNodePosition(activeEditor, node.visual.width, node.visual.height);
       queuedBindingActivationsRef.current.add(binding.binding_id);
       try {
         activeEditor.createShape<TPpmCanvasShape>({
@@ -1361,6 +1473,272 @@ export default function PpmCanvasEditor({
     },
     [boardId, createProjectionShape, projectId, service, workspaceId]
   );
+
+  // ── AF2.1 B: (B1) действия содержимого (заметка → задача/документ) ──
+  const pageService = useMemo(() => new ProjectPageService(), []);
+  // (B5) Уведомление может нести ссылку-действие (RB9: «Скачать» по ссылке, если blob не получился).
+  const [contentNotice, setContentNotice] = useState<TCanvasContentNotice>();
+  // (B1) Источник, созданный попыткой, которой не удалось положить карточку на холст: повтор его только привязывает.
+  const unplacedSourcesRef = useRef(new Map<string, TUnplacedNoteSource>());
+  // (B1) Новая карточка рядом с заметкой может оказаться за краем экрана: камера плавно подходит, масштаб прежний.
+  const revealBesideNote = useCallback((shapeId: TLShapeId) => {
+    const activeEditor = editorRef.current;
+    const bounds = activeEditor?.getShapePageBounds(shapeId);
+    if (!activeEditor || !bounds) return;
+    activeEditor.select(shapeId);
+    if (!rectInside(bounds, activeEditor.getViewportPageBounds())) {
+      activeEditor.centerOnPoint(bounds.center, { animation: { duration: 220 } });
+    }
+  }, []);
+  const occupiedPageRects = useCallback(
+    (activeEditor: Editor, except: ReadonlySet<TLShapeId>): TPlacementRect[] =>
+      activeEditor
+        .getCurrentPageShapes()
+        .filter((shape) => !["arrow", "line", "draw"].includes(shape.type) && !except.has(shape.id))
+        .map((shape) => activeEditor.getShapePageBounds(shape))
+        .filter((bounds): bounds is NonNullable<typeof bounds> => Boolean(bounds))
+        .map((bounds) => ({ h: bounds.h, w: bounds.w, x: bounds.x, y: bounds.y })),
+    []
+  );
+  const spotBeside = useCallback(
+    (anchor: TPpmCanvasShape, size: { h: number; w: number }) => {
+      const activeEditor = editorRef.current;
+      const bounds = activeEditor?.getShapePageBounds(anchor.id);
+      if (!activeEditor || !bounds) return undefined;
+      // Секция или рамка, в которой лежит заметка, — фон, а не препятствие: иначе рядом «всё занято».
+      const containers = new Set(activeEditor.getShapeAncestors(anchor.id).map((shape) => shape.id));
+      return findSpotBeside(
+        { h: bounds.h, w: bounds.w, x: bounds.x, y: bounds.y },
+        size,
+        occupiedPageRects(activeEditor, containers)
+      );
+    },
+    [occupiedPageRects]
+  );
+  const createTaskFromText = useCallback(
+    async (anchor: TPpmCanvasShape, name: string) => {
+      if (!editableRef.current) return;
+      const size = {
+        h: PPM_CANVAS_NODE_REGISTRY.work_item_ref.defaultHeight,
+        w: PPM_CANVAS_NODE_REGISTRY.work_item_ref.defaultWidth,
+      };
+      const key = unplacedSourceKey(anchor.id, "task");
+      const next = noteSourceStep(unplacedSourcesRef.current, anchor.id, "task");
+      try {
+        // (B1) Повтор после частичного отказа: задача уже есть — только привязать, вторую не создавать.
+        const binding =
+          next.step === "bind"
+            ? await service.bindWorkItem(workspaceId, projectId, boardId, {
+                shape_id: createShapeId(),
+                entity_type: "work_item",
+                entity_id: next.entityId,
+                client_operation_id: crypto.randomUUID(),
+              })
+            : await service.createWorkItem(workspaceId, projectId, boardId, {
+                name: name.slice(0, 255),
+                shape_id: createShapeId(),
+                client_operation_id: crypto.randomUUID(),
+              });
+        const label = binding.source.identity.identifier ?? binding.source.display.title;
+        unplacedSourcesRef.current.set(key, { entityId: binding.entity_id, label });
+        await createProjectionShape(binding, spotBeside(anchor, size));
+        unplacedSourcesRef.current.delete(key);
+        revealBesideNote(binding.shape_id as TLShapeId);
+        setContentNotice(fillCanvasTemplate(ppmT("canvas.note_task_created"), { name: label }));
+      } catch {
+        setContentNotice(
+          ppmT(unplacedSourcesRef.current.has(key) ? "canvas.note_task_created_unplaced" : "canvas.note_action_error")
+        );
+      }
+    },
+    [boardId, createProjectionShape, ppmT, projectId, revealBesideNote, service, spotBeside, workspaceId]
+  );
+  const placePageBinding = useCallback(
+    async (pageId: string, center?: { x: number; y: number }) => {
+      const binding = await service.bindContent(workspaceId, projectId, boardId, {
+        shape_id: createShapeId(),
+        entity_type: "page",
+        entity_id: pageId,
+        client_operation_id: crypto.randomUUID(),
+      });
+      await createContentProjectionShape(binding, center);
+      return binding.shape_id as TLShapeId;
+    },
+    [boardId, createContentProjectionShape, projectId, service, workspaceId]
+  );
+  const createPageFromNote = useCallback(
+    async (anchor: TPpmCanvasShape, title: string, markdown: string) => {
+      if (!editableRef.current) return;
+      const size = {
+        h: PPM_CANVAS_NODE_REGISTRY.page_ref.defaultHeight,
+        w: PPM_CANVAS_NODE_REGISTRY.page_ref.defaultWidth,
+      };
+      const key = unplacedSourceKey(anchor.id, "document");
+      const next = noteSourceStep(unplacedSourcesRef.current, anchor.id, "document");
+      try {
+        // (B1) Повтор после частичного отказа: документ уже есть — только положить на холст, второй не создавать.
+        let source: TUnplacedNoteSource;
+        if (next.step === "bind") source = next;
+        else {
+          const page = await pageService.create(workspaceSlug, projectId, {
+            access: EPageAccess.PUBLIC,
+            description_html: sanitizeCanvasHtml(markdownToPageHtml(markdown)) || "<p></p>",
+            name: title.slice(0, 255),
+          });
+          if (!page?.id) throw new Error("Page id is missing.");
+          source = { entityId: page.id, label: page.name || title };
+          unplacedSourcesRef.current.set(key, source);
+        }
+        const spot = spotBeside(anchor, size);
+        const shapeId = await placePageBinding(
+          source.entityId,
+          spot ? { x: spot.x + size.w / 2, y: spot.y + size.h / 2 } : undefined
+        );
+        unplacedSourcesRef.current.delete(key);
+        revealBesideNote(shapeId);
+        setContentNotice(fillCanvasTemplate(ppmT("canvas.note_document_created"), { name: source.label }));
+      } catch {
+        setContentNotice(
+          ppmT(
+            unplacedSourcesRef.current.has(key) ? "canvas.note_document_created_unplaced" : "canvas.note_action_error"
+          )
+        );
+      }
+    },
+    [pageService, placePageBinding, ppmT, projectId, revealBesideNote, spotBeside, workspaceSlug]
+  );
+  // ── /AF2.1 B ──
+
+  // ── AF2.1 B: (B3) документы — «Новый документ», «Документ PPM», превью ──
+  // Отдельный сервис и своя привязка-на-холст: код B1 выше (createPageFromNote/placePageBinding) — свой, не зовём
+  // его отсюда, чтобы не зависеть от чужого раунда правок. Дедуп — в финальном проходе (см. отчёт).
+  const docPageService = useMemo(() => new ProjectPageService(), []);
+  const [pagePickerOpen, setPagePickerOpen] = useState(false);
+  // M2 (раунд 1): кеш держит промис, а не готовое значение — конкурентные вызовы одного ключа не дублируют
+  // запрос; отказ не кешируется (retry получает свежий ответ); карта не растёт бесконечно (~100 записей, FIFO).
+  const pageHtmlCacheRef = useRef(new Map<string, Promise<string | null>>());
+  // Fix 1 (раунд 1): страница, созданная прошлой попыткой «Новый документ», но не положенная на холст (привязка
+  // или фигура не удались) — повтор только кладёт её, вторую не создаёт (аналог unplacedSourcesRef у B1, но без
+  // якоря-заметки). creatingPageRef — замок: двойной клик/Enter не создаёт вторую страницу параллельно.
+  const unplacedPageRef = useRef<TUnplacedPageSource>();
+  const creatingPageRef = useRef(false);
+  const freePageCenter = useCallback(() => {
+    const activeEditor = editorRef.current;
+    if (!activeEditor) return undefined;
+    const size = PPM_CANVAS_NODE_REGISTRY.page_ref;
+    const spot = findFreeNodePosition(activeEditor, size.defaultWidth, size.defaultHeight);
+    return { x: spot.x + size.defaultWidth / 2, y: spot.y + size.defaultHeight / 2 };
+  }, []);
+  const placePageOnCanvas = useCallback(
+    async (pageId: string) => {
+      const binding = await service.bindContent(workspaceId, projectId, boardId, {
+        shape_id: createShapeId(),
+        entity_type: "page",
+        entity_id: pageId,
+        client_operation_id: crypto.randomUUID(),
+      });
+      await createContentProjectionShape(binding, freePageCenter());
+    },
+    [boardId, createContentProjectionShape, freePageCenter, projectId, service, workspaceId]
+  );
+  const createPage = useCallback(async () => {
+    if (!editableRef.current || creatingPageRef.current) return;
+    creatingPageRef.current = true;
+    try {
+      const step = pageCreateStep(unplacedPageRef.current);
+      let pageId: string;
+      let title: string;
+      if (step.step === "place") {
+        ({ pageId, title } = step);
+      } else {
+        const name = ppmT("canvas.page_untitled");
+        const page = await docPageService.create(workspaceSlug, projectId, {
+          access: EPageAccess.PUBLIC,
+          description_html: "<p></p>",
+          name,
+        });
+        if (!page.id) throw new Error("Page id is missing.");
+        pageId = page.id;
+        title = page.name ?? name;
+      }
+      // Отмечаем «создан, но ещё не на холсте» до попытки привязки: если она откажет, ref останется — повтор
+      // увидит step "place" и не создаст вторую страницу (тот же приём, что и unplacedSourcesRef у B1).
+      unplacedPageRef.current = { pageId, title };
+      await placePageOnCanvas(pageId);
+      unplacedPageRef.current = undefined;
+      setContentNotice(fillCanvasTemplate(ppmT("canvas.page_created"), { name: title }));
+    } catch {
+      setContentNotice(ppmT(unplacedPageRef.current ? "canvas.page_created_unplaced" : "canvas.note_action_error"));
+    } finally {
+      creatingPageRef.current = false;
+    }
+  }, [docPageService, placePageOnCanvas, ppmT, projectId, workspaceSlug]);
+  const loadPageHtml = useCallback(
+    (pageId: string, sourceVersion: string | null): Promise<string | null> => {
+      const key = `${pageId}:${sourceVersion ?? ""}`;
+      const cache = pageHtmlCacheRef.current;
+      const cached = cache.get(key);
+      if (cached) return cached;
+      const request = (async () => {
+        try {
+          const page = await docPageService.fetchById(workspaceSlug, projectId, pageId, false);
+          const raw = page.description_html?.trim();
+          // M1 (раунд 1): режем до санитизации (а не 200 000 после) и санитизируем один раз здесь — карточка
+          // просто использует готовую строку, не зовёт sanitizeCanvasHtml на каждый рендер.
+          return raw ? sanitizeCanvasHtml(raw.slice(0, 50_000), { allowKatex: false }) : null;
+        } catch {
+          cache.delete(key);
+          return null;
+        }
+      })();
+      cache.set(key, request);
+      if (cache.size > 100) {
+        const oldestKey = cache.keys().next().value;
+        if (oldestKey !== undefined) cache.delete(oldestKey);
+      }
+      return request;
+    },
+    [docPageService, projectId, workspaceSlug]
+  );
+  const pageSearchDeps = useMemo(
+    () => ({
+      listProjectPages: () => docPageService.fetchAll(workspaceSlug, projectId),
+      searchServer: (query: string) => service.searchPages(workspaceId, projectId, query),
+    }),
+    [docPageService, projectId, service, workspaceId, workspaceSlug]
+  );
+  const placeExistingPage = useCallback(
+    async (hit: { id: string; title: string }) => {
+      // M6 (раунд 1): доска могла стать read-only, пока пикер был открыт (права поменялись в другой вкладке).
+      if (!editableRef.current) return;
+      try {
+        await placePageOnCanvas(hit.id);
+        setContentNotice(
+          fillCanvasTemplate(ppmT("canvas.page_placed"), { name: hit.title || ppmT("canvas.page_untitled") })
+        );
+      } catch (error) {
+        // M4 (раунд 1): уведомление показываем, но ошибку пробрасываем — pick() в пикере ловит её и НЕ закрывает
+        // диалог (не onClose()), чтобы можно было повторить или выбрать другой документ.
+        setContentNotice(ppmT("canvas.note_action_error"));
+        throw error;
+      }
+    },
+    [placePageOnCanvas, ppmT]
+  );
+  const openPagePicker = useCallback(() => setPagePickerOpen(true), []);
+  // Fix 5 (раунд 1): пока пикер открыт, tldraw не должен ловить горячие клавиши (Backspace/Delete удаляют фигуры,
+  // однобуквенные — инструменты). AF2.1 B5, раунд 1: эффект один на все диалоги холста (выбор документа, просмотр
+  // файла) — в блоке «(B5) просмотр и скачивание файлов» ниже, где объявлено состояние просмотра.
+  // Пункт 8 (раунд 2): права редактирования могли пропасть, пока пикер был открыт (снялись в другой вкладке,
+  // доска заархивирована и т.п.) — закрываем диалог и коротко сообщаем, а не оставляем зависший поиск, класть
+  // результат которого больше нельзя.
+  useEffect(() => {
+    if (pagePickerOpen && !effectiveCanEdit) {
+      setPagePickerOpen(false);
+      setContentNotice(ppmT("canvas.page_picker_readonly"));
+    }
+  }, [effectiveCanEdit, pagePickerOpen, ppmT]);
+  // ── /AF2.1 B ──
 
   const searchWorkItems = useCallback(
     (query: string, cursor?: string) => service.searchWorkItems(workspaceId, projectId, query, cursor),
@@ -1954,23 +2332,306 @@ export default function PpmCanvasEditor({
     [addUploadedContent, fileService, pendingFileDrop, ppmT, projectId, workspaceSlug]
   );
 
+  // ── AF2.1 B: (B4) вставка, перетаскивание, ⌘U ──
+  const { currentLocale } = useTranslation();
+  const { maxFileSize: instanceMaxFileSize } = useFileSize();
+  // Раунд 1: меньшее из нашего дефолта и фактического лимита инстанса (useFileSize() — тот же источник, что у
+  // вложений задач); сервер (FILE_SIZE_LIMIT и т. п.) остаётся источником истины, это только ранний отказ на клиенте.
+  const maxUploadBytes = Math.min(PPM_VAULT_MAX_UPLOAD_BYTES, instanceMaxFileSize);
+  const grammarV2Ref = useRef(grammarV2);
+  grammarV2Ref.current = grammarV2;
+  const bindingsRef = useRef(bindingsByShapeId);
+  bindingsRef.current = bindingsByShapeId;
+  const [dropHintCount, setDropHintCount] = useState<number>();
+  const dropHintTimerRef = useRef<number>();
+  const showDropHint = useCallback((count: number) => {
+    setDropHintCount((current) => (current === count ? current : count));
+    window.clearTimeout(dropHintTimerRef.current);
+    // dragover приходит каждые ~50 мс; тишина 400 мс = курсор ушёл (без onDragLeave у оболочки).
+    dropHintTimerRef.current = window.setTimeout(() => setDropHintCount(undefined), 400);
+  }, []);
+  const showDropHintRef = useRef(showDropHint);
+  showDropHintRef.current = showDropHint;
+  const createLinkNote = useCallback(
+    (url: string, point: { x: number; y: number }) => {
+      const activeEditor = editorRef.current;
+      if (!activeEditor || !editableRef.current) return;
+      let host = url;
+      try {
+        host = new URL(url).hostname || url;
+      } catch {
+        host = url;
+      }
+      const safeUrl = url.replace(/[\s<>]/g, (character) => encodeURIComponent(character));
+      const node = createPpmCanvasNode({ authorId, body: `<${safeUrl}>`, kind: "note", title: host.slice(0, 160) });
+      const id = createShapeId();
+      activeEditor.createShape<TPpmCanvasShape>({
+        id,
+        type: PPM_CANVAS_SHAPE_TYPE,
+        x: point.x - node.visual.width / 2,
+        y: point.y - node.visual.height / 2,
+        props: { h: node.visual.height, node: serializePpmCanvasNode(node), w: node.visual.width },
+      });
+      activeEditor.select(id);
+    },
+    [authorId]
+  );
+  const externalContentDepsRef = useRef<TPpmCanvasExternalContentDeps>();
+  externalContentDepsRef.current = {
+    canEdit: effectiveCanEdit,
+    createLinkNote,
+    grammarV2,
+    isActive,
+    maxUploadBytes,
+    notify: setContentNotice,
+    now: () => new Date(),
+    placeVaultEntry: (entryId, point, index) => addUploadedContent("vault_file", entryId, index, point),
+    t: ppmT,
+    uploadToVault: (file) => vaultService.uploadFile(workspaceId, projectId, file),
+  };
+  const getExternalContentDeps = useCallback(
+    (): TPpmCanvasExternalContentDeps => externalContentDepsRef.current as TPpmCanvasExternalContentDeps,
+    []
+  );
+  // Финальная волна (M-3): вложения, уже прикреплённые броском файлов в этом сеансе редактора (задача + имя + размер +
+  // время изменения), — повторный бросок их не загружает, только кладёт недостающую карточку.
+  const attachMemoryRef = useRef<TPpmWorkItemAttachMemory>(new Map());
+  const dropFilesV2 = useCallback(
+    async (files: File[], pagePoint: { x: number; y: number }) => {
+      setDropHintCount(undefined);
+      const activeEditor = editorRef.current;
+      if (!activeEditor) return;
+      const target = activeEditor.getShapeAtPoint(pagePoint, { hitInside: true });
+      const binding = target ? bindingsRef.current.get(target.id) : undefined;
+      if (binding?.entity_type !== "work_item") {
+        await activeEditor.putExternalContent({ type: "files", files, point: pagePoint, ignoreParent: false });
+        return;
+      }
+      // RB10: отпустили на живую карточку задачи — вложения этой задачи (прежняя возможность «В задачу»).
+      const size = {
+        h: PPM_CANVAS_NODE_REGISTRY.reference.defaultHeight,
+        w: PPM_CANVAS_NODE_REGISTRY.reference.defaultWidth,
+      };
+      const spot = spotBeside(target as TPpmCanvasShape, size);
+      const center = spot ? { x: spot.x + size.w / 2, y: spot.y + size.h / 2 } : pagePoint;
+      // M-3: шаблон B4 — размер до загрузки (лимит вложений задачи — useFileSize()), ошибки с именами файлов и без
+      // сырого текста исключения, счётчики «прикреплено / не удалось»; повтор не прикрепляет те же файлы второй раз.
+      await attachFilesToWorkItem(
+        {
+          isPlaced: (assetId) => Boolean(boundCardId(activeEditor.getCurrentPageShapes(), "attachment", assetId)),
+          maxUploadBytes: instanceMaxFileSize,
+          memory: attachMemoryRef.current,
+          notify: setContentNotice,
+          place: (assetId, index) => addUploadedContent("attachment", assetId, index, center),
+          t: ppmT,
+          upload: (file) =>
+            fileService.uploadProjectAsset(
+              workspaceSlug,
+              projectId,
+              { entity_identifier: binding.entity_id, entity_type: EFileAssetType.ISSUE_ATTACHMENT },
+              file
+            ),
+          workItemId: binding.entity_id,
+          workItemName: binding.source.identity.identifier ?? binding.source.display.title,
+        },
+        files
+      );
+    },
+    [addUploadedContent, fileService, instanceMaxFileSize, ppmT, projectId, spotBeside, workspaceSlug]
+  );
+  const dropFilesV2Ref = useRef(dropFilesV2);
+  dropFilesV2Ref.current = dropFilesV2;
+  // ── /AF2.1 B ──
+
+  // ── AF2.1 B: (final) «Из проекта» — файл из Хранилища и Git-объект ──
+  // I-1 (финальная волна): «Файл» — выбор файла Хранилища (живая карточка тем же путём, что B4 placeVaultEntry) или
+  // загрузка с компьютера тем же путём, что ⌘U; «Git-объект» — страница кода проекта, её «На холст» возвращает сюда
+  // с объектом (ppm_git_* выше). Только редактор: CanvasControls проверяет canEdit, рейка прячет пункты от читателя.
+  const router = useAppRouter();
+  const [vaultPickerOpen, setVaultPickerOpen] = useState(false);
+  const openVaultPicker = useCallback(() => setVaultPickerOpen(true), []);
+  const loadVaultFiles = useCallback(
+    async () => vaultFilesOf((await vaultService.getVault(workspaceId, projectId)).entries),
+    [projectId, vaultService, workspaceId]
+  );
+  const placingVaultFilesRef = useRef(new Set<string>());
+  const placeVaultFile = useCallback(
+    async (entry: TPpmVaultEntry) => {
+      const activeEditor = editorRef.current;
+      // Права могли пропасть, пока выбор был открыт; повторный выбор того же файла во время размещения — без дублей.
+      if (!activeEditor || !editableRef.current || placingVaultFilesRef.current.has(entry.id)) return;
+      // Файл уже на холсте — выделяем его карточку (при необходимости камера подходит к ней), вторую не кладём.
+      const existing = boundCardId(activeEditor.getCurrentPageShapes(), "vault_file", entry.id);
+      if (existing) {
+        revealBesideNote(existing as TLShapeId);
+        setContentNotice(fillCanvasTemplate(ppmT("canvas.vault_file_on_board"), { name: entry.name }));
+        return;
+      }
+      placingVaultFilesRef.current.add(entry.id);
+      try {
+        // Рядом с центром видимой области и без наложений; свободного места на экране нет — в самом центре.
+        const kind = contentNodeKind(entry.mime_type, entry.extension ? `.${entry.extension}` : null);
+        const size = PPM_CANVAS_NODE_REGISTRY[kind];
+        const spot = findFreeNodePosition(activeEditor, size.defaultWidth, size.defaultHeight);
+        const center = spot.inViewport
+          ? { x: spot.x + size.defaultWidth / 2, y: spot.y + size.defaultHeight / 2 }
+          : activeEditor.getViewportPageBounds().center;
+        await addUploadedContent("vault_file", entry.id, 0, center);
+        setContentNotice(fillCanvasTemplate(ppmT("canvas.vault_file_placed"), { name: entry.name }));
+      } catch (error) {
+        // Уведомление — здесь; ошибка — выбору: он остаётся открытым, можно повторить или выбрать другой файл.
+        setContentNotice(ppmT("canvas.vault_file_place_error"));
+        throw error;
+      } finally {
+        placingVaultFilesRef.current.delete(entry.id);
+      }
+    },
+    [addUploadedContent, ppmT, revealBesideNote]
+  );
+  // «Загрузить с компьютера…» — тот же путь, что ⌘U: обработчик B4 → Хранилище (имена, размер, 409) → живые карточки.
+  const uploadVaultFiles = useCallback((files: File[]) => {
+    const activeEditor = editorRef.current;
+    if (!activeEditor || !editableRef.current || files.length === 0) return;
+    activeEditor.markHistoryStoppingPoint("ppm upload files");
+    void activeEditor.putExternalContent({
+      type: "files",
+      files,
+      point: activeEditor.getViewportPageBounds().center,
+      ignoreParent: false,
+    });
+  }, []);
+  // Права на редактирование могли пропасть, пока выбор был открыт: закрываем его и коротко говорим почему.
+  useEffect(() => {
+    if (vaultPickerOpen && !effectiveCanEdit) {
+      setVaultPickerOpen(false);
+      setContentNotice(ppmT("canvas.vault_picker_readonly"));
+    }
+  }, [effectiveCanEdit, ppmT, vaultPickerOpen]);
+  // «Git-объект»: уходим с Холста, только сохранив доску — тем же flushSave, что и автосохранение (его же зовёт уход
+  // со страницы при размонтировании). Не сохранилось — остаёмся и говорим почему.
+  const leavingForCodeRef = useRef(false);
+  const openProjectCode = useCallback(async () => {
+    if (leavingForCodeRef.current) return;
+    leavingForCodeRef.current = true;
+    try {
+      await openProjectCodePage({
+        navigate: (path) => router.push(path),
+        notify: setContentNotice,
+        projectId,
+        settleSave: () =>
+          settleCanvasSave({
+            flush: () => flushSaveRef.current(),
+            hasUnsaved: () => dirtyRef.current || Boolean(pendingSaveRef.current),
+            isSaving: () => savingRef.current,
+            onWait: () => setContentNotice(ppmT("canvas.git_leave_saving")),
+            sleep: (ms) =>
+              new Promise<void>((resolve) => {
+                window.setTimeout(resolve, ms);
+              }),
+          }),
+        t: ppmT,
+        workspaceSlug,
+      });
+    } finally {
+      leavingForCodeRef.current = false;
+    }
+  }, [ppmT, projectId, router, workspaceSlug]);
+  const projectSources = useMemo<TPpmCanvasProjectSources>(
+    () => ({ openProjectCode: () => void openProjectCode(), openVaultPicker }),
+    [openProjectCode, openVaultPicker]
+  );
+  // ── /AF2.1 B ──
+
+  // ── AF2.1 B: (B5) просмотр и скачивание файлов ──
+  // Просмотр — состояние редактора, не доски: содержимое файла в снимок не попадает.
+  const [previewBinding, setPreviewBinding] = useState<TPpmCanvasContentBinding>();
+  // Раунд 1: пока открыт любой диалог холста (выбор документа B3, просмотр файла), горячие клавиши tldraw
+  // (hotkeys-js на body: Backspace/Delete, ⌘Z, буквы инструментов) выключены — editor.blur(); на закрытии фокус
+  // возвращается туда, куда его вернул диалог (кнопка «Просмотр»), иначе — контейнеру холста. Один эффект на всё.
+  // Финальная волна: выбор файла Хранилища («Из проекта → Файл») — третий такой диалог.
+  const canvasModalOpen = pagePickerOpen || vaultPickerOpen || previewBinding !== undefined;
+  // Мультидоска: тот же эффект выключает редактор скрытой вкладки (иначе все смонтированные вкладки «в фокусе» и одна ⌘V
+  // попадает на каждую открытую доску). Одно решение на обе причины (shouldFocusCanvasEditor) — эффекты не спорят;
+  // editor в зависимостях — после (пере)создания редактора tldraw состояние выставляется заново.
+  useEffect(() => {
+    if (editor) syncCanvasEditorFocus(editor, { isActive, modalOpen: canvasModalOpen });
+  }, [canvasModalOpen, editor, isActive]);
+  const downloadsRef = useRef(new Set<string>());
+  // Финальная волна (отложенное B5): скачивание возвращает исход. Карточка на холсте показывает его уведомлением холста
+  // (downloadFile ниже), просмотр — в своей области сообщения: уведомление холста под модальным окном не видно.
+  const startDownload = useCallback(
+    async (binding: TPpmCanvasContentBinding): Promise<TCanvasDownloadResult> => {
+      // Повторный щелчок, пока файл ещё качается, второй загрузки не начинает.
+      if (downloadsRef.current.has(binding.entity_id)) return { status: "started" };
+      downloadsRef.current.add(binding.entity_id);
+      try {
+        return await downloadCanvasFile(binding, vaultService);
+      } finally {
+        downloadsRef.current.delete(binding.entity_id);
+      }
+    },
+    [vaultService]
+  );
+  const downloadFile = useCallback(
+    async (binding: TPpmCanvasContentBinding) => {
+      const result = await startDownload(binding);
+      if (result.status === "error") setContentNotice(ppmT("canvas.file_download_error"));
+      // RB9: без ответа сервера ссылку ?download=1 щёлкает сам пользователь (новая вкладка, холст на месте).
+      else if (result.status === "link")
+        setContentNotice({
+          href: result.url,
+          label: ppmT("canvas.file_download"),
+          text: fillCanvasTemplate(ppmT("canvas.file_download_link"), { name: binding.source.display.title }),
+        });
+    },
+    [ppmT, startDownload]
+  );
+  const vaultPdfSrc = useCallback(
+    (binding: TPpmCanvasContentBinding) => vaultPdfUrl(binding, vaultService),
+    [vaultService]
+  );
+  // ── /AF2.1 B ──
+
   const handleFileDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     if (!event.dataTransfer.types.includes("Files")) return;
     event.preventDefault();
     event.stopPropagation();
-    if (event.type !== "drop") return;
+    // ── AF2.1 B: (B5) файлы, брошенные на диалог-портал холста (просмотр, выбор документа), на холст под ним не кладём:
+    // в DOM диалог вне оболочки, но React-всплытие идёт сюда. Браузеру — «нельзя» (без перехода на файл). ──
+    if (isFromCanvasModal(event.currentTarget, event.target)) {
+      event.dataTransfer.dropEffect = "none";
+      return;
+    }
+    // ── /AF2.1 B ──
+    // Мультидоска: скрытая вкладка файлы не принимает — ни подсказки, ни загрузки, ни диалога; браузеру тоже «нельзя».
+    if (!isActiveRef.current) {
+      event.dataTransfer.dropEffect = "none";
+      return;
+    }
+    // AF2.1 B4 (RB10): под v2 — подсказка K4 во время перетаскивания и сразу Хранилище; v1 — диалог как раньше.
+    if (event.type !== "drop") {
+      if (grammarV2Ref.current && editableRef.current) {
+        // Раунд 1: dataTransfer.items может нести и не-файловые записи (например text/uri-list рядом с файлом) —
+        // считаем только kind === "file", иначе подсказка называет число больше настоящего количества файлов.
+        const fileCount = [...event.dataTransfer.items].filter((item) => item.kind === "file").length;
+        if (fileCount > 0) showDropHintRef.current(fileCount);
+      }
+      return;
+    }
     if (!editableRef.current || !editorRef.current) {
       setFileDropNotice(true);
       return;
     }
     const files = [...event.dataTransfer.files].slice(0, 20);
     if (files.length === 0) return;
+    const pagePoint = editorRef.current.screenToPage({ x: event.clientX, y: event.clientY });
+    if (grammarV2Ref.current) {
+      void dropFilesV2Ref.current(files, pagePoint);
+      return;
+    }
     setFileDropError(undefined);
     setPlaneDropPickerOpen(false);
-    setPendingFileDrop({
-      files,
-      pagePoint: editorRef.current.screenToPage({ x: event.clientX, y: event.clientY }),
-    });
+    setPendingFileDrop({ files, pagePoint });
   }, []);
 
   const createSemanticEdge = useCallback(
@@ -2044,6 +2705,17 @@ export default function PpmCanvasEditor({
     [grammarV2, openSemanticEdge, semanticEdges]
   );
 
+  // ── AF2.1 B: <Tldraw onMount> seam — line B registers paste/drop/⌘U handlers here (v2 grammar only). ──
+  // Стабильная функция: tldraw вызывает onMount один раз и выполняет возвращённую очистку при размонтировании.
+  const handleTldrawMount = useCallback(
+    (mounted: Editor) => {
+      setEditor(mounted);
+      return registerPpmCanvasExternalContent(mounted, getExternalContentDeps);
+    },
+    [getExternalContentDeps]
+  );
+  // ── /AF2.1 B ──
+
   const components = useMemo<TLComponents>(
     () => ({
       ...HIDDEN_TLDRAW_UI,
@@ -2055,6 +2727,7 @@ export default function PpmCanvasEditor({
           boardInfoFocusRef={boardInfoFocusRef}
           // A pending import preview lives inside "Board" and must stay reachable until confirmed or cancelled.
           boardInfoOpen={boardInfoOpen || Boolean(desktopImport)}
+          boards={boards}
           canEdit={effectiveCanEdit}
           copiedLocal={copiedLocal}
           designV2={designV2}
@@ -2111,6 +2784,7 @@ export default function PpmCanvasEditor({
       authorId,
       boardId,
       boardInfoOpen,
+      boards,
       bindWorkItem,
       closeSemanticPanel,
       copiedLocal,
@@ -2159,6 +2833,247 @@ export default function PpmCanvasEditor({
     ]
   );
 
+  // ── AF2.1 B: (B6) чек-лист → задачи; перенос картинок data: в Хранилище по подтверждению (RB13) ──
+  // Память попыток «Сделать задачами» на время жизни редактора доски: задача, созданная для пункта, при повторе
+  // только привязывается и кладётся на холст; упавшее создание повторяется той же операцией (ответ сервера).
+  const checklistTasksRef = useRef(createChecklistTaskMemory());
+  const workItemCardOnBoard = useCallback((workItemId: string) => {
+    const activeEditor = editorRef.current;
+    return Boolean(
+      activeEditor?.getCurrentPageShapes().some((shape) => {
+        if (shape.type !== PPM_CANVAS_SHAPE_TYPE) return false;
+        const parsed = parseSerializedPpmCanvasNode((shape as TPpmCanvasShape).props.node);
+        return (
+          (parsed.status === "valid" || parsed.status === "migrated") &&
+          parsed.node.kind === "work_item_ref" &&
+          parsed.node.binding.entity_id === workItemId
+        );
+      })
+    );
+  }, []);
+  const convertChecklistItems = useCallback(
+    async (
+      anchor: TPpmCanvasShape,
+      items: { id: string; text: string }[],
+      onConverted: (itemId: string, workItemId: string) => void
+    ) => {
+      if (!editableRef.current || items.length === 0) return {};
+      // Своя точка истории: ⌘Z не склеивает отметки пунктов с прежними правками чек-листа.
+      editorRef.current?.markHistoryStoppingPoint("ppm checklist to tasks");
+      const size = {
+        h: PPM_CANVAS_NODE_REGISTRY.work_item_ref.defaultHeight,
+        w: PPM_CANVAS_NODE_REGISTRY.work_item_ref.defaultWidth,
+      };
+      let firstCardId: TLShapeId | undefined;
+      const outcome = await convertChecklistItemsToTasks(anchor.id, items, checklistTasksRef.current, {
+        bind: (workItemId) =>
+          service.bindWorkItem(workspaceId, projectId, boardId, {
+            shape_id: createShapeId(),
+            entity_type: "work_item",
+            entity_id: workItemId,
+            client_operation_id: crypto.randomUUID(),
+          }),
+        canContinue: () => editableRef.current && Boolean(editorRef.current?.getShape(anchor.id)),
+        create: ({ name, operationId, shapeId }) =>
+          service.createWorkItem(workspaceId, projectId, boardId, {
+            name,
+            shape_id: shapeId,
+            client_operation_id: operationId,
+          }),
+        isGone: (error) => error instanceof PpmCanvasServiceError && error.code === "WORK_ITEM_NOT_FOUND",
+        isPlaced: workItemCardOnBoard,
+        newIds: () => ({ operationId: crypto.randomUUID(), shapeId: createShapeId() }),
+        onConverted,
+        place: async (binding) => {
+          // spotBeside пересчитывает занятые места: каждая следующая карточка встаёт под предыдущей, справа.
+          await createProjectionShape(binding, spotBeside(anchor, size));
+          firstCardId ??= binding.shape_id as TLShapeId;
+        },
+      });
+      if (firstCardId) revealBesideNote(firstCardId);
+      setContentNotice(describeChecklistConversion(outcome, items.length, ppmT));
+      return outcome.converted;
+    },
+    [
+      boardId,
+      createProjectionShape,
+      ppmT,
+      projectId,
+      revealBesideNote,
+      service,
+      spotBeside,
+      workItemCardOnBoard,
+      workspaceId,
+    ]
+  );
+  const [inlineImages, setInlineImages] = useState<TInlineImagePlan>();
+  const [inlineMigrationBusy, setInlineMigrationBusy] = useState(false);
+  // Загрузки готовы, но пользователь ещё в жесте или правке текста: перенос ждёт покоя инструмента (любого).
+  const [inlineMigrationWaiting, setInlineMigrationWaiting] = useState(false);
+  const inlineMigrationBusyRef = useRef(false);
+  // «Не сейчас» — до конца сессии вкладки; ref — если sessionStorage недоступен.
+  const inlineDismissedRef = useRef(false);
+  // Уведомление уже показывали: дальше оно возвращается само, только если есть что делать (например, после ⌘Z).
+  const inlineShownRef = useRef(false);
+  // Память переносов доски (sessionStorage вкладки): файлы уже в Хранилище и карточки, заменившие картинки.
+  const inlineMemoryRef = useRef<TInlineMoveMemory>();
+  const inlineMoveMemory = useCallback(() => {
+    inlineMemoryRef.current ??= readInlineMoveMemory(getCanvasSessionStorage(), boardId);
+    return inlineMemoryRef.current;
+  }, [boardId]);
+  const readInlineImages = useCallback(
+    (activeEditor: Editor) => {
+      const plan = planInlineImageMigration(
+        findInlineImageAssets(activeEditor.getAssets(), maxUploadBytes),
+        collectInlineImageUses(activeEditor)
+      );
+      return inlineImagesCount(plan) > 0 ? plan : undefined;
+    },
+    [maxUploadBytes]
+  );
+  useEffect(() => {
+    // Только редактор под v2; читатель ничего не видит, записи без подтверждения нет. Доска, которая не сохраняется
+    // (снимок больше лимита — ошибка сохранения), — как раз та, которой перенос нужен.
+    if (!editor || !grammarV2 || !effectiveCanEdit || inlineMigrationBusy) return;
+    if (syncStatus !== "saved" && syncStatus !== "error") return;
+    if (inlineDismissedRef.current || isInlineImagesDismissed(getCanvasSessionStorage(), boardId)) return;
+    const plan = readInlineImages(editor);
+    const next = inlineImagesActionable(plan) || !inlineShownRef.current ? plan : undefined;
+    if (next) inlineShownRef.current = true;
+    setInlineImages((current) => (inlineImagePlanKey(current) === inlineImagePlanKey(next) ? current : next));
+  }, [boardId, editor, effectiveCanEdit, grammarV2, inlineMigrationBusy, readInlineImages, syncStatus]);
+  const dismissInlineImageNotice = useCallback(() => {
+    inlineDismissedRef.current = true;
+    dismissInlineImages(getCanvasSessionStorage(), boardId);
+    setInlineImages(undefined);
+  }, [boardId]);
+  const migrateInlineImages = useCallback(async () => {
+    const activeEditor = editorRef.current;
+    if (!activeEditor || !editableRef.current || inlineMigrationBusyRef.current) return;
+    // План — на момент нажатия: с показа уведомления доска могла измениться (без лишних файлов в Хранилище).
+    const plan = readInlineImages(activeEditor);
+    if (!plan || !inlineImagesActionable(plan)) {
+      setInlineImages(plan);
+      return;
+    }
+    inlineMigrationBusyRef.current = true;
+    setInlineMigrationBusy(true);
+    const storage = getCanvasSessionStorage();
+    const memory = inlineMoveMemory();
+    try {
+      const now = new Date();
+      const stillEditable = () => editableRef.current && editorRef.current === activeEditor;
+      // Шаг 1: загрузки и привязки; доска пока не меняется, старая картинка остаётся до успешной загрузки.
+      const prepared = await prepareInlineImageMoves(activeEditor, plan.targets, {
+        bind: (entryId) =>
+          service.bindContent(workspaceId, projectId, boardId, {
+            shape_id: createShapeId(),
+            entity_type: "vault_file",
+            entity_id: entryId,
+            client_operation_id: crypto.randomUUID(),
+          }),
+        canContinue: stillEditable,
+        describeError: (error, fileName) => inlineUploadErrorMessage(error, fileName, ppmT, maxUploadBytes),
+        file: (target, ordinal) => inlineImageFile(target.asset, now, ordinal),
+        isGone: (error) => error instanceof PpmCanvasServiceError && error.code === "CONTENT_SOURCE_NOT_FOUND",
+        memory,
+        upload: (file) => vaultService.uploadFile(workspaceId, projectId, file),
+      });
+      writeInlineMoveMemory(storage, boardId, memory);
+      const release = (binding: TPpmCanvasContentBinding) =>
+        void service.cancelPendingBinding(workspaceId, projectId, boardId, binding.binding_id).catch(() => undefined);
+      // Шаг 2 не рвёт жест пользователя: доска меняется только в покое инструмента (финальная волна: любого — Выбор,
+      // Рука, Перо…; жест и правка текста — не покой).
+      const ready =
+        stillEditable() &&
+        (await waitForCanvasIdle(
+          () => isCanvasToolIdle(activeEditor),
+          stillEditable,
+          (ms) =>
+            new Promise<void>((resolve) => {
+              window.setTimeout(resolve, ms);
+            }),
+          { onWait: () => setInlineMigrationWaiting(true) }
+        ));
+      // Одна точка истории — карточки на месте картинок, фигуры и data: удалены (⌘Z возвращает картинки).
+      let result: { moved: string[]; removed: number } = { moved: [], removed: 0 };
+      if (ready)
+        result = await applyInlineImageMoves(
+          activeEditor,
+          prepared.moves,
+          plan.orphans.map((asset) => asset.assetId),
+          {
+            memory,
+            place: (binding, center) => createContentProjectionShape(binding, { x: center.x, y: center.y }),
+            release,
+          }
+        );
+      else for (const move of prepared.moves) if (move.kind === "place") release(move.binding);
+      writeInlineMoveMemory(storage, boardId, memory);
+      setContentNotice(
+        describeInlineMigration(
+          {
+            attempted: plan.targets.length,
+            errors: prepared.errors,
+            // «Остались на доске» — ровно те, что всё ещё показывают свой data:.
+            failed: plan.targets.filter((target) => showsInlineImage(activeEditor, target)).length,
+            moved: result.moved.length,
+            removed: result.removed,
+          },
+          ppmT
+        )
+      );
+      // Не перенеслось — уведомление остаётся для повтора; иначе прячется (после ⌘Z вернётся само, без дублей).
+      const next = readInlineImages(activeEditor);
+      setInlineImages(inlineImagesActionable(next) ? next : undefined);
+    } finally {
+      inlineMigrationBusyRef.current = false;
+      setInlineMigrationBusy(false);
+      setInlineMigrationWaiting(false);
+    }
+  }, [
+    boardId,
+    createContentProjectionShape,
+    inlineMoveMemory,
+    maxUploadBytes,
+    ppmT,
+    projectId,
+    readInlineImages,
+    service,
+    vaultService,
+    workspaceId,
+  ]);
+  // ── /AF2.1 B ──
+
+  // ── AF2.1 B: контекст действий содержимого ──
+  const contentActions = useMemo<TPpmCanvasContentActions>(
+    () => ({
+      canEdit: effectiveCanEdit,
+      convertChecklistItems,
+      createPage,
+      createPageFromNote,
+      createTaskFromText,
+      downloadFile,
+      loadPageHtml,
+      notify: setContentNotice,
+      openPagePicker,
+      previewFile: setPreviewBinding,
+      vaultPdfUrl: vaultPdfSrc,
+    }),
+    [
+      convertChecklistItems,
+      createPage,
+      createPageFromNote,
+      createTaskFromText,
+      downloadFile,
+      effectiveCanEdit,
+      loadPageHtml,
+      openPagePicker,
+      vaultPdfSrc,
+    ]
+  );
+  // ── /AF2.1 B ──
+
   const projectionContext = useMemo(
     () => ({
       bindingsByShapeId,
@@ -2202,8 +3117,13 @@ export default function PpmCanvasEditor({
   );
   const boardNavigationContext = useMemo(() => ({ onOpenBoard }), [onOpenBoard]);
   // RC9: the inspector never covers the "Board" panel, the import preview or a blocking banner.
+  // ── AF2.1 R: (R5) one right-side panel at a time — «Задачи и бэклог» hides the inspector (regression #3). ──
   const inspectorHidden =
-    boardInfoOpen || Boolean(desktopImport) || isBlockingCanvasStatus(syncStatus, Boolean(recoveryDraft));
+    tasksPanelOpen ||
+    boardInfoOpen ||
+    Boolean(desktopImport) ||
+    isBlockingCanvasStatus(syncStatus, Boolean(recoveryDraft));
+  // ── /AF2.1 R ──
 
   return (
     <div
@@ -2218,15 +3138,33 @@ export default function PpmCanvasEditor({
           <PpmWorkItemProjectionContext.Provider value={projectionContext}>
             <PpmSemanticEdgesContext.Provider value={semanticLayerValue}>
               <PpmSemanticEdgeFocusContext.Provider value={focusedEdgeId}>
-                <Tldraw
-                  cameraOptions={{ wheelBehavior: "pan" }}
-                  components={components}
-                  shapeUtils={[PpmCanvasNodeShapeUtil]}
-                  onMount={setEditor}
-                >
-                  {presence && <PpmCanvasRealtimeCursors presence={presence} />}
-                  {grammarV2 && onZoomChange && <PpmCanvasZoomReporter boardId={boardId} onZoomChange={onZoomChange} />}
-                </Tldraw>
+                <PpmCanvasContentActionsContext.Provider value={contentActions}>
+                  {/* AF2.1 B (final): «Из проекта → Файл/Git-объект» — CanvasControls берёт их из этого контекста */}
+                  <PpmCanvasProjectSourcesContext.Provider value={projectSources}>
+                    <Tldraw
+                      acceptedImageMimeTypes={grammarV2 ? PPM_VAULT_ACCEPT : undefined}
+                      acceptedVideoMimeTypes={grammarV2 ? [] : undefined}
+                      // Мультидоска: читается при создании редактора — скрытая вкладка создаётся «не в фокусе»; дальше
+                      // фокус ведёт один эффект (syncCanvasEditorFocus). Это проп tldraw (isFocused редактора), DOM-фокус
+                      // он не двигает; по умолчанию у tldraw true — теперь true только у активной вкладки.
+                      // oxlint-disable-next-line jsx_a11y/no-autofocus -- проп tldraw: состояние редактора, не DOM-фокус
+                      autoFocus={isActive}
+                      cameraOptions={{ wheelBehavior: "pan" }}
+                      components={components}
+                      shapeUtils={shapeUtils}
+                      onMount={handleTldrawMount}
+                    >
+                      {presence && <PpmCanvasRealtimeCursors presence={presence} />}
+                      {grammarV2 && onZoomChange && (
+                        <PpmCanvasZoomReporter boardId={boardId} onZoomChange={onZoomChange} />
+                      )}
+                      {/* ── AF2.1 R: overlays — leaf children of <Tldraw>, never inside the components memo ── */}
+                      {grammarV2 && <PpmCanvasStyleToolbar canEdit={effectiveCanEdit} />}
+                      {grammarV2 && <PpmCanvasQuickConnect authorId={authorId} canEdit={effectiveCanEdit} />}
+                      {/* ── /AF2.1 R ── */}
+                    </Tldraw>
+                  </PpmCanvasProjectSourcesContext.Provider>
+                </PpmCanvasContentActionsContext.Provider>
               </PpmSemanticEdgeFocusContext.Provider>
             </PpmSemanticEdgesContext.Provider>
           </PpmWorkItemProjectionContext.Provider>
@@ -2253,6 +3191,100 @@ export default function PpmCanvasEditor({
           </button>
         </div>
       )}
+      {/* ── AF2.1 B: (B1) уведомление содержимого — свой класс, над уведомлением о перетаскивании файлов ── */}
+      {grammarV2 && contentNotice && (
+        <div className="ppm-canvas-content-notice" data-ppm-notice="content" role="status">
+          <span>{typeof contentNotice === "string" ? contentNotice : contentNotice.text}</span>
+          {/* (B5) Ссылку щёлкает сам пользователь: новая вкладка не блокируется, холст остаётся на месте. */}
+          {typeof contentNotice === "object" && (
+            <a
+              className="ppm-canvas-content-notice__link"
+              download
+              href={contentNotice.href}
+              rel="noopener noreferrer"
+              target="_blank"
+              onClick={() => window.setTimeout(() => setContentNotice(undefined), 0)}
+            >
+              {contentNotice.label}
+            </a>
+          )}
+          <button
+            type="button"
+            aria-label={ppmT("canvas.content_notice_close")}
+            onClick={() => setContentNotice(undefined)}
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
+      )}
+      {/* ── /AF2.1 B ── */}
+      {/* ── AF2.1 B: (B3) «Документ PPM» — поиск существующих документов ── */}
+      {grammarV2 && pagePickerOpen && (
+        <PpmCanvasPagePicker
+          deps={pageSearchDeps}
+          onClose={() => setPagePickerOpen(false)}
+          onPick={placeExistingPage}
+        />
+      )}
+      {/* ── /AF2.1 B ── */}
+      {/* ── AF2.1 B: (final) «Из проекта → Файл» — файл из Хранилища или с компьютера ── */}
+      {grammarV2 && vaultPickerOpen && (
+        <PpmCanvasVaultPicker
+          loadFiles={loadVaultFiles}
+          onClose={() => setVaultPickerOpen(false)}
+          onPick={placeVaultFile}
+          onUpload={uploadVaultFiles}
+        />
+      )}
+      {/* ── /AF2.1 B ── */}
+      {/* ── AF2.1 B: (B4) подсказка перетаскивания (K4) ── */}
+      {grammarV2 && dropHintCount !== undefined && (
+        <div className="ppm-canvas-drop-hint" role="status">
+          <Download aria-hidden="true" />
+          <span>{fillCanvasTemplate(ppmT(dropHintKey(dropHintCount, currentLocale)), { count: dropHintCount })}</span>
+        </div>
+      )}
+      {/* ── /AF2.1 B ── */}
+      {/* ── AF2.1 B: (B6) картинки data: внутри доски — перенос в Хранилище только по подтверждению (RB13) ── */}
+      {grammarV2 && effectiveCanEdit && inlineImages && (
+        <div className="ppm-canvas-inline-images" role="status">
+          <span>{describeInlineImages(inlineImages, ppmT, formatFileSize, maxUploadBytes)}</span>
+          {inlineImagesActionable(inlineImages) && (
+            <button
+              type="button"
+              className="ppm-canvas-inline-images__move"
+              aria-busy={inlineMigrationBusy || undefined}
+              disabled={inlineMigrationBusy}
+              onClick={() => void migrateInlineImages()}
+            >
+              {ppmT(
+                inlineMigrationWaiting
+                  ? "canvas.inline_images_waiting"
+                  : inlineMigrationBusy
+                    ? "canvas.inline_images_moving"
+                    : inlineImages.targets.length > 0
+                      ? "canvas.inline_images_move"
+                      : "canvas.inline_images_remove_unused"
+              )}
+            </button>
+          )}
+          <button type="button" disabled={inlineMigrationBusy} onClick={dismissInlineImageNotice}>
+            {ppmT("canvas.inline_images_later")}
+          </button>
+        </div>
+      )}
+      {/* ── /AF2.1 B ── */}
+      {/* ── AF2.1 B: (B5) полноэкранный просмотр файла — порталом в body, открывается только по «Просмотр» ── */}
+      {grammarV2 && previewBinding && (
+        <PpmFilePreviewDialog
+          key={previewBinding.binding_id}
+          binding={previewBinding}
+          vaultService={vaultService}
+          onClose={() => setPreviewBinding(undefined)}
+          onDownload={startDownload}
+        />
+      )}
+      {/* ── /AF2.1 B ── */}
       {pendingFileDrop && !planeDropPickerOpen && (
         <FileDropDialog
           error={fileDropError}
@@ -2351,6 +3383,7 @@ function CanvasControls({
   boardId,
   boardInfoFocusRef,
   boardInfoOpen,
+  boards,
   canEdit,
   copiedLocal,
   designV2,
@@ -2405,6 +3438,7 @@ function CanvasControls({
   boardId: string;
   boardInfoFocusRef: { current: boolean };
   boardInfoOpen: boolean;
+  boards: TPpmCanvasBoard[];
   canEdit: boolean;
   copiedLocal: boolean;
   designV2: boolean;
@@ -2463,6 +3497,13 @@ function CanvasControls({
   const editor = useEditor();
   const ppmT = usePpmTranslation();
   const projectionContext = useContext(PpmWorkItemProjectionContext);
+  // AF2.1 B3: «Новый документ»/«Документ PPM» живут в PpmCanvasEditor (createPage/openPagePicker close over its
+  // service/state); CanvasControls only reaches them through the context, like the note card does.
+  const contentActions = useContext(PpmCanvasContentActionsContext);
+  // AF2.1 B (final): «Из проекта → Файл/Git-объект» — выбор файла и переход живут в PpmCanvasEditor, как у B3.
+  const projectSources = useContext(PpmCanvasProjectSourcesContext);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [boardPickerOpen, setBoardPickerOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const boardInfoToggleRef = useRef<HTMLButtonElement>(null);
   const nodes = useValue(
@@ -2473,7 +3514,20 @@ function CanvasControls({
         .map((shape) => ({ parsed: parseSerializedPpmCanvasNode(shape.props.node), shape })),
     [editor]
   );
+  // ── AF2.1 R: (R5) one object rule for the «Доска · Объектов: N» pill and the «Объекты» list (regression #6). ──
+  const grammarV2 = usePpmCanvasGrammarV2();
   const shapeCount = useValue("ppm canvas shape count", () => editor.getCurrentPageShapes().length, [editor]);
+  const countedShapes = useValue(
+    "ppm canvas counted native shapes",
+    () =>
+      editor
+        .getCurrentPageShapes()
+        .filter((shape) => shape.type !== PPM_CANVAS_SHAPE_TYPE && isCountedCanvasShape(shape))
+        .map((shape) => ({ id: shape.id, label: nativeShapeLabel(editor, shape) })),
+    [editor]
+  );
+  const objectCount = grammarV2 ? countedShapes.length + nodes.length : nodes.length;
+  // ── /AF2.1 R ──
   const selectedShapeIds = useValue("ppm canvas selected shapes", () => editor.getSelectedShapeIds(), [editor]);
   const toolId = useValue("ppm canvas tool", () => editor.getCurrentToolId(), [editor]);
   const orchestratorRunVersions = useMemo(
@@ -2514,9 +3568,14 @@ function CanvasControls({
         case "select":
           editor.setCurrentTool("select");
           break;
-        case "add-note":
-          if (canEdit) createNode(editor, authorId, "note", ppmT("canvas.note_title"));
+        case "add-note": {
+          if (!canEdit) break;
+          const addNote = () => createNode(editor, authorId, "note", ppmT("canvas.note_title"));
+          // AF2.1 B (final): новая заметка v2 сразу в правке, как стикер (рейка, палитра, Shift+N); v1 — как в UX1.1.
+          if (grammarV2) createNoteInEditMode(editor, addNote);
+          else addNote();
           break;
+        }
         case "add-document":
           if (canEdit) createNode(editor, authorId, "document", ppmT("canvas.document_title"));
           break;
@@ -2525,6 +3584,30 @@ function CanvasControls({
           break;
         case "add-table":
           if (canEdit) createNode(editor, authorId, "table", ppmT("canvas.table_title"));
+          break;
+        case "add-code":
+          if (canEdit) createNode(editor, authorId, "code", ppmT("canvas.code_title"));
+          break;
+        case "add-group":
+          if (canEdit) createNode(editor, authorId, "group", ppmT("canvas.group_title"));
+          break;
+        case "add-frame":
+          if (canEdit) createNode(editor, authorId, "frame", ppmT("canvas.frame_title"));
+          break;
+        case "add-board-link":
+          if (canEdit) setBoardPickerOpen(true);
+          break;
+        case "add-work-item":
+          if (canEdit) setPickerOpen(true);
+          break;
+        case "add-work-items-view":
+          if (canEdit) createNode(editor, authorId, "work_items_view", ppmT("canvas.work_items_view_title"));
+          break;
+        case "add-diagram":
+          if (canEdit) createNode(editor, authorId, "diagram", ppmT("canvas.diagram_title"));
+          break;
+        case "add-deck":
+          if (canEdit) createNode(editor, authorId, "deck", ppmT("canvas.deck_title"));
           break;
         case "draw-rectangle":
         case "draw-ellipse":
@@ -2562,6 +3645,47 @@ function CanvasControls({
         case "semantic-edges":
           if (!semanticPanelOpen) onOpenSemanticPanel();
           break;
+        // ── AF2.1 R: tool commands (sticky, hand, shapes menu, semantic links) — line R fills these cases ──
+        case "add-sticky":
+          if (canEdit) createPpmSticky(editor);
+          break;
+        case "open-shapes":
+          break;
+        case "select-hand":
+          editor.setCurrentTool("hand");
+          break;
+        case "draw-geo":
+          if (canEdit && detail.geo) {
+            editor.setStyleForNextShapes(GeoShapeGeoStyle, detail.geo);
+            editor.setCurrentTool("geo");
+          }
+          break;
+        case "open-board-panel":
+          onToggleBoardInfo();
+          break;
+        case "open-semantic-edges":
+          if (!semanticPanelOpen) onOpenSemanticPanel();
+          break;
+        // ── /AF2.1 R ──
+        // ── AF2.1 B: content commands (document page, PPM document, list, file, Git object) — line B fills ──
+        case "add-document-page":
+          if (canEdit) void contentActions.createPage();
+          break;
+        // (final) «Из проекта» линии B: «Документ PPM», «Файл» (файл Хранилища или с компьютера), «Git-объект» (страница
+        // кода проекта) — один диспетчер, у каждого пункта настоящее действие (files-vault-picker.test.ts).
+        case "add-page-ref":
+        case "add-file":
+        case "add-git":
+          runProjectSourceCommand(detail.command, canEdit, {
+            openPagePicker: contentActions.openPagePicker,
+            openProjectCode: projectSources.openProjectCode,
+            openVaultPicker: projectSources.openVaultPicker,
+          });
+          break;
+        case "add-list":
+          if (canEdit) createNode(editor, authorId, "checklist", ppmT("canvas.checklist_title"));
+          break;
+        // ── /AF2.1 B ──
         case "undo":
           if (canEdit) editor.undo();
           break;
@@ -2598,7 +3722,20 @@ function CanvasControls({
     };
     window.addEventListener(PPM_CANVAS_COMMAND_EVENT, onCommand);
     return () => window.removeEventListener(PPM_CANVAS_COMMAND_EVENT, onCommand);
-  }, [authorId, boardId, canEdit, editor, onOpenSemanticPanel, onOpenTasksPanel, ppmT, semanticPanelOpen]);
+  }, [
+    authorId,
+    boardId,
+    canEdit,
+    contentActions,
+    editor,
+    grammarV2,
+    onOpenSemanticPanel,
+    onOpenTasksPanel,
+    onToggleBoardInfo,
+    ppmT,
+    projectSources,
+    semanticPanelOpen,
+  ]);
 
   const statusLabelKey: TPpmTranslationKey = recoveryMode
     ? "canvas.recovery_title"
@@ -2768,9 +3905,9 @@ function CanvasControls({
   const objectsList = (
     <details>
       <summary>
-        {ppmT("canvas.objects")} · {nodes.length}
+        {ppmT("canvas.objects")} · {objectCount}
       </summary>
-      {nodes.length === 0 ? (
+      {objectCount === 0 ? (
         <p>{ppmT("canvas.objects_empty")}</p>
       ) : (
         <ul>
@@ -2790,6 +3927,15 @@ function CanvasControls({
               </button>
             </li>
           ))}
+          {grammarV2 &&
+            countedShapes.map(({ id, label }) => (
+              <li key={id}>
+                <button type="button" onClick={() => focusShape(editor, id)}>
+                  <Frame aria-hidden="true" />
+                  <span>{label.text ? `${ppmT(label.key)} · ${label.text}` : ppmT(label.key)}</span>
+                </button>
+              </li>
+            ))}
         </ul>
       )}
     </details>
@@ -2797,8 +3943,33 @@ function CanvasControls({
 
   return (
     <>
+      {pickerOpen && canEdit && (
+        <WorkItemPicker
+          onAdd={async (source) => {
+            await onBindWorkItem(source);
+            setPickerOpen(false);
+          }}
+          onClose={() => setPickerOpen(false)}
+          onCreate={async (name) => {
+            await onCreateWorkItem(name);
+            setPickerOpen(false);
+          }}
+          onSearch={onSearchWorkItems}
+        />
+      )}
+      {boardPickerOpen && canEdit && (
+        <BoardLinkPicker
+          boards={boards.filter((board) => board.status === "active" && board.board_id !== boardId)}
+          onAdd={(board) => {
+            createNode(editor, authorId, "board_link", board.name, board.board_id);
+            setBoardPickerOpen(false);
+          }}
+          onClose={() => setBoardPickerOpen(false)}
+        />
+      )}
       {tasksPanelOpen && (
         <WorkItemPicker
+          variant="panel"
           addDisabled={!canEdit}
           createDisabled={!canEdit}
           onAdd={async (source) => {
@@ -2902,7 +4073,7 @@ function CanvasControls({
                 <Frame aria-hidden="true" />
                 <span>
                   {ppmT("canvas.board_info")} ·{" "}
-                  {ppmT("canvas.board_info_objects").replace("{count}", String(shapeCount))}
+                  {ppmT("canvas.board_info_objects").replace("{count}", String(objectCount))}
                 </span>
                 <ChevronDown aria-hidden="true" />
               </button>
@@ -3011,6 +4182,7 @@ function WorkItemPicker({
   onCreate,
   onSearch,
   title,
+  variant = "picker",
 }: {
   addDisabled?: boolean;
   createDisabled?: boolean;
@@ -3019,6 +4191,7 @@ function WorkItemPicker({
   onCreate: (name: string) => Promise<void>;
   onSearch: (query: string, cursor?: string) => Promise<TPpmProjectionSearchResponse>;
   title?: string;
+  variant?: "picker" | "panel";
 }) {
   const ppmT = usePpmTranslation();
   const [query, setQuery] = useState("");
@@ -3093,7 +4266,10 @@ function WorkItemPicker({
   };
 
   return (
-    <section className="ppm-work-item-picker" aria-label={title ?? ppmT("canvas.add_work_item")}>
+    <section
+      className={variant === "panel" ? "ppm-work-item-picker ppm-work-item-picker--panel" : "ppm-work-item-picker"}
+      aria-label={title ?? ppmT("canvas.add_work_item")}
+    >
       <header>
         <div>
           <strong>{title ?? ppmT("canvas.add_work_item")}</strong>
@@ -3113,9 +4289,50 @@ function WorkItemPicker({
         />
       </label>
       <div className="ppm-work-item-picker__results">
-        {results.map((source) => (
-          <div className="ppm-work-item-picker__row" key={source.identity.entity_id}>
-            <button type="button" disabled={addDisabled || Boolean(actionId)} onClick={() => void add(source)}>
+        {results.map((source) =>
+          variant === "panel" ? (
+            <div className="ppm-work-item-picker__row" key={source.identity.entity_id}>
+              <button type="button" disabled={addDisabled || Boolean(actionId)} onClick={() => void add(source)}>
+                <span>
+                  <strong>{source.display.title}</strong>
+                  <small>
+                    {source.identity.identifier} · {source.display.state?.name ?? ppmT("canvas.work_item_no_state")}
+                  </small>
+                </span>
+                <Plus aria-hidden="true" />
+              </button>
+              {source.identity.source_url && (
+                <button
+                  type="button"
+                  className="ppm-work-item-picker__copy"
+                  aria-label={ppmT(
+                    copiedTaskId === source.identity.entity_id ? "canvas.task_link_copied" : "canvas.copy_task_link"
+                  )}
+                  title={ppmT(
+                    copiedTaskId === source.identity.entity_id ? "canvas.task_link_copied" : "canvas.copy_task_link"
+                  )}
+                  onClick={async () => {
+                    try {
+                      const sourceUrl = source.identity.source_url;
+                      if (!sourceUrl) return;
+                      await navigator.clipboard.writeText(new URL(sourceUrl, window.location.origin).toString());
+                      setCopiedTaskId(source.identity.entity_id);
+                    } catch {
+                      setError(true);
+                    }
+                  }}
+                >
+                  <Copy aria-hidden="true" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={addDisabled || Boolean(actionId)}
+              key={source.identity.entity_id}
+              onClick={() => void add(source)}
+            >
               <span>
                 <strong>{source.display.title}</strong>
                 <small>
@@ -3124,32 +4341,8 @@ function WorkItemPicker({
               </span>
               <Plus aria-hidden="true" />
             </button>
-            {source.identity.source_url && (
-              <button
-                type="button"
-                className="ppm-work-item-picker__copy"
-                aria-label={ppmT(
-                  copiedTaskId === source.identity.entity_id ? "canvas.task_link_copied" : "canvas.copy_task_link"
-                )}
-                title={ppmT(
-                  copiedTaskId === source.identity.entity_id ? "canvas.task_link_copied" : "canvas.copy_task_link"
-                )}
-                onClick={async () => {
-                  try {
-                    const sourceUrl = source.identity.source_url;
-                    if (!sourceUrl) return;
-                    await navigator.clipboard.writeText(new URL(sourceUrl, window.location.origin).toString());
-                    setCopiedTaskId(source.identity.entity_id);
-                  } catch {
-                    setError(true);
-                  }
-                }}
-              >
-                <Copy aria-hidden="true" />
-              </button>
-            )}
-          </div>
-        ))}
+          )
+        )}
         {!loading && results.length === 0 && <p>{ppmT("canvas.work_item_empty_search")}</p>}
         {loading && <p>{ppmT("canvas.work_item_searching")}</p>}
       </div>
@@ -3170,6 +4363,46 @@ function WorkItemPicker({
         </button>
       )}
       {error && <p className="ppm-work-item-picker__error">{ppmT("canvas.work_item_action_error")}</p>}
+    </section>
+  );
+}
+
+function BoardLinkPicker({
+  boards,
+  onAdd,
+  onClose,
+}: {
+  boards: TPpmCanvasBoard[];
+  onAdd: (board: TPpmCanvasBoard) => void;
+  onClose: () => void;
+}) {
+  const ppmT = usePpmTranslation();
+  const { currentLocale } = useTranslation();
+  return (
+    <section className="ppm-work-item-picker ppm-board-link-picker" aria-label={ppmT("canvas.add_board_link")}>
+      <header>
+        <div>
+          <strong>{ppmT("canvas.add_board_link")}</strong>
+          <span>{ppmT("canvas.boards_description")}</span>
+        </div>
+        <button type="button" aria-label={ppmT("canvas.close_picker")} onClick={onClose}>
+          <X aria-hidden="true" />
+        </button>
+      </header>
+      <div className="ppm-work-item-picker__results">
+        {boards.map((board) => (
+          <button type="button" key={board.board_id} onClick={() => onAdd(board)}>
+            <span>
+              <strong>{board.name}</strong>
+              <small>
+                {ppmT("canvas.board_updated")} {formatPpmTimeAgo(board.updated_at, currentLocale)}
+              </small>
+            </span>
+            <Plus aria-hidden="true" />
+          </button>
+        ))}
+        {boards.length === 0 && <p>{ppmT("canvas.boards_empty_search")}</p>}
+      </div>
     </section>
   );
 }
@@ -3455,6 +4688,23 @@ function getCanvasLocalStorage(): Storage | undefined {
   }
 }
 
+/**
+ * «На холст»: адрес без параметров ссылки (takeCanvasLinkParams); history.state роутера и hash сохраняются, как в
+ * workspace.tsx. false — браузер отказал (Safari ограничивает частоту replaceState): тогда ссылку не трогаем вовсе.
+ */
+function replaceCanvasSearch(search: string): boolean {
+  try {
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${search}${window.location.hash}`
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function downloadCanvasSnapshot(boardId: string, snapshot: TPpmCanvasSnapshot): void {
   const payload = createPpmCanvasBoardExport(snapshot);
   downloadCanvasJson(`ppm-board-${boardId}.json`, JSON.stringify(payload, null, 2));
@@ -3476,7 +4726,7 @@ function createNode(
   kind: TPpmCanvasOwnedNodeKind,
   title: string,
   targetBoardId?: string
-) {
+): TLShapeId {
   const node = createPpmCanvasNode({ authorId, kind, targetBoardId, title });
   const position = findFreeNodePosition(editor, node.visual.width, node.visual.height);
   const id = createShapeId();
@@ -3501,6 +4751,8 @@ function createNode(
       ]),
       { immediate: true, targetZoom: 1 }
     );
+  // AF2.1 B (final): новую заметку v2 сразу открывают в правке (createNoteInEditMode) — ей нужен id фигуры.
+  return id;
 }
 
 function findFreeNodePosition(editor: Editor, width: number, height: number) {
@@ -3573,6 +4825,30 @@ function findFreeNodePosition(editor: Editor, width: number, height: number) {
   for (const candidate of candidates) if (!best || candidate.score > best.score) best = candidate;
   return best ?? { x: center.x - width / 2, y: center.y - height / 2, inViewport: true };
 }
+
+// ── AF2.1 R: (R5) a readable name of a native shape in the «Объекты» list. ──
+function nativeShapeLabel(editor: Editor, shape: TLShape): { key: TPpmTranslationKey; text: string } {
+  const props = shape.props as {
+    richText?: Parameters<typeof renderPlaintextFromRichText>[1];
+    name?: string;
+    geo?: string;
+  };
+  const text = props.richText
+    ? renderPlaintextFromRichText(editor, props.richText).trim().slice(0, 80)
+    : (props.name ?? "");
+  const key: TPpmTranslationKey =
+    shape.type === "note"
+      ? "canvas.rail.sticky"
+      : shape.type === "text"
+        ? "canvas.rail.text"
+        : shape.type === "frame"
+          ? "canvas.rail.frame"
+          : shape.type === "geo" && props.geo && geoLabelKey(props.geo)
+            ? geoLabelKey(props.geo)!
+            : "canvas.rail.object";
+  return { key, text };
+}
+// ── /AF2.1 R ──
 
 function createAgentAnswerNodes(
   editor: Editor,

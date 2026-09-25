@@ -622,21 +622,11 @@
   color: var(--ppm-color-icon-subtle, var(--txt-tertiary));
 }
 
-:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--yellow .ppm-canvas-node__type-icon {
-  color: var(--ppm-type-file, var(--txt-tertiary));
-}
-
-:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--cyan .ppm-canvas-node__type-icon {
-  color: var(--ppm-type-task, var(--txt-tertiary));
-}
-
-:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--green .ppm-canvas-node__type-icon {
-  color: var(--ppm-type-decision, var(--txt-tertiary));
-}
-
-:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node--violet .ppm-canvas-node__type-icon {
-  color: var(--ppm-type-doc, var(--txt-tertiary));
-}
+/* AF2.1 R2 (final-fix M-2/R2): the 4 old-name rules that used to colour the type icon here (--yellow/--cyan/--green/
+   --violet → --ppm-type-*) are fully overridden — same (0,3,0) specificity, and canvas-toolkit.css's
+   `.ppm-canvas-node .ppm-canvas-node__type-icon { color: var(--ppm-card-accent, …) }` loads after this file
+   (af21-foundation.test.ts "imports the lines' stylesheets after canvas-v2.css") and covers all 9 palette colours via
+   --ppm-card-accent. Removed as dead; v1 never loaded this v2-gated block either way. */
 
 :where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-node__chrome button {
   color: var(--ppm-color-icon-subtle, var(--txt-tertiary));

@@ -1,4 +1,5 @@
 from django.http import FileResponse, HttpResponseRedirect
+from django.utils.http import content_disposition_header
 from rest_framework import status
 from rest_framework.exceptions import AuthenticationFailed, NotAuthenticated
 from rest_framework.permissions import IsAuthenticated
@@ -34,6 +35,7 @@ from .services import (
 )
 from .exporting import build_vault_export
 from .links import entry_path, serialize_link
+from .preview import PreviewStorageUnavailable, build_entry_preview
 from .storage import open_private_object, private_object_url
 from .transfers import (
     export_markdown_to_page,
@@ -327,15 +329,25 @@ class PpmVaultFileContentView(PpmVaultAPIView):
         if entry.kind in {PpmVaultEntryKind.FOLDER, PpmVaultEntryKind.MARKDOWN}:
             raise PpmVaultConflict(code="VAULT_INVALID_FILE_TYPE", message="У материала нет бинарного файла.")
         version = entry.versions.get(version=entry.version)
-        signed_url = private_object_url(object_key=version.object_key, filename=entry.name)
+        download = request.query_params.get("download") == "1"
+        signed_url = private_object_url(
+            object_key=version.object_key,
+            filename=entry.name,
+            **({"disposition": "attachment"} if download else {}),
+        )
         if signed_url:
             return HttpResponseRedirect(signed_url)
         file_obj = open_private_object(version.object_key)
         if file_obj is None:
             raise PpmVaultConflict(code="VAULT_STORAGE_FAILED", message="Файл временно недоступен.")
         response = FileResponse(file_obj, content_type=entry.mime_type or "application/octet-stream")
-        disposition = "inline" if entry.kind in {PpmVaultEntryKind.PDF, PpmVaultEntryKind.IMAGE} else "attachment"
-        response["Content-Disposition"] = f'{disposition}; filename="{entry.id}.{entry.extension}"'
+        if download:
+            # Real client-facing filename (Cyrillic/spaces safe) — only for the explicit download request;
+            # the default response below keeps the identifier-based filename unchanged.
+            response["Content-Disposition"] = content_disposition_header(as_attachment=True, filename=entry.name)
+        else:
+            disposition = "inline" if entry.kind in {PpmVaultEntryKind.PDF, PpmVaultEntryKind.IMAGE} else "attachment"
+            response["Content-Disposition"] = f'{disposition}; filename="{entry.id}.{entry.extension}"'
         response["Cache-Control"] = "private, no-store"
         response["Content-Security-Policy"] = "default-src 'none'; sandbox"
         response["X-Content-Type-Options"] = "nosniff"
@@ -365,6 +377,23 @@ class PpmVaultFileContentView(PpmVaultAPIView):
             user_id=request.user.id,
         )
         return Response(serialize_entry(entry))
+
+
+class PpmVaultFilePreviewView(PpmVaultAPIView):
+    def get(self, request, workspace_id, project_id, entry_id):
+        _, vault, denied = self.require_access(request, workspace_id, project_id)
+        if denied:
+            return denied
+        entry = self.get_entry(vault=vault, entry_id=entry_id)
+        if entry.kind == PpmVaultEntryKind.FOLDER:
+            raise PpmVaultConflict(code="VAULT_INVALID_FILE_TYPE", message="У папки нет предпросмотра.")
+        try:
+            payload = build_entry_preview(entry)
+        except PreviewStorageUnavailable as exc:
+            raise PpmVaultConflict(code="VAULT_STORAGE_FAILED", message="Файл временно недоступен.") from exc
+        response = Response(payload)
+        response["Cache-Control"] = "private, no-store"
+        return response
 
 
 class PpmVaultBacklinksView(PpmVaultAPIView):

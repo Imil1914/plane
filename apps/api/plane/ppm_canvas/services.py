@@ -6,7 +6,7 @@ import json
 import uuid
 
 from django.db import IntegrityError, transaction
-from django.db.models import Count, F, Max, Q
+from django.db.models import Case, Count, F, IntegerField, Max, Q, Value, When
 from django.utils.html import strip_tags
 from django.utils import timezone
 from rest_framework import serializers
@@ -622,6 +622,69 @@ def serialize_missing_work_item(*, binding):
     }
 
 
+def _user_is_restricted_guest(*, project, user):
+    """Mirrors Plane's page guest rule (app/views/page/base.py list/retrieve ~294-304, ~212-221):
+    a project GUEST (role=5) who is active is restricted to pages they own themselves, unless the
+    project opted into guest_view_all_features. Keeps ppm_canvas page visibility in step with it."""
+    if project.guest_view_all_features:
+        return False
+    role = (
+        ProjectMember.objects.filter(
+            workspace_id=project.workspace_id,
+            project_id=project.id,
+            member_id=user.id,
+            is_active=True,
+            deleted_at__isnull=True,
+        )
+        .values_list("role", flat=True)
+        .first()
+    )
+    return role == ROLE.GUEST.value
+
+
+def search_project_pages(*, project, user, query, cursor, limit):
+    """Pages the user may attach to a board: public, top-level pages only (matching Plane's own
+    page list). A private page is never offered here, even the requester's own one, because a
+    bound card's title becomes part of the board's shared snapshot for every viewer. A restricted
+    guest (see `_user_is_restricted_guest`) is further limited to public pages they own themselves,
+    matching Plane's guest rule."""
+    queryset = Page.objects.filter(
+        workspace_id=project.workspace_id,
+        archived_at__isnull=True,
+        parent__isnull=True,
+        access=Page.PUBLIC_ACCESS,
+        project_pages__project_id=project.id,
+        project_pages__workspace_id=project.workspace_id,
+        project_pages__deleted_at__isnull=True,
+    ).select_related("owned_by")
+    if _user_is_restricted_guest(project=project, user=user):
+        queryset = queryset.filter(owned_by_id=user.id)
+    ordering = ["-updated_at", "-id"]
+    if query:
+        queryset = queryset.filter(Q(name__icontains=query) | Q(description_stripped__icontains=query)).annotate(
+            name_rank=Case(When(name__icontains=query, then=Value(0)), default=Value(1), output_field=IntegerField())
+        )
+        ordering.insert(0, "name_rank")
+    page = list(queryset.order_by(*ordering)[cursor : cursor + limit + 1])
+    has_more = len(page) > limit
+    return page[:limit], str(cursor + limit) if has_more else None
+
+
+def serialize_page_search_result(*, page, project, access):
+    owner = page.owned_by
+    return {
+        **serialize_content_source(source=page, entity_type=PpmCanvasEntityType.PAGE, project=project, access=access),
+        "page": {
+            "updated_at": page.updated_at.isoformat(),
+            "owned_by": {
+                "id": str(page.owned_by_id),
+                "display_name": (owner.display_name or owner.first_name or "") if owner else "",
+            },
+            "access": "private" if page.access == Page.PRIVATE_ACCESS else "public",
+        },
+    }
+
+
 def _content_source_url(*, project, entity_type, entity_id):
     if entity_type == PpmCanvasEntityType.PAGE:
         return f"/{project.workspace.slug}/projects/{project.id}/pages/{entity_id}"
@@ -636,7 +699,12 @@ def _content_preview_url(*, project, entity_type, entity_id):
     return None
 
 
-def get_content_source(*, project, user, entity_type, entity_id):
+def get_content_source(*, project, user, entity_type, entity_id, restricted_guest=None):
+    """`restricted_guest` lets a caller that resolves many bindings for the same (project, user) in
+    one request (see `get_canvas_bindings_payload`) pass in an already-computed
+    `_user_is_restricted_guest` result instead of paying one ProjectMember query per PAGE binding.
+    Leave it `None` (default) for a single-lookup call site; it is then computed here, same as
+    before."""
     if entity_type == PpmCanvasEntityType.PAGE:
         project_page = (
             ProjectPage.objects.filter(
@@ -654,6 +722,12 @@ def get_content_source(*, project, user, entity_type, entity_id):
         page = project_page.page
         if page.access == Page.PRIVATE_ACCESS and page.owned_by_id != user.id:
             return None
+        if page.owned_by_id != user.id:
+            is_restricted = (
+                _user_is_restricted_guest(project=project, user=user) if restricted_guest is None else restricted_guest
+            )
+            if is_restricted:
+                return None
         return page
 
     if entity_type == PpmCanvasEntityType.ATTACHMENT:
@@ -948,7 +1022,7 @@ def serialize_missing_git(*, binding):
     }
 
 
-def serialize_binding(*, binding, access, user, project=None):
+def serialize_binding(*, binding, access, user, project=None, restricted_guest=None):
     project = project or get_project(workspace_id=binding.workspace_id, project_id=binding.project_id)
     if project and binding.entity_type == PpmCanvasEntityType.WORK_ITEM:
         issue = get_work_item(project=project, user=user, entity_id=binding.entity_id)
@@ -972,6 +1046,7 @@ def serialize_binding(*, binding, access, user, project=None):
             user=user,
             entity_type=binding.entity_type,
             entity_id=binding.entity_id,
+            restricted_guest=restricted_guest,
         )
         source = (
             serialize_content_source(
@@ -1009,6 +1084,9 @@ def _serialize_resolved_binding(*, binding, source):
 def get_canvas_bindings_payload(*, board, access, user):
     canvas = board.canvas
     project = get_project(workspace_id=canvas.workspace_id, project_id=canvas.project_id)
+    # Computed once per request here rather than once per PAGE binding inside get_content_source:
+    # opening a board with many page cards must not add one ProjectMember query per card.
+    restricted_guest = _user_is_restricted_guest(project=project, user=user) if project else None
     bindings = list(board.bindings.filter(status=PpmCanvasBindingStatus.ACTIVE))
     work_item_ids = [binding.entity_id for binding in bindings if binding.entity_type == PpmCanvasEntityType.WORK_ITEM]
     issues_by_id = {}
@@ -1031,7 +1109,15 @@ def get_canvas_bindings_payload(*, board, access, user):
             )
             payload.append(_serialize_resolved_binding(binding=binding, source=source))
         else:
-            payload.append(serialize_binding(binding=binding, access=access, user=user, project=project))
+            payload.append(
+                serialize_binding(
+                    binding=binding,
+                    access=access,
+                    user=user,
+                    project=project,
+                    restricted_guest=restricted_guest,
+                )
+            )
     return payload
 
 

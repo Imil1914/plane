@@ -1,0 +1,1297 @@
+/*
+ * AF2.1 line B: note (Markdown, KaTeX), code block, document, list, file previews (K3/K4).
+ * Every selector starts with :where(html[data-ppm-design="v2"]) — облик v1 не меняется (af21-foundation.test.ts).
+ * Created empty by F2; imported after canvas-toolkit.css.
+ */
+
+/* AF2.1 B1 · Заметка v2 (K3). Все селекторы — только облик v2 и рабочее пространство. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem 1rem;
+  overflow: hidden;
+  color: var(--ppm-color-text, var(--txt-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card__actions {
+  display: inline-flex;
+  gap: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card__actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: var(--ppm-control-height-sm, 1.75rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card__actions button:hover {
+  color: var(--ppm-color-text, var(--txt-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card__actions svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown h1,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown h2,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown h3,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown h4,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown h5,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown h6 {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown p,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown ul,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown ol,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown blockquote,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown table {
+  margin: 0 0 0.5rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown ul,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown ol {
+  padding-left: 1.25rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown ul {
+  list-style: disc;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown ol {
+  list-style: decimal;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown a {
+  color: var(--ppm-color-link, var(--txt-accent-primary));
+  text-decoration: underline;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown blockquote {
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--ppm-color-border, var(--border-subtle));
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown th,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown td {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  text-align: left;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown .ppm-note-math {
+  margin: 0.5rem 0;
+  overflow-x: auto;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-markdown .ppm-note-code {
+  margin: 0 0 0.5rem;
+  padding: 0.5rem 0.625rem;
+  overflow-x: auto;
+  border-radius: var(--ppm-radius-sm, 0.25rem);
+  background: var(--ppm-color-surface-2, var(--bg-layer-2));
+  font-family: var(--ppm-font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card__source {
+  min-height: 0;
+  flex: 1 1 auto;
+  resize: none;
+  font-family: var(--ppm-font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card__title-input {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card__hint,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card__empty,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card__notice {
+  margin: 0;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+}
+
+/* B1, раунд 1: заметка длиннее 10 000 знаков — текстом без разбора, пробелы и переводы строк сохранены. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-plain {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* B1, раунд 1: уведомление действий содержимого — своё место; если открыто и уведомление о перетаскивании файлов
+   (canvas.css, справа внизу), встаёт над ним, а не поверх. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-content-notice {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 390;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  width: min(26rem, calc(100% - 2rem));
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  box-shadow: var(--ppm-shadow-popover, 0 12px 36px rgb(15 23 42 / 0.18));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-canvas-file-drop-notice
+  ~ .ppm-canvas-content-notice {
+  bottom: 5.5rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-content-notice span {
+  flex: 1;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-content-notice button,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-content-notice svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* AF2.1 B2 · Блок кода (K3) и подсветка hljs для блока и заметки. Палитра — своя, светлая/тёмная, ≥ 4.5:1. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card {
+  --ppm-code-bg: #f6f8fa;
+  --ppm-code-text: #1f2328;
+  --ppm-code-gutter: #6e7781;
+  --ppm-code-keyword: #cf222e;
+  --ppm-code-string: #0a3069;
+  --ppm-code-number: #0550ae;
+  --ppm-code-comment: #57606a;
+  --ppm-code-title: #8250df;
+  --ppm-code-builtin: #953800;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block[data-theme="dark"],
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card[data-code-theme="dark"] {
+  --ppm-code-bg: #0d1117;
+  --ppm-code-text: #e6edf3;
+  --ppm-code-gutter: #8b949e;
+  --ppm-code-keyword: #ff7b72;
+  --ppm-code-string: #a5d6ff;
+  --ppm-code-number: #79c0ff;
+  --ppm-code-comment: #8b949e;
+  --ppm-code-title: #d2a8ff;
+  --ppm-code-builtin: #ffa657;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  color: var(--ppm-code-text, #1f2328);
+  background: var(--ppm-code-bg, #f6f8fa);
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.375rem;
+  border-bottom: 1px solid var(--ppm-color-border-subtle, var(--border-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__tool {
+  display: inline-grid;
+  width: var(--ppm-control-height-sm, 1.75rem);
+  height: var(--ppm-control-height-sm, 1.75rem);
+  place-items: center;
+  border-radius: var(--ppm-radius-sm, 0.25rem);
+  color: inherit;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__tool svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__language {
+  height: var(--ppm-control-height-sm, 1.75rem);
+  padding: 0 0.375rem;
+  border-radius: var(--ppm-radius-sm, 0.25rem);
+  color: inherit;
+  background: transparent;
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__menu-anchor {
+  position: relative;
+  margin-left: auto;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__menu {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  display: grid;
+  min-width: 11rem;
+  padding: 0.25rem;
+  border: 1px solid var(--ppm-color-border-subtle, var(--border-subtle));
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--ppm-control-height-sm, 1.75rem);
+  padding: 0 0.5rem;
+  border-radius: var(--ppm-radius-sm, 0.25rem);
+  font-size: 0.75rem;
+  text-align: left;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__menu button[aria-checked="true"] {
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__copied {
+  font-size: 0.6875rem;
+  color: var(--ppm-code-gutter, #6e7781);
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__body {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  font-family: var(--ppm-font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  line-height: 1.5rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__gutter {
+  position: sticky;
+  left: 0;
+  margin: 0;
+  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+  color: var(--ppm-code-gutter, #6e7781);
+  background: var(--ppm-code-bg, #f6f8fa);
+  list-style: none;
+  text-align: right;
+  user-select: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__code {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__code > pre,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__code > textarea {
+  grid-area: 1 / 1;
+  margin: 0;
+  padding: 0.5rem 0.75rem 0.5rem 0.25rem;
+  border: 0;
+  font: inherit;
+  line-height: inherit;
+  tab-size: 2;
+  white-space: pre;
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-code-block__body[data-wrap]
+  .ppm-code-block__code
+  > pre,
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-code-block__body[data-wrap]
+  .ppm-code-block__code
+  > textarea {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__source {
+  overflow: hidden;
+  resize: none;
+  color: transparent;
+  background: transparent;
+  caret-color: var(--ppm-code-text, #1f2328);
+  outline: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block__line {
+  display: inline;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-keyword,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-selector-tag,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-doctag,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-keyword,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-selector-tag,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-doctag {
+  color: var(--ppm-code-keyword, #cf222e);
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-string,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-regexp,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-meta .hljs-string,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-string,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-regexp,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-meta .hljs-string {
+  color: var(--ppm-code-string, #0a3069);
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-number,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-literal,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-attr,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-variable,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-attribute,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-number,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-literal,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-attr,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-variable,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-attribute {
+  color: var(--ppm-code-number, #0550ae);
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-comment,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-quote,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-meta,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-comment,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-quote,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-meta {
+  color: var(--ppm-code-comment, #57606a);
+  font-style: italic;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-title,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-section,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-name,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-title,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-section,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-name {
+  color: var(--ppm-code-title, #8250df);
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-built_in,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-type,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-code-block .hljs-params,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-built_in,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-type,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .hljs-params {
+  color: var(--ppm-code-builtin, #953800);
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-note-card .ppm-note-code {
+  color: var(--ppm-code-text, #1f2328);
+  background: var(--ppm-code-bg, #f6f8fa);
+}
+
+/* AF2.1 B3 · Документ PPM: превью описания и выбор документа. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__page-preview {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  /* M13 (раунд 1): превью — только для взгляда; ссылки внутри description_html не должны быть кликабельны —
+     открывать документ можно только через «Открыть ↗». */
+  pointer-events: none;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__page-preview h1,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__page-preview h2,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__page-preview h3,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__page-preview p,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__page-preview ul,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__page-preview ol {
+  margin: 0;
+  font-size: inherit;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-content-backdrop {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: var(--ppm-color-backdrop, rgb(0 0 0 / 0.4));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-page-picker {
+  display: grid;
+  width: min(32rem, 100%);
+  max-height: min(36rem, 90vh);
+  gap: 0.5rem;
+  padding: 1rem;
+  overflow: auto;
+  border-radius: var(--ppm-radius-lg, 0.75rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-page-picker header,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-page-picker__search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-page-picker__search input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* M5 (раунд 1): значок загрузки крутится — та же анимация, что и у остальных спиннеров холста (canvas.css). */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-page-picker__spinner {
+  width: 0.9rem;
+  height: 0.9rem;
+  animation: ppm-canvas-spin 0.9s linear infinite;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-page-picker li button {
+  display: flex;
+  width: 100%;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  border-radius: var(--ppm-radius-sm, 0.25rem);
+  text-align: left;
+}
+
+/* M5: подсветка пункта под клавиатурной навигацией (стрелки) — семантика listbox/option. */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-page-picker li[aria-selected="true"] button {
+  background: var(--ppm-color-surface-2, var(--bg-layer-2));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-page-picker small {
+  display: block;
+  overflow: hidden;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+}
+
+/* M5: экстракт результата — не более двух строк, чтобы длинные описания не растягивали список. */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-page-picker li small {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* M4: ошибка поиска — отдельно от «ничего не найдено», с кнопкой «Повторить». */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-page-picker__error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--ppm-color-danger-text, var(--txt-danger-primary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-page-picker__error button {
+  text-decoration: underline;
+}
+
+/* AF2.1 B4 · Подсказка перетаскивания (K4): внизу по центру холста, не перехватывает указатель. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-drop-hint {
+  position: absolute;
+  z-index: 330;
+  bottom: 6rem;
+  left: 50%;
+  display: flex;
+  max-width: min(34rem, calc(100% - 2rem));
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  border: 1px solid var(--ppm-color-accent, var(--txt-accent-primary));
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  font-size: 0.8125rem;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-drop-hint svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+  color: var(--ppm-color-accent, var(--txt-accent-primary));
+}
+
+/* AF2.1 B6 · Чек-лист → задачи: «Сделать задачами · N» под пунктами и метка задачи в строке пункта. Строка пункта —
+   сетка на 3 колонки (canvas.css): метка задачи встаёт своей колонкой, а не переносится на новую строку сетки. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-checklist__item {
+  grid-auto-flow: column;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-checklist__convert {
+  margin-top: 0.25rem;
+  color: var(--ppm-color-accent, var(--txt-accent-primary));
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-checklist__convert:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-checklist__task {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.125rem;
+  color: var(--ppm-color-accent, var(--txt-accent-primary));
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] a.ppm-canvas-checklist__task:hover {
+  text-decoration: underline;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-checklist__convert svg,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-checklist__task svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-checklist__convert[aria-busy] svg {
+    animation: ppm-canvas-spin 0.9s linear infinite;
+  }
+}
+
+/* AF2.1 B6 · Картинки data: внутри доски (RB13): подтверждение переноса вверху по центру — не над нижним
+   уведомлением содержимого и не над подсказкой перетаскивания. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inline-images {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 330;
+  top: 3.5rem;
+  left: 50%;
+  display: flex;
+  width: max-content;
+  max-width: min(40rem, calc(100% - 2rem));
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  box-shadow: var(--ppm-shadow-popover, 0 12px 36px rgb(15 23 42 / 0.18));
+  font-size: 0.8125rem;
+  transform: translateX(-50%);
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inline-images span {
+  flex: 1 1 16rem;
+  line-height: 1.45;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inline-images button {
+  flex: none;
+  min-height: var(--ppm-control-height-sm, 1.75rem);
+  padding: 0 0.625rem;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-sm, 0.25rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-canvas-inline-images
+  button.ppm-canvas-inline-images__move {
+  border-color: var(--ppm-color-accent, var(--txt-accent-primary));
+  color: var(--ppm-color-accent, var(--txt-accent-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-inline-images button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+/* AF2.1 B5 · Кнопки файловых карточек и «Доски задач», полноэкранный просмотр (K4). Диалог — портал в body:
+   его селекторы начинаются только с облика v2. Запятых внутри :where() нет: списки селекторов — полными строками. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__action,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-work-items-view__backlog {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: var(--ppm-control-height-sm, 1.75rem);
+  padding: 0 0.5rem;
+  border: 1px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  border-radius: var(--ppm-radius-sm, 0.25rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__action:hover,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-work-items-view__backlog:hover {
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__action:focus-visible,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-work-items-view__backlog:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: var(--ppm-focus-ring, 0 0 0 2px var(--border-accent-strong));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-live-card__action svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+}
+
+/* RB14: подпись «Доска задач» — ручка перетаскивания карточки. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] [data-ppm-drag-handle] {
+  cursor: grab;
+}
+
+/* Раунд 1: «Развернуть доску» — первой в шапке ужатой доски, заметной (акцент), чтобы её не срезал overflow. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-work-items-view__expand {
+  border-color: var(--ppm-color-accent, var(--txt-accent-primary));
+  color: var(--ppm-color-accent-text, var(--txt-accent-primary));
+}
+
+/* Раунд 1: ссылка-действие в уведомлении содержимого (RB9: «Скачать» по ссылке, щелчок пользователя). */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-content-notice__link {
+  flex: none;
+  color: var(--ppm-color-accent-text, var(--txt-accent-primary));
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview {
+  --ppm-code-bg: #f6f8fa;
+  --ppm-code-text: #1f2328;
+  --ppm-code-gutter: #6e7781;
+  --ppm-code-keyword: #cf222e;
+  --ppm-code-string: #0a3069;
+  --ppm-code-number: #0550ae;
+  --ppm-code-comment: #57606a;
+  --ppm-code-title: #8250df;
+  --ppm-code-builtin: #953800;
+  position: relative;
+  display: grid;
+  width: min(72rem, 100%);
+  height: min(52rem, calc(100vh - 2rem));
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-lg, 0.75rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  box-shadow: var(--ppm-shadow-popover, 0 12px 36px rgb(15 23 42 / 0.18));
+}
+
+/* Код и Markdown в просмотре следуют теме приложения (палитра — как у блока кода B2, ≥ 4.5:1). */
+:where(html[data-ppm-design="v2"]) .ppm-file-preview[data-code-theme="dark"] {
+  --ppm-code-bg: #0d1117;
+  --ppm-code-text: #e6edf3;
+  --ppm-code-gutter: #8b949e;
+  --ppm-code-keyword: #ff7b72;
+  --ppm-code-string: #a5d6ff;
+  --ppm-code-number: #79c0ff;
+  --ppm-code-comment: #8b949e;
+  --ppm-code-title: #d2a8ff;
+  --ppm-code-builtin: #ffa657;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__guard {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem 0.625rem 1rem;
+  border-bottom: 1px solid var(--ppm-color-border, var(--border-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__title {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__title strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__type {
+  flex: none;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-family: var(--ppm-font-mono, ui-monospace, monospace);
+  font-size: 0.6875rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: var(--ppm-control-height-sm, 1.75rem);
+  padding: 0 0.625rem;
+  border: 1px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  border-radius: var(--ppm-radius-sm, 0.25rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__close {
+  display: inline-grid;
+  width: var(--ppm-control-height-sm, 1.75rem);
+  height: var(--ppm-control-height-sm, 1.75rem);
+  flex: none;
+  place-items: center;
+  border-radius: var(--ppm-radius-sm, 0.25rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__action:hover,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__close:hover {
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview button:focus-visible,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview a:focus-visible,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview [role="tabpanel"]:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: var(--ppm-focus-ring, 0 0 0 2px var(--border-accent-strong));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__action svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__close svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__body {
+  min-height: 0;
+  padding: 1rem;
+  overflow: auto;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__body[data-state="media"] {
+  display: grid;
+  padding: 0;
+  overflow: hidden;
+  background: var(--ppm-color-surface-2, var(--bg-surface-2));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__body > img {
+  width: 100%;
+  height: 100%;
+  padding: 1rem;
+  object-fit: contain;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__body > iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__message {
+  display: grid;
+  min-height: 100%;
+  align-content: center;
+  justify-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__message > svg {
+  width: 2rem;
+  height: 2rem;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__message p {
+  max-width: 28rem;
+  margin: 0;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+/* Ключевые кадры ppm-canvas-spin — из canvas.css (тот же редактор). */
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__spinner {
+  animation: ppm-canvas-spin 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(html[data-ppm-design="v2"]) .ppm-file-preview__spinner {
+    animation: none;
+  }
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__note {
+  display: block;
+  margin-top: 0.75rem;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__code {
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  color: var(--ppm-code-text, #1f2328);
+  background: var(--ppm-code-bg, #f6f8fa);
+  font-family: var(--ppm-font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  tab-size: 4;
+  white-space: pre;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__number {
+  display: inline-block;
+  min-width: 3ch;
+  margin-right: 1rem;
+  color: var(--ppm-code-gutter, #6e7781);
+  text-align: right;
+  user-select: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-keyword,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-selector-tag,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-doctag {
+  color: var(--ppm-code-keyword, #cf222e);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-string,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-regexp,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-meta .hljs-string {
+  color: var(--ppm-code-string, #0a3069);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-number,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-literal,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-attr,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-variable,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-attribute {
+  color: var(--ppm-code-number, #0550ae);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-comment,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-quote,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-meta {
+  color: var(--ppm-code-comment, #57606a);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-title,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-section,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-name {
+  color: var(--ppm-code-title, #8250df);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-built_in,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-type,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview .hljs-params {
+  color: var(--ppm-code-builtin, #953800);
+}
+
+/* Markdown (как заметка) и docx (HTML сервера): читаемая колонка, заголовки и списки поверх сброса Tailwind. */
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__document {
+  max-width: 48rem;
+  margin: 0 auto;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown h1,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__document h1 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1.375rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown h2,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__document h2 {
+  margin: 1.125rem 0 0.5rem;
+  font-size: 1.125rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown h3,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown h4,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__document h3,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__document h4 {
+  margin: 1rem 0 0.375rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown p,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__document p {
+  margin: 0 0 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown ul,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__document ul {
+  margin: 0 0 0.75rem;
+  padding-left: 1.5rem;
+  list-style: disc;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown ol {
+  margin: 0 0 0.75rem;
+  padding-left: 1.5rem;
+  list-style: decimal;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown blockquote {
+  margin: 0 0 0.75rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--ppm-color-border, var(--border-subtle));
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown a {
+  color: var(--ppm-color-accent-text, var(--txt-accent-primary));
+  text-decoration: underline;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown pre {
+  margin: 0 0 0.75rem;
+  padding: 0.75rem 1rem;
+  overflow: auto;
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  color: var(--ppm-code-text, #1f2328);
+  background: var(--ppm-code-bg, #f6f8fa);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown code {
+  font-family: var(--ppm-font-mono, ui-monospace, monospace);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown table,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__document table {
+  margin: 0 0 0.75rem;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown th,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__markdown td,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__document td {
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  text-align: left;
+  vertical-align: top;
+}
+
+/* CSV и листы xlsx: первая строка — шапка, закреплена при прокрутке; значения — моноширинными цифрами. */
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__table table {
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__table th,
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__table td {
+  max-width: 24rem;
+  padding: 0.375rem 0.625rem;
+  overflow: hidden;
+  border-bottom: 1px solid var(--ppm-color-border, var(--border-subtle));
+  text-align: left;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__table th {
+  position: sticky;
+  top: 0;
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--ppm-color-border, var(--border-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__tabs button {
+  margin-bottom: -1px;
+  padding: 0.375rem 0.75rem;
+  border-bottom: 2px solid transparent;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.8125rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__tabs button[aria-selected="true"] {
+  border-bottom-color: var(--ppm-color-accent, var(--txt-accent-primary));
+  color: var(--ppm-color-text, var(--txt-primary));
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__slides {
+  display: grid;
+  max-width: 48rem;
+  gap: 0.75rem;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__slides li {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-md, 0.5rem);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__slides strong {
+  display: block;
+  margin-bottom: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__slides p {
+  margin: 0;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+/* Финальная волна (I-1) · «Из проекта → Файл»: выбор файла Хранилища — тот же компактный диалог, что «Документ PPM»
+   (.ppm-canvas-page-picker), плюс список с прокруткой и «Загрузить с компьютера…» внизу. */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker header {
+  justify-content: space-between;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker header button svg,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker .ppm-canvas-page-picker__search > svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker ul {
+  max-height: min(22rem, 50vh);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker li button {
+  align-items: flex-start;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker li button > svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  margin-top: 0.125rem;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker li button > span {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker li strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker li button[aria-disabled="true"] {
+  cursor: progress;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker__empty {
+  margin: 0;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.8125rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker__footer {
+  display: flex;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--ppm-color-border, var(--border-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker__upload {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: var(--ppm-control-height-sm, 1.75rem);
+  padding: 0 0.625rem;
+  border: 1px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  border-radius: var(--ppm-radius-sm, 0.25rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker__upload svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker__upload:hover {
+  background: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-vault-picker button:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: var(--ppm-focus-ring, 0 0 0 2px var(--border-accent-strong));
+}
+
+/* Финальная волна (отложенное B5): исход «Скачать» внутри просмотра — строкой между шапкой и содержимым, а не
+   уведомлением холста под модальным окном. */
+:where(html[data-ppm-design="v2"]) .ppm-file-preview[data-download-notice] {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__download {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  margin: 0;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--ppm-color-border, var(--border-subtle));
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  background: var(--ppm-color-surface-2, var(--bg-surface-2));
+  font-size: 0.8125rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__download[data-tone="error"] {
+  color: var(--ppm-color-danger-text, var(--txt-danger-primary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__download a {
+  color: var(--ppm-color-accent-text, var(--txt-accent-primary));
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* Строка кода в просмотре: номер строки под указателем ярче — по длинной строке легче найти её начало. */
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__line:hover .ppm-file-preview__number {
+  color: var(--ppm-code-text, #1f2328);
+}
+
+/* M-1: подпись «показан без форматирования» — над текстом Markdown-файла (подпись «показано начало» — под ним). */
+:where(html[data-ppm-design="v2"]) .ppm-file-preview__note:first-child {
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+}

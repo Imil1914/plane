@@ -12,41 +12,26 @@ import {
 import {
   Archive,
   ArrowDown,
-  ArrowRight,
   ArrowUp,
   BrainCircuit,
   ChevronDown,
   ChevronRight,
   CircleDot,
-  Circle,
   Copy,
-  Diamond,
-  FileText,
   Focus,
   Frame,
-  ListChecks,
-  ListPlus,
   LoaderCircle,
   LockKeyhole,
-  Menu,
   Minus,
   MousePointer2,
-  PanelLeftClose,
-  PanelLeftOpen,
-  PenTool,
   Pencil,
   Plus,
   Search,
-  Square,
-  StickyNote,
-  Table2,
-  Type,
-  Redo2,
-  Undo2,
   X,
 } from "lucide-react";
 import { isPpmProjectAskEnabled } from "@ppm/canvas";
 import type { TPpmCanvasBoard, TPpmCanvasCapabilities, TPpmCanvasSyncStatus } from "@ppm/canvas";
+import type { TPpmTranslationKey } from "@ppm/brand";
 import { useTranslation } from "@plane/i18n";
 import { formatPpmTimeAgo } from "@/helpers/ppm-time-ago.helper";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
@@ -54,6 +39,7 @@ import { usePpmDesignV2 } from "@/lib/ppm-design";
 import { PpmCanvasService, PpmCanvasServiceError } from "@/services/ppm-canvas.service";
 import type { TPpmBrainAnswerRun } from "@/services/ppm-brain.service";
 import {
+  CANVAS_RAIL_COLLAPSE_QUERY,
   canvasBoardTabsKey,
   closeBoardTab,
   filterCanvasCommands,
@@ -67,6 +53,7 @@ import {
   openBoardTab,
   readCanvasBoardTabs,
   shouldCanvasOwnCommandShortcut,
+  shouldReturnCanvasFocus,
   shouldShowTabSyncDot,
   writeCanvasBoardTabs,
   type TPpmCanvasCommandItem,
@@ -76,8 +63,33 @@ import { dispatchPpmCanvasCommand, type TPpmCanvasCommand, type TPpmCanvasComman
 import { PpmBrainPanel, type TPpmBrainPanelMode } from "./brain-panel";
 import { fillCanvasTemplate } from "./canvas-grammar";
 import { createCanvasZoomStore, type TPpmCanvasZoomStore } from "./canvas-zoom-store";
+import { PpmCanvasLegacyRail } from "./canvas-rail-legacy";
+import { PpmCanvasRail } from "./canvas-rail";
+import { railShortcutCommand, type TPpmGeo } from "./canvas-toolkit-model";
 
 const PpmCanvasEditor = lazy(() => import("./editor"));
+
+// Second agent's native tools (shapes, line, pen, text) — v2 only; line R regroups them in the rail (R1).
+function DRAW_COMMANDS(ppmT: (key: TPpmTranslationKey) => string): TPpmCanvasCommandItem<TPpmCanvasCommand>[] {
+  return [
+    {
+      command: "draw-rectangle",
+      id: "draw-rectangle",
+      keywords: ["shape", "box"],
+      label: ppmT("canvas.tool_rectangle"),
+    },
+    { command: "draw-ellipse", id: "draw-ellipse", keywords: ["shape", "circle"], label: ppmT("canvas.tool_ellipse") },
+    {
+      command: "draw-diamond",
+      id: "draw-diamond",
+      keywords: ["shape", "decision"],
+      label: ppmT("canvas.tool_diamond"),
+    },
+    { command: "draw-line", id: "draw-line", keywords: ["line"], label: ppmT("canvas.tool_line") },
+    { command: "draw-pen", id: "draw-pen", keywords: ["draw", "pen"], label: ppmT("canvas.tool_pen") },
+    { command: "draw-text", id: "draw-text", keywords: ["text", "write"], label: ppmT("canvas.tool_text") },
+  ];
+}
 
 const CANVAS_COMMAND_SHORTCUT = formatCanvasCommandShortcut(getCanvasPlatform());
 
@@ -138,16 +150,10 @@ export default function PpmCanvasWorkspace({
   const [error, setError] = useState<string>();
   const [actionError, setActionError] = useState<string>();
   const [boardMenuOpen, setBoardMenuOpen] = useState(false);
-  const [shapeMenuOpen, setShapeMenuOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [railExpanded, setRailExpanded] = useState(() => {
-    try {
-      return typeof window !== "undefined" && window.localStorage.getItem("ppm-canvas-rail-expanded") === "true";
-    } catch {
-      return false;
-    }
-  });
-  const [railTooltip, setRailTooltip] = useState<{ label: string; top: number }>();
+  const [railExpanded, setRailExpanded] = useState(
+    () => typeof window === "undefined" || !window.matchMedia(CANVAS_RAIL_COLLAPSE_QUERY).matches
+  );
   const [boardLinkCopied, setBoardLinkCopied] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [brainPanelOpen, setBrainPanelOpen] = useState(false);
@@ -174,25 +180,23 @@ export default function PpmCanvasWorkspace({
   }, []);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem("ppm-canvas-rail-expanded", String(railExpanded));
-    } catch {
-      // The panel remains usable if browser storage is unavailable.
-    }
-    setRailTooltip(undefined);
-  }, [railExpanded]);
+    const narrowViewport = window.matchMedia(CANVAS_RAIL_COLLAPSE_QUERY);
+    const collapseRailOnNarrowViewport = () => {
+      if (narrowViewport.matches) setRailExpanded(false);
+    };
+    narrowViewport.addEventListener("change", collapseRailOnNarrowViewport);
+    return () => narrowViewport.removeEventListener("change", collapseRailOnNarrowViewport);
+  }, []);
 
-  const showRailTooltip = (target: EventTarget | null) => {
-    if (railExpanded || !(target instanceof Element)) return;
-    const button = target.closest<HTMLElement>("[data-tooltip]");
-    const workspace = workspaceRef.current;
-    if (!button || !workspace) return;
-    const top = button.getBoundingClientRect().top - workspace.getBoundingClientRect().top;
-    setRailTooltip({ label: button.dataset.tooltip ?? "", top });
-  };
-
+  // Final-fix round 2, I-A: the frame this runs in may already have moved focus somewhere real — a command run
+  // from the palette can synchronously open a new note/sticker's edit mode (autoFocus) or a [data-ppm-canvas-modal]
+  // dialog (Файл, Документ PPM); pulling focus back to `target` then would yank the caret out of it. Skip when that
+  // happened (shouldReturnCanvasFocus): restore only onto body/nothing.
   const returnFocus = (target: HTMLElement | null) => {
-    requestAnimationFrame(() => (target?.isConnected ? target : boardSwitcherButtonRef.current)?.focus());
+    requestAnimationFrame(() => {
+      if (!shouldReturnCanvasFocus(document.activeElement)) return;
+      (target?.isConnected ? target : boardSwitcherButtonRef.current)?.focus();
+    });
   };
   const openBoardDialog = (nextDialog: TBoardDialog) => {
     dialogReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -286,6 +290,19 @@ export default function PpmCanvasWorkspace({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      // ── AF2.1 B: (B3) modal guard ── R-b/раунд 1 (исправлено в раунде 2, комментарий обновлён в раунде 2
+      // финальной волны, m-2): этот обработчик — однобуквенные инструменты рейки (e.code, v2), Shift+N/G/T и
+      // побочные эффекты Escape (закрыть меню/палитру/диалог доски); горячие клавиши самого tldraw
+      // (Backspace/Delete и т.п.) отдельно выключает эффект syncCanvasEditorFocus / shouldFocusCanvasEditor
+      // (editor.tsx, блок B5; через editor.blur()) — он же следит за isActive при нескольких открытых досках.
+      // Пока открыт диалог-портал линии B (наш «Документ PPM», превью файла у B5 и т.п.) — этот обработчик не
+      // должен реагировать вовсе, иначе, приходя первым (capture-фаза, раньше самого диалога), Escape/⌘K и
+      // остальные ветки ниже срабатывают вместо диалога. Проверяем СВОЙ атрибут `data-ppm-canvas-modal`, а не общий
+      // `aria-modal="true"` — иначе гасли бы и штатные модалки этого файла (палитра команд, панель досок,
+      // BoardNameDialog, ConfirmArchiveDialog), у которых `aria-modal="true"` тоже есть, а закрыть их можно только
+      // отсюда же (их Escape/⌘K — ветки этого самого обработчика).
+      if (document.querySelector("[data-ppm-canvas-modal]")) return;
+      // ── /AF2.1 B ──
       const target = event.target as HTMLElement | null;
       const typing =
         target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || Boolean(target?.isContentEditable);
@@ -302,7 +319,6 @@ export default function PpmCanvasWorkspace({
         return;
       }
       if (event.key === "Escape") {
-        setShapeMenuOpen(false);
         if (boardMenuOpen) requestAnimationFrame(() => boardSwitcherButtonRef.current?.focus());
         setBoardMenuOpen(false);
         if (commandPaletteOpen) closeCommandPalette();
@@ -313,15 +329,29 @@ export default function PpmCanvasWorkspace({
         return;
       }
       if (typing || !activeBoardId || !editableBoardIds.has(activeBoardId)) return;
+      // AF2.1 R1: real single-key tools of the v2 rail, by e.code (Russian layout: М, Р, Ы, Е, З).
+      const toolCommand = designV2 ? railShortcutCommand(event) : undefined;
+      if (toolCommand) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        runCanvasCommand(toolCommand);
+        return;
+      }
       if (event.shiftKey && event.code === "KeyN") {
         event.preventDefault();
         event.stopImmediatePropagation();
         runCanvasCommand("add-note");
       }
+      if (event.shiftKey && event.code === "KeyG") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        runCanvasCommand("add-group");
+      }
       if (event.shiftKey && event.code === "KeyT") {
         event.preventDefault();
         event.stopImmediatePropagation();
-        runCanvasCommand("open-tasks");
+        // v1 (UX1.1): «Добавить задачу»; v2: панель «Задачи и бэклог».
+        runCanvasCommand(designV2 ? "open-tasks" : "add-work-item");
       }
     };
     window.addEventListener("keydown", onKeyDown, true);
@@ -341,10 +371,19 @@ export default function PpmCanvasWorkspace({
   );
   const activeTool = activeBoardId ? toolByBoardId[activeBoardId] : undefined;
 
-  const runCanvasCommand = (command: TPpmCanvasCommand) => {
+  const runCanvasCommand = (command: TPpmCanvasCommand, extra: { geo?: TPpmGeo } = {}) => {
+    // AF2.1 R1 (final-fix R1 deferred; gate order fixed in round 2, m-4): "open-find" opens this workspace's own
+    // brain-panel state — editor.tsx never sees it (the rail used to call a separate onFind prop that skipped the
+    // checks below entirely). Handled here, first, so every caller (rail, palette, shortcuts) goes through the same
+    // gateway — but unlike the commands below it, it is not tied to a board, so it must run even with none active
+    // (the header's own brain-trigger button already opens the panel unconditionally too).
+    if (command === "open-find") {
+      setBrainPanelOpen(true);
+      return;
+    }
     if (!activeBoardId) return;
     if (!activeBoardEditReady && !isCanvasCommandAllowedReadOnly(command, designV2)) return;
-    dispatchPpmCanvasCommand({ boardId: activeBoardId, command });
+    dispatchPpmCanvasCommand({ boardId: activeBoardId, command, ...extra });
   };
 
   const copyBoardLink = async () => {
@@ -579,62 +618,164 @@ export default function PpmCanvasWorkspace({
   const commands = useMemo<TPpmCanvasCommandItem<TPpmCanvasCommand>[]>(
     () => [
       { command: "select", id: "select", keywords: ["cursor"], label: ppmT("canvas.select") },
-      { command: "open-tasks", id: "open-tasks", keywords: ["tasks", "backlog"], label: ppmT("canvas.tasks_panel") },
-      ...(activeBoardEditReady
+      ...(designV2
         ? [
             {
-              command: "draw-rectangle" as const,
-              id: "draw-rectangle",
-              keywords: ["shape", "box"],
-              label: ppmT("canvas.tool_rectangle"),
+              command: "open-tasks" as const,
+              id: "open-tasks",
+              keywords: ["tasks", "backlog"],
+              label: ppmT("canvas.tasks_panel"),
             },
-            {
-              command: "draw-ellipse" as const,
-              id: "draw-ellipse",
-              keywords: ["shape", "circle"],
-              label: ppmT("canvas.tool_ellipse"),
-            },
-            {
-              command: "draw-diamond" as const,
-              id: "draw-diamond",
-              keywords: ["shape", "decision"],
-              label: ppmT("canvas.tool_diamond"),
-            },
-            { command: "draw-line" as const, id: "draw-line", keywords: ["line"], label: ppmT("canvas.tool_line") },
-            { command: "draw-pen" as const, id: "draw-pen", keywords: ["draw", "pen"], label: ppmT("canvas.tool_pen") },
-            {
-              command: "draw-text" as const,
-              id: "draw-text",
-              keywords: ["text", "write"],
-              label: ppmT("canvas.tool_text"),
-            },
-            {
-              command: "draw-connection" as const,
-              id: "draw-connection",
-              keywords: ["arrow", "connection"],
-              label: ppmT("canvas.draw_connection"),
-            },
+          ]
+        : []),
+      ...(activeBoardEditReady
+        ? [
+            ...(designV2 ? DRAW_COMMANDS(ppmT) : []),
+            // M-2 (final-fix): a v2 sticker is its own creation command, next to the note it's grouped with in the
+            // rail's «Документы и текст» (canvas-rail.tsx docs menu already lists add-note first, add-sticky is a
+            // direct rail tool rather than a menu item — added here so the palette offers it too).
+            ...(designV2
+              ? [
+                  {
+                    command: "add-sticky" as const,
+                    id: "add-sticky",
+                    keywords: ["sticky", "note"],
+                    label: ppmT("canvas.rail.sticky"),
+                  },
+                ]
+              : []),
             { command: "add-note" as const, id: "add-note", keywords: ["note"], label: ppmT("canvas.add_note") },
-            {
-              command: "add-document" as const,
-              id: "add-document",
-              keywords: ["document", "markdown"],
-              label: ppmT("canvas.add_document"),
-            },
-            {
-              command: "add-checklist" as const,
-              id: "add-checklist",
-              keywords: ["checklist", "todo"],
-              label: ppmT("canvas.add_checklist"),
-            },
+            // M-2 (final-fix): under v2 "Добавить документ" now creates a page in «Документы» (add-document-page,
+            // same as the rail's «Документ» item) instead of the board's own Markdown `document` node — the palette
+            // no longer offers that node under v2 at all, so the one visible "Добавить документ" always means the
+            // same object as the rail. v1 is unchanged: it still creates the board's own document node.
+            designV2
+              ? {
+                  command: "add-document-page" as const,
+                  id: "add-document",
+                  keywords: ["document", "page"],
+                  label: ppmT("canvas.add_document"),
+                }
+              : {
+                  command: "add-document" as const,
+                  id: "add-document",
+                  keywords: ["document", "markdown"],
+                  label: ppmT("canvas.add_document"),
+                },
+            // M-2 (final-fix, coordinator follow-up): add-checklist and add-list both create the very same
+            // `checklist` node (editor.tsx: `case "add-checklist"` and `case "add-list"` are identical calls to
+            // createNode(..., "checklist", ...)) — one visible item per design, not two labels for one action.
+            // v1 keeps the original "Добавить чек-лист"; v2 shows only the rail's own name, "Список" (matches
+            // canvas-toolkit-model.ts PPM_RAIL_MENUS.docs, which also lists just add-list).
+            designV2
+              ? {
+                  command: "add-list" as const,
+                  id: "add-list",
+                  keywords: ["list", "checklist"],
+                  label: ppmT("canvas.rail.list"),
+                }
+              : {
+                  command: "add-checklist" as const,
+                  id: "add-checklist",
+                  keywords: ["checklist", "todo"],
+                  label: ppmT("canvas.add_checklist"),
+                },
             {
               command: "add-table" as const,
               id: "add-table",
               keywords: ["table", "grid"],
               label: ppmT("canvas.add_table"),
             },
+            {
+              command: "add-code" as const,
+              id: "add-code",
+              keywords: ["code", "snippet"],
+              label: ppmT("canvas.add_code"),
+            },
+            // M-2 (final-fix): the rail's «Из проекта» live cards — PPM document (add-page-ref) and a Vault file
+            // (add-file) — as palette creation commands too.
+            ...(designV2
+              ? [
+                  {
+                    command: "add-page-ref" as const,
+                    id: "add-page-ref",
+                    keywords: ["document", "ppm", "page"],
+                    label: ppmT("canvas.rail.page"),
+                  },
+                  {
+                    command: "add-file" as const,
+                    id: "add-file",
+                    keywords: ["file", "vault", "knowledge"],
+                    label: ppmT("canvas.rail.file"),
+                  },
+                ]
+              : []),
+            {
+              command: "add-group" as const,
+              id: "add-group",
+              keywords: ["group", "frame"],
+              label: ppmT("canvas.add_group"),
+            },
+            {
+              command: "add-frame" as const,
+              id: "add-frame",
+              keywords: ["frame", "section"],
+              label: ppmT("canvas.add_frame"),
+            },
+            {
+              command: "add-board-link" as const,
+              id: "add-board-link",
+              keywords: ["board", "link"],
+              label: ppmT("canvas.add_board_link"),
+            },
+            {
+              command: "add-work-item" as const,
+              id: "add-work-item",
+              keywords: ["task", "issue"],
+              label: ppmT("canvas.add_work_item"),
+            },
+            {
+              command: "add-work-items-view" as const,
+              id: "add-work-items-view",
+              keywords: ["kanban", "backlog", "board", "tasks"],
+              label: ppmT("canvas.add_work_items_view"),
+            },
+            {
+              command: "add-diagram" as const,
+              id: "add-diagram",
+              keywords: ["diagram", "mermaid", "scheme"],
+              label: ppmT("canvas.add_diagram"),
+            },
+            {
+              command: "add-deck" as const,
+              id: "add-deck",
+              keywords: ["presentation", "slides", "deck"],
+              label: ppmT("canvas.add_deck"),
+            },
+            {
+              command: "draw-connection" as const,
+              id: "draw-connection",
+              keywords: ["arrow", "link"],
+              label: ppmT("canvas.draw_connection"),
+            },
+            {
+              command: "semantic-edges" as const,
+              id: "semantic-edges",
+              keywords: ["meaning", "relation"],
+              label: ppmT("canvas.semantic_edges"),
+            },
             { command: "undo" as const, id: "undo", keywords: ["history"], label: ppmT("canvas.undo") },
             { command: "redo" as const, id: "redo", keywords: ["history"], label: ppmT("canvas.redo") },
+          ]
+        : []),
+      ...(designV2 && !activeBoardEditReady
+        ? [
+            {
+              command: "semantic-edges" as const,
+              id: "semantic-edges",
+              keywords: ["meaning", "relation"],
+              label: ppmT("canvas.semantic_edges"),
+            },
           ]
         : []),
       { command: "fit-view", id: "fit-view", keywords: ["camera"], label: ppmT("canvas.fit_view") },
@@ -687,7 +828,7 @@ export default function PpmCanvasWorkspace({
           ]
         : []),
     ],
-    [activeBoardEditReady, ppmT]
+    [activeBoardEditReady, designV2, ppmT]
   );
 
   if (loading) return <WorkspaceState icon={LoaderCircle} spinning text={ppmT("canvas.loading_description")} />;
@@ -712,6 +853,16 @@ export default function PpmCanvasWorkspace({
   // The footer is the only visible save status; the role is not repeated when the status already says read-only.
   const activeStatusKey = syncStatusLabel(syncByBoardId[activeBoardId], capabilities.edit);
   const activeRoleKey = footerRoleLabelKey(capabilities.edit, activeStatusKey);
+  const railProps = {
+    activeTool,
+    canEdit: capabilities.edit,
+    designV2,
+    editReady: activeBoardEditReady,
+    expanded: railExpanded,
+    onRunCommand: (command: TPpmCanvasCommand) => runCanvasCommand(command),
+    onToggleBoards: () => setBoardMenuOpen((current) => !current),
+    onToggleExpanded: () => setRailExpanded((current) => !current),
+  };
 
   return (
     <div ref={workspaceRef} className="ppm-canvas-workspace" data-rail-expanded={railExpanded || undefined}>
@@ -729,15 +880,17 @@ export default function PpmCanvasWorkspace({
           <strong>{activeBoard.name}</strong>
           <ChevronDown aria-hidden="true" />
         </button>
-        <button
-          type="button"
-          className="ppm-canvas-board-copy"
-          aria-label={ppmT(boardLinkCopied ? "canvas.board_link_copied" : "canvas.copy_board_link")}
-          title={ppmT(boardLinkCopied ? "canvas.board_link_copied" : "canvas.copy_board_link")}
-          onClick={() => void copyBoardLink()}
-        >
-          <Copy aria-hidden="true" />
-        </button>
+        {designV2 && (
+          <button
+            type="button"
+            className="ppm-canvas-board-copy"
+            aria-label={ppmT(boardLinkCopied ? "canvas.board_link_copied" : "canvas.copy_board_link")}
+            title={ppmT(boardLinkCopied ? "canvas.board_link_copied" : "canvas.copy_board_link")}
+            onClick={() => void copyBoardLink()}
+          >
+            <Copy aria-hidden="true" />
+          </button>
+        )}
         <div
           className="ppm-canvas-tabs"
           role="tablist"
@@ -819,156 +972,10 @@ export default function PpmCanvasWorkspace({
         </button>
       </header>
 
-      <aside
-        className="ppm-canvas-rail"
-        aria-label={ppmT("canvas.toolbar")}
-        onMouseOver={(event) => showRailTooltip(event.target)}
-        onFocus={(event) => showRailTooltip(event.target)}
-        onMouseLeave={() => setRailTooltip(undefined)}
-        onBlurCapture={() => setRailTooltip(undefined)}
-      >
-        <button
-          type="button"
-          className="ppm-canvas-rail__brand"
-          data-tooltip={ppmT(railExpanded ? "canvas.collapse_panel" : "canvas.expand_panel")}
-          aria-label={ppmT(railExpanded ? "canvas.collapse_panel" : "canvas.expand_panel")}
-          aria-expanded={railExpanded}
-          onClick={() => setRailExpanded((current) => !current)}
-        >
-          {railExpanded ? <PanelLeftClose aria-hidden="true" /> : <PanelLeftOpen aria-hidden="true" />}
-          {railExpanded && <strong>{ppmT("canvas.collapse_panel")}</strong>}
-        </button>
-        <RailButton
-          pressed={activeTool === "select"}
-          expanded={railExpanded}
-          icon={MousePointer2}
-          label={ppmT("canvas.select")}
-          onClick={() => runCanvasCommand("select")}
-        />
-        {capabilities.edit && (
-          <>
-            <RailSectionLabel expanded={railExpanded} label={ppmT("canvas.nodes")} />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={Square}
-              label={ppmT("canvas.shapes")}
-              pressed={shapeMenuOpen}
-              onClick={() => setShapeMenuOpen((current) => !current)}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={PenTool}
-              label={ppmT("canvas.tool_pen")}
-              pressed={activeTool === "draw"}
-              onClick={() => runCanvasCommand("draw-pen")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={Type}
-              label={ppmT("canvas.tool_text")}
-              pressed={activeTool === "text"}
-              onClick={() => runCanvasCommand("draw-text")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={ArrowRight}
-              label={ppmT("canvas.draw_connection")}
-              pressed={activeTool === "arrow"}
-              onClick={() => runCanvasCommand("draw-connection")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={StickyNote}
-              label={ppmT("canvas.add_note")}
-              shortcut="⇧N"
-              onClick={() => runCanvasCommand("add-note")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={FileText}
-              label={ppmT("canvas.add_document")}
-              onClick={() => runCanvasCommand("add-document")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={ListChecks}
-              label={ppmT("canvas.add_checklist")}
-              onClick={() => runCanvasCommand("add-checklist")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={Table2}
-              label={ppmT("canvas.add_table")}
-              onClick={() => runCanvasCommand("add-table")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={Undo2}
-              label={ppmT("canvas.undo")}
-              onClick={() => runCanvasCommand("undo")}
-            />
-            <RailButton
-              disabled={!activeBoardEditReady}
-              expanded={railExpanded}
-              icon={Redo2}
-              label={ppmT("canvas.redo")}
-              onClick={() => runCanvasCommand("redo")}
-            />
-          </>
-        )}
-        <RailSectionLabel expanded={railExpanded} label={ppmT("canvas.navigation")} />
-        <RailButton
-          expanded={railExpanded}
-          icon={ListPlus}
-          label={ppmT("canvas.tasks_panel")}
-          shortcut="⇧T"
-          onClick={() => runCanvasCommand("open-tasks")}
-        />
-        <RailButton
-          expanded={railExpanded}
-          icon={Menu}
-          label={ppmT("canvas.boards")}
-          onClick={() => setBoardMenuOpen((current) => !current)}
-        />
-      </aside>
-      {railTooltip && !railExpanded && (
-        <span className="ppm-canvas-rail-tooltip" role="tooltip" style={{ top: railTooltip.top }}>
-          {railTooltip.label}
-        </span>
-      )}
-      {shapeMenuOpen && activeBoardEditReady && (
-        <div className="ppm-canvas-shape-menu" role="menu" aria-label={ppmT("canvas.shapes")}>
-          {(
-            [
-              ["draw-rectangle", Square, "canvas.tool_rectangle"],
-              ["draw-ellipse", Circle, "canvas.tool_ellipse"],
-              ["draw-diamond", Diamond, "canvas.tool_diamond"],
-              ["draw-line", Minus, "canvas.tool_line"],
-            ] as const
-          ).map(([command, Icon, label]) => (
-            <button
-              key={command}
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                runCanvasCommand(command);
-                setShapeMenuOpen(false);
-              }}
-            >
-              <Icon aria-hidden="true" />
-              {ppmT(label)}
-            </button>
-          ))}
-        </div>
+      {designV2 ? (
+        <PpmCanvasRail {...railProps} onDrawGeo={(geo) => runCanvasCommand("draw-geo", { geo })} />
+      ) : (
+        <PpmCanvasLegacyRail {...railProps} />
       )}
 
       <main className="ppm-canvas-workspace__content">
@@ -990,6 +997,8 @@ export default function PpmCanvasWorkspace({
                 boardId={boardId}
                 boards={boards}
                 canEdit={canEdit && capabilities.edit}
+                // Все открытые вкладки смонтированы: вставку, брошенные файлы и горячие клавиши слушает только активная.
+                isActive={boardId === activeBoardId}
                 onEditabilityChange={handleEditabilityChange}
                 onOpenBoard={openBoard}
                 onOrchestratorRunVersionsChange={handleOrchestratorRunVersionsChange}
@@ -1449,53 +1458,6 @@ function ConfirmArchiveDialog({
       </section>
     </div>
   );
-}
-
-function RailButton({
-  disabled = false,
-  expanded,
-  icon: Icon,
-  label,
-  onClick,
-  // Only actual toggle buttons ("Холст" / "Нарисовать визуальную связь") pass this. Leaving it
-  // undefined for plain action buttons (add-note, undo, ...) keeps aria-pressed off them entirely
-  // instead of falsely announcing every rail button as a toggle.
-  pressed,
-  shortcut,
-}: {
-  disabled?: boolean;
-  expanded: boolean;
-  icon: typeof BrainCircuit;
-  label: string;
-  onClick: () => void;
-  pressed?: boolean;
-  shortcut?: string;
-}) {
-  return (
-    <button
-      type="button"
-      className="ppm-canvas-rail-button"
-      aria-label={label}
-      aria-pressed={pressed}
-      data-active={pressed || undefined}
-      data-tooltip={shortcut ? `${label} · ${shortcut}` : label}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      <Icon aria-hidden="true" />
-      {expanded && (
-        <>
-          <span>{label}</span>
-          {shortcut && <kbd>{shortcut}</kbd>}
-        </>
-      )}
-    </button>
-  );
-}
-
-function RailSectionLabel({ expanded, label }: { expanded: boolean; label: string }) {
-  if (!expanded) return <span className="ppm-canvas-rail__divider" aria-hidden="true" />;
-  return <small className="ppm-canvas-rail__label">{label}</small>;
 }
 
 function SyncDot({ status }: { status?: TPpmCanvasSyncStatus }) {

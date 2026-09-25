@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatCanvasCommandShortcut,
   shouldCanvasOwnCommandShortcut,
+  shouldReturnCanvasFocus,
 } from "@/components/ppm-canvas/board-workspace-state";
 
 // Minimal element stand-ins: the helper only reads tagName and Node.contains, so no DOM is needed.
@@ -43,5 +44,22 @@ describe("canvas command shortcut ownership", () => {
     const powerKInput = element("INPUT");
     expect(shouldCanvasOwnCommandShortcut(powerKInput, container(element("BUTTON")))).toBe(false);
     expect(shouldCanvasOwnCommandShortcut(powerKInput, null)).toBe(false);
+  });
+});
+
+describe("canvas palette return-focus (final-fix round 2, I-A)", () => {
+  it("restores focus when nothing specific has it — body, or none at all", () => {
+    expect(shouldReturnCanvasFocus(null)).toBe(true);
+    expect(shouldReturnCanvasFocus(element("BODY"))).toBe(true);
+  });
+
+  it("skips restoring focus once a command already put it somewhere real — a new note's title, a dialog", () => {
+    const noteTitle = { isConnected: true, tagName: "INPUT" } as Element;
+    expect(shouldReturnCanvasFocus(noteTitle)).toBe(false);
+  });
+
+  it("restores focus if what had it already left the document", () => {
+    const removed = { isConnected: false, tagName: "INPUT" } as Element;
+    expect(shouldReturnCanvasFocus(removed)).toBe(true);
   });
 });

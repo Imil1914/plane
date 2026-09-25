@@ -1,4 +1,5 @@
 import { isAxiosError } from "axios";
+import { z } from "zod";
 import { API_BASE_URL } from "@plane/constants";
 import {
   ppmCanvasBindingMutationResponseSchema,
@@ -7,6 +8,7 @@ import {
   ppmCanvasBoardVersionResponseSchema,
   ppmCanvasBoardsReorderResponseSchema,
   ppmCanvasBoardsResponseSchema,
+  ppmCanvasContentProjectionSchema,
   ppmCanvasErrorResponseSchema,
   ppmCanvasReadResponseSchema,
   ppmCanvasSaveResponseSchema,
@@ -41,6 +43,18 @@ import {
   type TPpmWorkItemsViewResponse,
 } from "@ppm/canvas";
 import { APIService } from "@/services/api.service";
+
+// AF2.1 B3: поиск документов для Холста (сервер S). Ответ — проекции содержимого только типа «page», у каждой —
+// доп. поле `page.access` (serialize_page_search_result, ppm_canvas/services.py): используем в canvas-pages.ts,
+// чтобы не класть на общую доску приватный документ, даже если сервер когда-нибудь отдаст его (R-a, раунд 1).
+const ppmCanvasPageSearchResultSchema = ppmCanvasContentProjectionSchema.extend({
+  page: z.object({ access: z.enum(["public", "private"]) }),
+});
+const ppmCanvasPageSearchResponseSchema = z.object({
+  results: z.array(ppmCanvasPageSearchResultSchema),
+  next_cursor: z.string().nullable(),
+});
+export type TPpmCanvasPageSearchResponse = z.infer<typeof ppmCanvasPageSearchResponseSchema>;
 
 const PPM_ASSET_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || API_BASE_URL;
 
@@ -251,6 +265,26 @@ export class PpmCanvasService extends APIService {
         params: { types: "work_item", q: query, cursor, limit },
       });
       return ppmProjectionSearchResponseSchema.parse(response.data);
+    } catch (error) {
+      throw normalizeCanvasError(error);
+    }
+  }
+
+  // AF2.1 B3: «Документ PPM» — поиск существующих страниц проекта (только видимые пользователю). Совпадает по форме
+  // с searchWorkItems; parse() падает на «entity_type»/«page.access», если сервер ещё не умеет types=page — это
+  // сигнал для запасного пути в canvas-pages.ts (createStickyPageSearch ловит любую ошибку, включая ZodError).
+  async searchPages(
+    workspaceId: string,
+    projectId: string,
+    query: string,
+    cursor?: string,
+    limit = 20
+  ): Promise<TPpmCanvasPageSearchResponse> {
+    try {
+      const response = await this.get(`${this.projectPath(workspaceId, projectId)}/projections/search/`, {
+        params: { types: "page", q: query, cursor, limit },
+      });
+      return ppmCanvasPageSearchResponseSchema.parse(response.data);
     } catch (error) {
       throw normalizeCanvasError(error);
     }

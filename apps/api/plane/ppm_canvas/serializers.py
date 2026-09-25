@@ -149,8 +149,10 @@ class PpmProjectionSearchSerializer(serializers.Serializer):
 
     def validate_types(self, value):
         entity_types = {item.strip() for item in value.split(",") if item.strip()}
+        if entity_types == {PpmCanvasEntityType.PAGE}:
+            return [PpmCanvasEntityType.PAGE]
         if entity_types != {PpmCanvasEntityType.WORK_ITEM}:
-            raise serializers.ValidationError("Only work_item projections are available in this release.")
+            raise serializers.ValidationError("Search one projection type per request: work_item or page.")
         return [PpmCanvasEntityType.WORK_ITEM]
 
 

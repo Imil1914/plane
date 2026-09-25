@@ -83,15 +83,36 @@ export type TPpmVaultTransfer = {
   page_version: string;
 };
 
+// AF2.1 B5: превью файла, построенное сервером (S): Office → html/листы/слайды, текст → text. HTML уже санитизирован
+// сервером; клиент всё равно пропускает его через DOMPurify. `unsupported` несёт причину (reason): type, binary,
+// too_large, limits, encrypted, invalid (apps/api/plane/ppm_vault/preview.py).
+export type TPpmVaultPreview = {
+  encoding?: string;
+  html?: string;
+  kind: "docx" | "pptx" | "text" | "unsupported" | "xlsx";
+  reason?: string;
+  sheets?: Array<{ name: string; rows: string[][] }>;
+  slides?: Array<{ index: number; text: string; title: string }>;
+  text?: string;
+  truncated: boolean;
+};
+
+/** AF2.1 B5: отмена запроса (диалог просмотра закрыт — запрос прерывается). */
+export type TPpmVaultRequestOptions = { signal?: AbortSignal };
+
 export class PpmVaultServiceError extends Error {
   code?: string;
   status?: number;
+  // AF2.1 B4 (round 1): server-sent conflict/limit context (e.g. VAULT_NAME_CONFLICT's suggested_name,
+  // VAULT_FILE_TOO_LARGE's size_bytes/limit_bytes) — optional, existing callers passing only {code, status} keep working.
+  details?: Record<string, unknown>;
 
-  constructor(message: string, options: { code?: string; status?: number } = {}) {
+  constructor(message: string, options: { code?: string; status?: number; details?: Record<string, unknown> } = {}) {
     super(message);
     this.name = "PpmVaultServiceError";
     this.code = options.code;
     this.status = options.status;
+    this.details = options.details;
   }
 }
 
@@ -134,9 +155,20 @@ export class PpmVaultService extends APIService {
     }
   }
 
-  async getMarkdown(workspaceId: string, projectId: string, entryId: string): Promise<TPpmVaultMarkdown> {
+  async getMarkdown(
+    workspaceId: string,
+    projectId: string,
+    entryId: string,
+    options: TPpmVaultRequestOptions = {}
+  ): Promise<TPpmVaultMarkdown> {
     try {
-      const response = await this.get(`${this.entryPath(workspaceId, projectId, entryId)}content/`);
+      const response = await this.get(
+        `${this.entryPath(workspaceId, projectId, entryId)}content/`,
+        {},
+        {
+          signal: options.signal,
+        }
+      );
       return response.data as TPpmVaultMarkdown;
     } catch (error) {
       throw normalizeVaultError(error);
@@ -327,6 +359,76 @@ export class PpmVaultService extends APIService {
     }
   }
 
+  // ── AF2.1 B5: просмотр и скачивание файла с холста ──
+  async getPreview(
+    workspaceId: string,
+    projectId: string,
+    entryId: string,
+    options: TPpmVaultRequestOptions = {}
+  ): Promise<TPpmVaultPreview> {
+    try {
+      const response = await this.get(
+        `${this.vaultPath(workspaceId, projectId)}entries/${entryId}/preview/`,
+        {},
+        {
+          signal: options.signal,
+        }
+      );
+      return response.data as TPpmVaultPreview;
+    } catch (error) {
+      throw normalizeVaultError(error);
+    }
+  }
+
+  async getFileText(
+    workspaceId: string,
+    projectId: string,
+    entryId: string,
+    options: TPpmVaultRequestOptions = {}
+  ): Promise<string> {
+    try {
+      const response = await this.get(
+        `${this.entryPath(workspaceId, projectId, entryId)}file/`,
+        {},
+        {
+          responseType: "text",
+          signal: options.signal,
+          transformResponse: [(data: unknown) => data],
+        }
+      );
+      return String(response.data ?? "");
+    } catch (error) {
+      throw await normalizeVaultRawError(error);
+    }
+  }
+
+  async getFileBlob(
+    workspaceId: string,
+    projectId: string,
+    entryId: string,
+    options: TPpmVaultRequestOptions = {}
+  ): Promise<Blob> {
+    try {
+      const response = await this.get(
+        `${this.entryPath(workspaceId, projectId, entryId)}file/`,
+        {},
+        {
+          responseType: "blob",
+          signal: options.signal,
+        }
+      );
+      return response.data as Blob;
+    } catch (error) {
+      throw await normalizeVaultRawError(error);
+    }
+  }
+
+  /** Ссылка скачивания с настоящим именем файла (S: Content-Disposition: attachment; filename*=UTF-8''…). */
+  downloadUrl(workspaceId: string, projectId: string, entryId: string) {
+    return `${this.fileUrl(workspaceId, projectId, entryId)}?download=1`;
+  }
+  // ── /AF2.1 B5 ──
+
   pdfUrl(workspaceId: string, projectId: string, entryId: string) {
     return `${PPM_ASSET_API_BASE_URL}${this.entryPath(workspaceId, projectId, entryId)}pdf/`;
   }
@@ -348,14 +450,47 @@ export class PpmVaultService extends APIService {
   }
 }
 
+// AF2.1 B4 (round 1): a file over the server's hard limit (nginx/Django, ahead of our own PpmVaultConflict handling —
+// see apps/api/plane/settings/common.py: FILE_SIZE_LIMIT/DATA_UPLOAD_MAX_MEMORY_SIZE) comes back as a bare 413, or a
+// 400/413 with no parseable {error:{...}} body — client-side pre-check (PPM_VAULT_MAX_UPLOAD_BYTES) should prevent
+// this in practice, but map it defensively so the notice stays the "file too large" wording instead of a generic one.
 function normalizeVaultError(error: unknown) {
   if (error instanceof PpmVaultServiceError) return error;
   if (isAxiosError(error)) {
-    const payload = error.response?.data as { error?: { code?: string; message?: string } } | undefined;
+    const status = error.response?.status;
+    const payload = error.response?.data as
+      | { error?: { code?: string; message?: string; details?: Record<string, unknown> } }
+      | undefined;
+    const bodyEmpty = typeof payload !== "object" || payload === null || !payload.error?.code;
+    if (status === 413 || (status === 400 && bodyEmpty)) {
+      return new PpmVaultServiceError("Файл превышает допустимый размер.", {
+        code: "VAULT_FILE_TOO_LARGE",
+        status,
+      });
+    }
     return new PpmVaultServiceError(payload?.error?.message ?? "Не удалось выполнить действие с хранилищем.", {
       code: payload?.error?.code,
-      status: error.response?.status,
+      details: payload?.error?.details,
+      status,
     });
   }
   return new PpmVaultServiceError(error instanceof Error ? error.message : "Ошибка хранилища.");
+}
+
+/**
+ * AF2.1 B5: ответы responseType "blob"/"text" приносят тело ошибки Blob'ом или строкой — сначала читаем JSON, иначе
+ * код ошибки Хранилища (VAULT_INVALID_FILE_TYPE, VAULT_STORAGE_FAILED) потеряется, а 400 без разобранного тела
+ * normalizeVaultError примет за слишком большой файл.
+ */
+export async function normalizeVaultRawError(error: unknown) {
+  if (isAxiosError(error) && error.response) {
+    const { data } = error.response;
+    try {
+      const text = data instanceof Blob ? await data.text() : typeof data === "string" ? data : undefined;
+      if (text !== undefined) error.response.data = JSON.parse(text);
+    } catch {
+      // Не JSON: останется общий текст ошибки.
+    }
+  }
+  return normalizeVaultError(error);
 }

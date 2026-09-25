@@ -1,3 +1,4 @@
+import codecs
 import hashlib
 import re
 import uuid
@@ -16,6 +17,7 @@ from .models import (
     PpmVaultVersionStatus,
     PpmVaultStatus,
 )
+from .formats import CODE_TEXT_EXTENSIONS
 from .storage import copy_private_object, delete_private_object, put_private_object
 
 
@@ -25,6 +27,7 @@ IMAGE_SIGNATURES = {
     "jpg": ("image/jpeg", lambda header: header.startswith(b"\xff\xd8\xff")),
     "jpeg": ("image/jpeg", lambda header: header.startswith(b"\xff\xd8\xff")),
     "webp": ("image/webp", lambda header: header.startswith(b"RIFF") and header[8:12] == b"WEBP"),
+    "gif": ("image/gif", lambda header: header.startswith((b"GIF87a", b"GIF89a"))),
 }
 REFERENCE_MIME_TYPES = {
     "csv": "text/csv",
@@ -120,10 +123,69 @@ def _uploaded_file_metadata(uploaded_file):
             return name, extension, PpmVaultEntryKind.IMAGE, mime_type
     if extension in REFERENCE_MIME_TYPES:
         return name, extension, PpmVaultEntryKind.FILE, REFERENCE_MIME_TYPES[extension]
+    if extension in CODE_TEXT_EXTENSIONS:
+        _require_utf8_text(uploaded_file)
+        return name, extension, PpmVaultEntryKind.FILE, "text/plain"
     raise PpmVaultConflict(
         code="VAULT_INVALID_FILE_TYPE",
-        message="Разрешены PDF, PNG, JPEG, WebP и безопасные офисные или текстовые файлы.",
+        message="Разрешены PDF, PNG, JPEG, WebP, GIF, офисные и текстовые файлы, исходный код.",
     )
+
+
+def _require_utf8_text(uploaded_file):
+    if int(getattr(uploaded_file, "size", 0) or 0) > _binary_limit(PpmVaultEntryKind.FILE):
+        return  # the caller rejects the size; oversized input is never decoded
+    decoder = codecs.getincrementaldecoder("utf-8-sig")("strict")
+    try:
+        for chunk in uploaded_file.chunks():
+            if b"\x00" in chunk:
+                raise ValueError("NUL byte in a text file")
+            decoder.decode(chunk)
+        decoder.decode(b"", final=True)
+    except ValueError as exc:  # UnicodeDecodeError is a ValueError
+        raise PpmVaultConflict(
+            code="VAULT_INVALID_FILE_TYPE",
+            message="Файл с кодом должен быть текстом в кодировке UTF-8.",
+        ) from exc
+    finally:
+        uploaded_file.seek(0)
+
+
+def _suggest_free_name(*, vault, parent, name):
+    stem, dot, extension = name.rpartition(".")
+    if not dot or not stem:
+        stem, extension = name, ""
+    suffix = f".{extension}" if extension else ""
+    taken = set(
+        PpmVaultEntry.objects.filter(
+            vault=vault,
+            parent=parent,
+            normalized_name__startswith=normalize_name(stem),
+            status__in=[PpmVaultEntryStatus.ACTIVE, PpmVaultEntryStatus.QUARANTINED],
+        ).values_list("normalized_name", flat=True)
+    )
+    for index in range(2, 1000):
+        candidate = f"{stem} ({index}){suffix}"
+        if len(candidate) > 255:
+            return None
+        if normalize_name(candidate) not in taken:
+            return candidate
+    return None
+
+
+def _assert_name_available(*, vault, parent, name):
+    taken = PpmVaultEntry.objects.filter(
+        vault=vault,
+        parent=parent,
+        normalized_name=normalize_name(name),
+        status__in=[PpmVaultEntryStatus.ACTIVE, PpmVaultEntryStatus.QUARANTINED],
+    ).exists()
+    if taken:
+        raise PpmVaultConflict(
+            code="VAULT_NAME_CONFLICT",
+            message="Материал с таким именем уже существует.",
+            details={"name": name, "suggested_name": _suggest_free_name(vault=vault, parent=parent, name=name)},
+        )
 
 
 def _binary_limit(kind):
@@ -147,7 +209,12 @@ def create_uploaded_file(*, vault, parent_id, uploaded_file, user_id):
     name, extension, kind, mime_type = _uploaded_file_metadata(uploaded_file)
     size = int(getattr(uploaded_file, "size", 0) or 0)
     if size <= 0 or size > _binary_limit(kind):
-        raise PpmVaultConflict(code="VAULT_FILE_TOO_LARGE", message="Файл пустой или превышает допустимый размер.")
+        raise PpmVaultConflict(
+            code="VAULT_FILE_TOO_LARGE",
+            message="Файл пустой или превышает допустимый размер.",
+            details={"size_bytes": size, "limit_bytes": _binary_limit(kind)},
+        )
+    _assert_name_available(vault=vault, parent=parent, name=name)
     if extension == "md":
         try:
             content = uploaded_file.read().decode("utf-8")
@@ -218,7 +285,11 @@ def replace_uploaded_file(*, entry, base_version, uploaded_file, user_id):
         )
     size = int(getattr(uploaded_file, "size", 0) or 0)
     if size <= 0 or size > _binary_limit(kind):
-        raise PpmVaultConflict(code="VAULT_FILE_TOO_LARGE", message="Файл пустой или превышает допустимый размер.")
+        raise PpmVaultConflict(
+            code="VAULT_FILE_TOO_LARGE",
+            message="Файл пустой или превышает допустимый размер.",
+            details={"size_bytes": size, "limit_bytes": _binary_limit(kind)},
+        )
     content_hash = _hash_uploaded_file(uploaded_file)
     version_id = uuid.uuid4()
     object_key = f"ppm-vault/{entry.vault_id}/{entry.id}/{version_id}.{extension}"

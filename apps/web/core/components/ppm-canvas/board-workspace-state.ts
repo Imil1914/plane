@@ -3,7 +3,9 @@ import type { TPpmCanvasBoard, TPpmCanvasSyncStatus } from "@ppm/canvas";
 
 export const MAX_OPEN_CANVAS_BOARDS = 8;
 
-// Below this width an expanded rail overlays the canvas instead of taking its own column.
+// Below this width the rail starts (and snaps back to) collapsed so it does not eat canvas space
+// on laptop-size viewports. Independent of canvas.css's 980px overlay breakpoint, which still
+// governs when an expanded rail floats over the canvas instead of taking its own column.
 export const CANVAS_RAIL_COLLAPSE_QUERY = "(max-width: 1279px)";
 
 export type TPpmCanvasBoardTabScope = {
@@ -143,6 +145,14 @@ export function shouldCanvasOwnCommandShortcut(activeElement: Element | null, wo
   return Boolean(workspace?.contains(activeElement));
 }
 
+// Final-fix round 2, I-A: a command run from the palette can open a new note/sticker's edit mode (autoFocus) or a
+// [data-ppm-canvas-modal] dialog (Файл, Документ PPM) synchronously; the palette's own returnFocus then runs a
+// frame later and must not yank focus back to whatever was focused before ⌘K. Restore only when nothing specific
+// has it — the page body, or nothing connected at all (the earlier target already left the document).
+export function shouldReturnCanvasFocus(activeElement: Element | null): boolean {
+  return !activeElement || activeElement.tagName === "BODY" || !activeElement.isConnected;
+}
+
 export function filterCanvasCommands<TCommand extends string>(
   commands: TPpmCanvasCommandItem<TCommand>[],
   query: string
@@ -159,8 +169,18 @@ function compareBoards(first: TPpmCanvasBoard, second: TPpmCanvasBoard) {
 }
 
 // UX1.1: commands a read-only viewer may run. v2 adds zoom reset and the read-only semantic links list (R12).
-const READ_ONLY_COMMANDS_V1: readonly string[] = ["select", "open-tasks", "fit-view", "zoom-in", "zoom-out"];
-const READ_ONLY_COMMANDS_V2: readonly string[] = [...READ_ONLY_COMMANDS_V1, "zoom-reset", "semantic-edges"];
+const READ_ONLY_COMMANDS_V1: readonly string[] = ["select", "fit-view", "zoom-in", "zoom-out"];
+// AF2.1: the tasks panel and the read-only semantic links are v2 tools.
+const READ_ONLY_COMMANDS_V2: readonly string[] = [
+  ...READ_ONLY_COMMANDS_V1,
+  "zoom-reset",
+  "semantic-edges",
+  "open-semantic-edges",
+  "open-tasks",
+  "select-hand",
+  "open-find",
+  "open-board-panel",
+];
 
 export function isCanvasCommandAllowedReadOnly(command: string, designV2: boolean): boolean {
   return (designV2 ? READ_ONLY_COMMANDS_V2 : READ_ONLY_COMMANDS_V1).includes(command);
