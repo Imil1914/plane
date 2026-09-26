@@ -39,6 +39,12 @@ def canvas_snapshot_hash(snapshot):
 
 
 def canvas_snapshot_shape_ids(snapshot):
+    """Id фигур снимка: `record.id`, а без него — ключ записи в `document.store` (только записи `typeName = "shape"`).
+
+    AF2.2: это правило повторено там, где нужен не набор id, а SQL или сами записи, — менять только вместе:
+    `changes._shape_records` (записи текущего снимка ленты «Что изменилось»), `changes.VERSION_SHAPE_IDS_SQL` (id фигур
+    версии в SQL: `COALESCE(record.value ->> 'id', record.key)`), `services.PREVIOUS_VERSION_SHAPES_SQL` и
+    `services._snapshot_node_texts` (отметки версии при сохранении, S2a)."""
     store = snapshot.get("document", {}).get("store", {})
     if not isinstance(store, dict):
         return set()

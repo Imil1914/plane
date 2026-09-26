@@ -15,6 +15,7 @@ import {
   Link,
   List,
   ListTodo,
+  MapIcon,
   MousePointer2,
   Network,
   NotebookText,
@@ -77,6 +78,8 @@ const ITEM_ICONS: Partial<Record<TPpmCanvasCommand, LucideIcon>> = {
   "open-tasks": ListTodo,
   "add-board-link": Link,
   "open-board-panel": LayoutGrid,
+  // AF2.2 F: «Из проекта → Карта спринта».
+  "build-sprint-map": MapIcon,
 };
 
 export function PpmCanvasRail({ activeTool, canEdit, editReady, onDrawGeo, onRunCommand }: TPpmCanvasToolkitRailProps) {

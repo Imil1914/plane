@@ -141,6 +141,13 @@ export const PPM_RAIL_MENUS: Readonly<Record<TPpmRailMenuId, TPpmRailMenu>> = {
         sourceKey: "canvas.rail.source_code",
       },
       { command: "add-page-ref", labelKey: "canvas.rail.page", sourceKey: "canvas.rail.source_pages" },
+      // AF2.2 F: «Карта спринта» — новая доска-карта из спринта; диалог и сборка — линия M (блок M в editor.tsx).
+      {
+        command: "build-sprint-map",
+        labelKey: "canvas.af22.sprint_map",
+        hintKey: "canvas.af22.sprint_map_hint",
+        sourceKey: "canvas.af22.source_sprints",
+      },
     ],
   },
   more: {

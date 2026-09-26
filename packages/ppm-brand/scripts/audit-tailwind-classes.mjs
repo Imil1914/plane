@@ -49,6 +49,8 @@ const extraFiles = [
   "apps/web/core/components/workspace/content-wrapper.tsx",
   "apps/web/core/components/workspace/sidebar/projects-list-item.tsx",
   "apps/web/core/components/workspace/sidebar/workspace-menu-root.tsx",
+  // AF2.2 C: «На карте» в задаче лежит вне папок ppm-* — её классы проверяются так же (файл создаёт линия C).
+  "apps/web/core/components/issues/issue-detail/ppm-canvas-boards.tsx",
 ];
 // Plain (non-Tailwind) CSS that defines PPM classes such as ppm-canvas-*.
 const customCssFiles = [
@@ -59,6 +61,8 @@ const customCssFiles = [
   // those classes were unknown to the audit and printed as "notes" even though they are real, scanned CSS.
   "apps/web/core/components/ppm-canvas/canvas-toolkit.css",
   "apps/web/core/components/ppm-canvas/canvas-content.css",
+  // AF2.2 F: «Живая карта» (living-map/) — классы правой колонки, карты и «Что изменилось»; иначе они — «notes».
+  "apps/web/core/components/ppm-canvas/living-map/living-map.css",
   "apps/web/styles/globals.css",
   "apps/web/styles/power-k.css",
   "apps/web/styles/emoji.css",

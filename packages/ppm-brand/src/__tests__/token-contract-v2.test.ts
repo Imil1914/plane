@@ -136,7 +136,13 @@ const MARKS = [
   "--ppm-color-link",
   "--ppm-color-section-tick",
   "--ppm-color-card-found-border",
+  // AF2.2 final-pass M3/F: the «Светофор» overdue frame of a live card and the badge border.
+  "--ppm-color-warning",
 ];
+// AF2.2 final-pass M3/F: warning is text only on the live card and the map badges (surface-1): «просрочено · 20 сент.»,
+// «2 просрочено». It is not in TEXT: on the canvas and on hover/selected layers the light warning is below 4.5:1
+// (3.79–4.41), so any text on those surfaces needs another token.
+const WARNING_TEXT_SURFACES = ["card-live", "surface-1"];
 const MARK_SURFACES = ["canvas", "surface-1", "surface-2", "layer-1", "layer-2", "board"];
 
 describe("PPM token contract v2 (UX1.1, гибрид A+B)", () => {
@@ -146,6 +152,11 @@ describe("PPM token contract v2 (UX1.1, гибрид A+B)", () => {
     it(`${name}: every text role is >= 4.5:1 on every surface, state and the selection fill`, () => {
       for (const t of TEXT)
         for (const s of SURFACES) expect(ratio(role(t), role(s)), `${t} on ${s}`).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it(`${name}: the living map's warning text («просрочено») is >= 4.5:1 where it is drawn`, () => {
+      for (const s of WARNING_TEXT_SURFACES)
+        expect(ratio(role("warning"), role(s)), `warning on ${s}`).toBeGreaterThanOrEqual(4.5);
     });
 
     it(`${name}: labels on accent and danger fills are >= 4.5:1`, () => {

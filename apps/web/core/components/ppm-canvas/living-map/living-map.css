@@ -1,0 +1,1083 @@
+/*
+ * AF2.2 «Живая карта проекта» — только облик v2 (импорт в editor.tsx после canvas-content.css).
+ * Каждый селектор начинается с :where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"], без запятых внутри
+ * :where(...) (гард af22-foundation.test.ts). Диалог-портал ставит data-ppm-canvas-grammar="v2" на свой корень.
+ * Блоки по линиям: F — правая колонка (K5) и общие детали; M — карта, «Светофор», «Не на карте», связи «из Задач»;
+ * C — «Что изменилось». Линия пишет только в свой блок.
+ */
+
+/* ── F: правая колонка «Живой карты» (K5) и общие детали линий ── */
+
+/* The column takes the rest of the top overlay (as the «Доска» pill did); its bar and panels size themselves. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-living-map-aside {
+  pointer-events: none;
+  display: flex;
+  min-height: 0;
+  max-width: 100%;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-living-map-aside__bar {
+  pointer-events: none;
+  display: flex;
+  min-height: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* «Доска · Объектов» keeps its column (pill, then its panel); in the bar it stretches only to the bar's height, so a
+   long object list still scrolls inside its panel instead of running off the canvas. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-living-map-aside__bar > .ppm-canvas-board-info {
+  width: auto;
+  min-height: 0;
+  flex: none;
+  align-self: stretch;
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-living-map-aside__bar
+  .ppm-canvas-board-info__panel {
+  width: 17rem;
+}
+
+/* A blocking banner (conflict, recovery) stays in the flow above the column: canvas.css places it left of a 17rem
+   pill column, and the v2 column with its buttons is wider — it would cover the banner's actions. */
+@container (min-width: 44rem) {
+  :where(html[data-ppm-design="v2"])
+    [data-ppm-canvas-grammar="v2"]
+    .ppm-canvas-overlay-top
+    > .ppm-canvas-status--alert {
+    position: relative;
+    top: auto;
+    right: auto;
+    left: auto;
+    width: min(40rem, 100%);
+    max-height: none;
+    align-self: center;
+    margin-inline: 0;
+  }
+}
+
+/* The pill of «Доска · Объектов» (canvas-v2.css C1) for the column's own buttons: «Светофор» (M), «Что изменилось» (C). */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-living-map-pill {
+  pointer-events: auto;
+  display: inline-flex;
+  min-height: 1.75rem;
+  flex: none;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 0.625rem;
+  border: 1px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  border-radius: var(--ppm-radius-full, 999px);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-living-map-pill:hover,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-living-map-pill[aria-expanded="true"],
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-living-map-pill[aria-pressed="true"] {
+  color: var(--ppm-color-text, var(--txt-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-living-map-pill:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: var(--ppm-focus-ring, 0 0 0 2px var(--border-accent-strong));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-living-map-pill svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+}
+
+/* A panel of the column (K5: «Что изменилось», «Не на карте»): the inspector's width, radius 8, the popover shadow. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-living-map-panel {
+  pointer-events: auto;
+  display: grid;
+  width: min(var(--ppm-inspector-width, 19rem), 100%);
+  min-height: 0;
+  flex: 0 1 auto;
+  align-content: start;
+  overflow-y: auto;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-md, 0.5rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  box-shadow: var(--ppm-shadow-popover, 0 8px 24px rgb(0 0 0 / 0.24));
+  font-size: 0.8125rem;
+}
+
+/* «Собрать карту спринта» under «Добавить заметку» on an empty board: the secondary action. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-empty .ppm-living-map-empty-action {
+  margin-top: 0.5rem;
+  border: 1px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-canvas-empty .ppm-living-map-empty-action:hover {
+  background: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-canvas-empty
+  .ppm-living-map-empty-action:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: var(--ppm-focus-ring, 0 0 0 2px var(--border-accent-strong));
+}
+
+/* ── /F ── */
+
+/* ── M: карта спринта, «Светофор», «Не на карте», связи «из Задач» ── */
+
+/* M1 · RM-f (ревью F2): колонка F (min-height: 0) под высоким баннером конфликта схлопывалась до нуля — «Светофор»,
+   «Что изменилось» и «Доска» пропадали. Колонка — не ниже своих пилюль (1.75rem). */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-living-map-aside {
+  min-height: 2rem;
+}
+
+/* M1 · рамка спринта и секции направлений (узел group с полем map). Тело секции прозрачное: связи «из Задач» и
+   смысловые связи рисуются под фигурами (html-слой tldraw) — заливка скрыла бы их внутри секции (RM5). */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-group {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  color: var(--ppm-color-text, var(--txt-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-group[data-ppm-map-role="section"] {
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-group__icon {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+  color: var(--ppm-color-icon-subtle, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-sprint__header {
+  display: flex;
+  height: 4rem;
+  min-width: 0;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0 1rem;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-sprint__title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ppm-color-text, var(--txt-primary));
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-sprint__scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-left: 1rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-sprint__bar {
+  flex: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-sprint__track {
+  fill: var(--ppm-color-layer-2, var(--bg-layer-2));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-sprint__done {
+  fill: var(--ppm-color-success, var(--txt-success-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-sprint__today {
+  fill: none;
+  stroke: var(--ppm-color-text, var(--txt-primary));
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-sprint__meta {
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-sprint__open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+  border-radius: var(--ppm-radius-xs, 0.25rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-decoration: none;
+  pointer-events: auto;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-sprint__open svg,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-section__open svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-sprint__open:focus-visible,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-section__open:focus-visible {
+  outline: 2px solid var(--ppm-color-focus, var(--border-accent-strong));
+  outline-offset: 2px;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-section__header {
+  display: flex;
+  height: 3rem;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.5rem 0 1rem;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-section__title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-section__count {
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-badge {
+  display: inline-flex;
+  height: 1.25rem;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.375rem 0 0.25rem;
+  border: 1px solid currentColor;
+  border-radius: var(--ppm-radius-xs, 0.25rem);
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-badge[data-tone="overdue"] {
+  color: var(--ppm-color-warning, var(--txt-warning-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-badge[data-tone="blocked"] {
+  border-color: var(--ppm-color-danger-line, var(--txt-danger-primary));
+  color: var(--ppm-color-danger-text, var(--txt-danger-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-badge svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-map-section__open {
+  display: inline-grid;
+  width: 1.375rem;
+  height: 1.375rem;
+  flex: none;
+  place-items: center;
+  margin-left: auto;
+  border-radius: var(--ppm-radius-xs, 0.25rem);
+  color: var(--ppm-color-icon-subtle, var(--txt-tertiary));
+  pointer-events: auto;
+}
+
+/* M1 · диалог «Карта спринта» — портал в body, корень несёт data-ppm-canvas-grammar="v2" */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"].ppm-sprint-map-backdrop {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: var(--ppm-color-backdrop, rgb(0 0 0 / 0.4));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog {
+  display: grid;
+  width: min(30rem, 100%);
+  max-height: min(38rem, 90vh);
+  gap: 0.75rem;
+  padding: 1rem;
+  overflow: auto;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-lg, 0.75rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  box-shadow: var(--ppm-shadow-popover, 0 8px 24px rgb(0 0 0 / 0.24));
+  font-size: 0.8125rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog:focus-visible {
+  outline: 2px solid var(--ppm-color-focus, var(--border-accent-strong));
+  outline-offset: 2px;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__header h2 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__header button {
+  display: inline-grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  margin-left: auto;
+  border: 0;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  background: transparent;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__sprints {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__sprints legend {
+  margin-bottom: 0.25rem;
+  padding: 0;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__sprint {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 0.5rem;
+  row-gap: 0.125rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  cursor: pointer;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__sprint[data-selected] {
+  border-color: var(--ppm-color-selection, var(--border-accent-strong));
+  background: var(--ppm-color-selection-bg, var(--bg-accent-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__sprint input {
+  grid-row: 1 / span 2;
+  margin: 0;
+  accent-color: var(--ppm-color-accent, var(--bg-accent-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__sprint-name {
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__sprint-meta,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__note {
+  margin: 0;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  color: var(--ppm-color-danger-text, var(--txt-danger-primary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__error button {
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-decoration: underline;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__secondary,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__primary {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 0.75rem;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__secondary {
+  border: 1px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__primary {
+  border: 0;
+  color: var(--ppm-color-on-accent, var(--txt-on-color));
+  background: var(--ppm-color-accent, var(--bg-accent-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog button:focus-visible {
+  outline: 2px solid var(--ppm-color-focus, var(--border-accent-strong));
+  outline-offset: 2px;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__spinner {
+  animation: ppm-canvas-spin 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-sprint-map-dialog__spinner {
+    animation: none;
+  }
+}
+
+/* M2 · связи «из Задач»: линии и концы — классы смысловых связей (canvas-v2.css), слой и чип — свои. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-task-relations-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-task-relation {
+  color: var(--ppm-color-link-emphasis, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-task-relation[data-tone="danger"] {
+  color: var(--ppm-color-danger-line, var(--txt-danger-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-task-relation-chip {
+  position: absolute;
+  z-index: 1;
+  display: inline-flex;
+  height: var(--ppm-link-chip-height, 1.25rem);
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0 0.375rem;
+  border: 1px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  border-radius: var(--ppm-radius-xs, 0.25rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1rem;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+  cursor: default;
+  pointer-events: auto;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-task-relation-chip[data-tone="danger"] {
+  border-color: var(--ppm-color-danger-line, var(--txt-danger-primary));
+  color: var(--ppm-color-danger-text, var(--txt-danger-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-task-relation-chip__divider {
+  width: 1px;
+  height: 0.75rem;
+  flex: none;
+  background: var(--ppm-color-border, var(--border-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-task-relation-chip__source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-weight: 400;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-task-relation-chip__source svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: none;
+}
+
+/* M3 · «Светофор»: переключатель (поверх пилюли F), рамка и строка живой карточки задачи. Рамка — у контейнера
+   .ppm-canvas-node (там рамка v2, canvas-v2.css (0,5,0)); :has(> …) — чтобы не подписывать на факты каждую фигуру. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-traffic-toggle {
+  gap: 0.5rem;
+  padding-left: 0.5rem;
+  color: var(--ppm-color-text, var(--txt-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-traffic-toggle__track {
+  position: relative;
+  display: block;
+  width: 1.625rem;
+  height: 1rem;
+  flex: none;
+  border-radius: var(--ppm-radius-xs, 0.25rem);
+  background: var(--ppm-color-border-strong, var(--border-strong));
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-traffic-toggle[aria-checked="true"]
+  .ppm-traffic-toggle__track {
+  background: var(--ppm-color-accent, var(--bg-accent-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-traffic-toggle__thumb {
+  position: absolute;
+  top: 0.125rem;
+  left: 0.125rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 0.125rem;
+  background: var(--ppm-color-on-accent, var(--txt-on-color));
+  transition: transform 120ms ease;
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-traffic-toggle[aria-checked="true"]
+  .ppm-traffic-toggle__thumb {
+  transform: translateX(0.625rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-traffic-toggle__thumb {
+    transition: none;
+  }
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-canvas-node.ppm-canvas-node--work_item_ref:has(> .ppm-work-item-card.ppm-live-card[data-ppm-traffic="blocked"]) {
+  border-color: var(--ppm-color-danger-line, var(--txt-danger-primary));
+  box-shadow: 0 0 0 1px var(--ppm-color-danger-line, var(--txt-danger-primary));
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-canvas-node.ppm-canvas-node--work_item_ref:has(> .ppm-work-item-card.ppm-live-card[data-ppm-traffic="overdue"]) {
+  border-color: var(--ppm-color-warning, var(--txt-warning-primary));
+  box-shadow: 0 0 0 1px var(--ppm-color-warning, var(--txt-warning-primary));
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-canvas-node.ppm-canvas-node--work_item_ref:has(> .ppm-work-item-card.ppm-live-card[data-ppm-traffic="done"]) {
+  background: var(--ppm-color-surface-2, var(--bg-surface-2));
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-live-card[data-ppm-traffic="done"]
+  .ppm-live-card__title {
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-traffic-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  align-self: end;
+  gap: 0.375rem;
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1rem;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-traffic-line[data-tone="overdue"] {
+  color: var(--ppm-color-warning, var(--txt-warning-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-traffic-line[data-tone="blocked"] {
+  color: var(--ppm-color-danger-text, var(--txt-danger-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-traffic-line svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+}
+
+/* M4 · лоток «Не на карте» — панель F (.ppm-living-map-panel), строки K5. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map {
+  max-height: min(28rem, 60vh);
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.5rem 0.25rem 1rem;
+  color: var(--ppm-color-icon-subtle, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  margin: 0;
+  color: var(--ppm-color-text, var(--txt-primary));
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__count {
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__all {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  padding: 0 0.75rem 0 0.625rem;
+  border: 0;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-on-accent, var(--txt-on-color));
+  background: var(--ppm-color-accent, var(--bg-accent-primary));
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__toggle {
+  display: inline-grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  background: transparent;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__subtitle {
+  margin: 0;
+  padding: 0 1rem 0.5rem 2.375rem;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__list {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 1rem 0.25rem;
+  overflow-y: auto;
+  list-style: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--ppm-color-border, var(--border-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__row {
+  display: flex;
+  min-width: 0;
+  min-height: 1.5rem;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__id {
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-family: var(--ppm-font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__module {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__add {
+  display: inline-flex;
+  min-height: 1.5rem;
+  flex: none;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+  padding: 0 0.5rem 0 0.375rem;
+  border: 1px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__item-title {
+  overflow: hidden;
+  color: var(--ppm-color-text, var(--txt-primary));
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__meta {
+  overflow: hidden;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Ревью M4, раунд 1: недоступные «+ Добавить» (RM-c) и «Разложить всё» — aria-disabled (в порядке Tab), вид — как
+   у disabled. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map button[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Ревью M4, раунд 1: лоток открывается свёрнутым — одна шапка «Не на карте · N»; отступ снизу — как сверху. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__header:last-child {
+  padding-bottom: 0.625rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map button:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: var(--ppm-focus-ring, 0 0 0 2px var(--border-accent-strong));
+}
+
+/* M4 · RM-c: ручная ссылка на PR без объекта Git — «+ Добавить» недоступно, под строкой — почему. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-not-on-map__hint {
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+/* M4 · RM-b: одна правая панель за раз (AF2.1 R5, как «Что изменилось» у C) — пока список лотка развёрнут, инспектор
+   выделенной карточки скрыт (инспектор — сосед .tl-container в .ppm-canvas-shell, лоток — внутри .tl-container). */
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .tl-container:has(.ppm-not-on-map__list)
+  ~ .ppm-canvas-inspector {
+  display: none;
+}
+
+/* ── /M ── */
+
+/* ── C: «Что изменилось» — кнопка, панель, метки на карточках ── */
+
+/* AF2.2 C1 · «Что изменилось»: кнопка — пилюля колонки (.ppm-living-map-pill, F), панель — .ppm-living-map-panel (F);
+   здесь только своё: заголовок, период, лента, подвал. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-button[data-unseen] {
+  color: var(--ppm-color-text, var(--txt-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 0.5rem 0.625rem 0.875rem;
+  border-bottom: 1px solid var(--ppm-color-border, var(--border-subtle));
+}
+
+/* Заголовок панели — настоящий h2 (навигация читалки по заголовкам) в размере текста панели. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: inherit;
+  font-weight: 600;
+  line-height: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__count {
+  flex: none;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__header button {
+  display: inline-grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: none;
+  margin-left: auto;
+  place-items: center;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__header button:hover,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] button.ppm-changes-panel__item:hover,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__seen:hover {
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-layer-1-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__period {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem 0.25rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__period select,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__period input {
+  min-height: var(--ppm-control-height-sm, 1.75rem);
+  padding: 0 0.5rem;
+  border: 1px solid var(--ppm-color-border-control, var(--border-subtle-1));
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-1, var(--bg-surface-1));
+  font-size: 0.75rem;
+}
+
+/* Длинная лента прокручивается внутри панели: заголовок и «Отметить просмотренным» всегда на виду. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__list {
+  max-height: 18rem;
+  margin: 0;
+  padding: 0.25rem 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__item {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  column-gap: 0.625rem;
+  row-gap: 0.125rem;
+  padding: 0.5rem 0.875rem;
+  color: inherit;
+  text-align: left;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__item[data-static] {
+  cursor: default;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__icon {
+  grid-row: span 2;
+  margin-top: 0.125rem;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__text {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__meta {
+  overflow: hidden;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.75rem 0.875rem;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__state[data-error] {
+  color: var(--ppm-color-danger-text, var(--txt-danger-primary));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__state button {
+  text-decoration: underline;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__note {
+  margin: 0;
+  padding: 0 0.875rem 0.5rem;
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__footer {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.375rem 0.5rem;
+  border-top: 1px solid var(--ppm-color-border, var(--border-subtle));
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__footer p {
+  margin: 0;
+  padding: 0 0.375rem;
+  color: var(--ppm-color-danger-text, var(--txt-danger-primary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__seen {
+  display: inline-flex;
+  min-height: 1.75rem;
+  align-items: center;
+  justify-self: start;
+  gap: 0.375rem;
+  padding: 0 0.375rem;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  font-size: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel__seen:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel button:focus-visible,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel select:focus-visible,
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-changes-panel input:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: var(--ppm-focus-ring, 0 0 0 2px var(--border-accent-strong));
+}
+
+/* Одна правая панель за раз (AF2.1 R5): пока открыта «Что изменилось», инспектор выделенной карточки её не перекрывает
+   (инспектор — сосед .tl-container в .ppm-canvas-shell, панель — внутри .tl-container). */
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .tl-container:has(.ppm-changes-panel)
+  ~ .ppm-canvas-inspector {
+  display: none;
+}
+
+/* AF2.2 C2 · метка «изменено» / «добавлено» над верхней рамкой карточки: сосед HTMLContainer внутри .tl-shape
+   (overflow: visible), клики не берёт. */
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-change-chip {
+  position: absolute;
+  z-index: 1;
+  top: -0.625rem;
+  right: 0.75rem;
+  display: inline-flex;
+  height: 1.25rem;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-full, 999px);
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-surface-2, var(--bg-surface-2));
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+:where(html[data-ppm-design="v2"]) [data-ppm-canvas-grammar="v2"] .ppm-change-chip__dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+:where(html[data-ppm-design="v2"])
+  [data-ppm-canvas-grammar="v2"]
+  .ppm-change-chip[data-mark="added"]
+  .ppm-change-chip__dot {
+  background: var(--ppm-color-accent, var(--txt-accent-primary));
+}
+
+/* ── /C ── */

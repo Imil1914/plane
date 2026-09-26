@@ -1,11 +1,14 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { TPpmCanvasBoard } from "@ppm/canvas";
 import {
   canvasBoardTabsKey,
   closeBoardTab,
   filterCanvasCommands,
+  MAX_OPEN_CANVAS_BOARDS,
   moveBoard,
   openBoardTab,
+  openLinkedBoardTabs,
   readCanvasBoardTabs,
   writeCanvasBoardTabs,
 } from "@/components/ppm-canvas/board-workspace-state";
@@ -89,6 +92,94 @@ describe("Canvas board tabs", () => {
       "one",
       "archive",
     ]);
+  });
+});
+
+// AF2.2, итоговое ревью M-5: ссылка ?board= («На карте» в задаче) на доску, которой не хватает вкладки (открыто 8), —
+// не тихий переход на первую вкладку: вкладки и активная доска прежние, рабочее пространство сообщает предел.
+describe("Canvas board link (?board=) and the tab limit", () => {
+  const valid = new Set(["b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8", "b9"]);
+  const saved = { activeBoardId: "b2", openBoardIds: ["b1", "b2"] };
+  const eight = ["b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8"];
+
+  it("opens the linked board in a new active tab while a tab is free", () => {
+    expect(
+      openLinkedBoardTabs({
+        currentActiveBoardId: undefined,
+        currentOpenBoardIds: [],
+        linkedBoardId: "b5",
+        savedTabs: saved,
+        validBoardIds: valid,
+      })
+    ).toEqual({ activeBoardId: "b5", openBoardIds: ["b1", "b2", "b5"], tabLimit: false });
+    // Уже открытая доска ссылки — та же вкладка, новой нет.
+    expect(
+      openLinkedBoardTabs({
+        currentActiveBoardId: "b3",
+        currentOpenBoardIds: eight,
+        linkedBoardId: "b7",
+        savedTabs: saved,
+        validBoardIds: valid,
+      })
+    ).toEqual({ activeBoardId: "b7", openBoardIds: eight, tabLimit: false });
+  });
+
+  it("stays on the current tab and reports the limit when every tab is taken", () => {
+    expect(eight).toHaveLength(MAX_OPEN_CANVAS_BOARDS);
+    expect(
+      openLinkedBoardTabs({
+        currentActiveBoardId: "b3",
+        currentOpenBoardIds: eight,
+        linkedBoardId: "b9",
+        savedTabs: saved,
+        validBoardIds: valid,
+      })
+    ).toEqual({ activeBoardId: "b3", openBoardIds: eight, tabLimit: true });
+    // Первая загрузка: восемь сохранённых вкладок — остаётся сохранённая активная.
+    expect(
+      openLinkedBoardTabs({
+        currentActiveBoardId: undefined,
+        currentOpenBoardIds: [],
+        linkedBoardId: "b9",
+        savedTabs: { activeBoardId: "b8", openBoardIds: eight },
+        validBoardIds: valid,
+      })
+    ).toEqual({ activeBoardId: "b8", openBoardIds: eight, tabLimit: true });
+  });
+
+  it("restores the tabs as before without a link or with a link to a board that is not active", () => {
+    const restored = { activeBoardId: "b2", openBoardIds: ["b1", "b2"], tabLimit: false };
+    for (const linkedBoardId of [undefined, "archived"])
+      expect(
+        openLinkedBoardTabs({
+          currentActiveBoardId: undefined,
+          currentOpenBoardIds: [],
+          linkedBoardId,
+          savedTabs: saved,
+          validBoardIds: valid,
+        })
+      ).toEqual(restored);
+    // Уже открытые вкладки (повторная загрузка списка) важнее сохранённых; закрытая доска из них выпадает.
+    expect(
+      openLinkedBoardTabs({
+        currentActiveBoardId: "gone",
+        currentOpenBoardIds: ["b4", "gone", "b6"],
+        linkedBoardId: undefined,
+        savedTabs: saved,
+        validBoardIds: valid,
+      })
+    ).toEqual({ activeBoardId: "b2", openBoardIds: ["b4", "b6"], tabLimit: false });
+  });
+
+  it("shows canvas.board_tab_limit the way the workspace reports the limit and drops ?shape= of that link", () => {
+    const workspace = readFileSync(
+      new URL("../../core/components/ppm-canvas/workspace.tsx", import.meta.url),
+      "utf8"
+    ).replace(/\s+/g, " ");
+    expect(workspace).toContain("const tabs = openLinkedBoardTabs({");
+    expect(workspace).toContain('if (tabs.tabLimit) { setActionError(ppmT("canvas.board_tab_limit"));');
+    expect(workspace).toContain("url.searchParams.delete(PPM_CANVAS_SHAPE_PARAM);");
+    expect(workspace).not.toContain("return linkedBoardId ? openBoardTab(valid, linkedBoardId) : valid;");
   });
 });
 

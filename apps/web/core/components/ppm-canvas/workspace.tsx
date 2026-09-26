@@ -51,6 +51,7 @@ import {
   MAX_OPEN_CANVAS_BOARDS,
   moveBoard,
   openBoardTab,
+  openLinkedBoardTabs,
   readCanvasBoardTabs,
   shouldCanvasOwnCommandShortcut,
   shouldReturnCanvasFocus,
@@ -66,6 +67,7 @@ import { createCanvasZoomStore, type TPpmCanvasZoomStore } from "./canvas-zoom-s
 import { PpmCanvasLegacyRail } from "./canvas-rail-legacy";
 import { PpmCanvasRail } from "./canvas-rail";
 import { railShortcutCommand, type TPpmGeo } from "./canvas-toolkit-model";
+import { PPM_CANVAS_SHAPE_PARAM } from "./living-map/shape-link";
 
 const PpmCanvasEditor = lazy(() => import("./editor"));
 
@@ -141,6 +143,9 @@ export default function PpmCanvasWorkspace({
   const [defaultBoardId, setDefaultBoardId] = useState<string>();
   const [activeBoardId, setActiveBoardId] = useState<string>();
   const [openBoardIds, setOpenBoardIds] = useState<string[]>([]);
+  // Вкладки на момент ответа списка досок (loadBoards — useCallback без них в зависимостях): ссылка ?board= (M-5).
+  const tabsRef = useRef({ activeBoardId, openBoardIds });
+  tabsRef.current = { activeBoardId, openBoardIds };
   const boardTabScope = useMemo(() => ({ authorId, projectId, workspaceId }), [authorId, projectId, workspaceId]);
   const boardTabScopeKey = canvasBoardTabsKey(boardTabScope);
   const [loadedBoardTabScopeKey, setLoadedBoardTabScopeKey] = useState<string>();
@@ -236,15 +241,23 @@ export default function PpmCanvasWorkspace({
         const savedTabs = readCanvasBoardTabs(getBoardTabStorage(), boardTabScope, validIds, response.default_board_id);
         const requestedBoardId = new URL(window.location.href).searchParams.get("board");
         const linkedBoardId = requestedBoardId && validIds.has(requestedBoardId) ? requestedBoardId : undefined;
-        setOpenBoardIds((current) => {
-          const restored = current.filter((id) => validIds.has(id));
-          const next = restored.length > 0 ? restored : savedTabs.openBoardIds;
-          const valid = next.filter((id) => validIds.has(id));
-          return linkedBoardId ? openBoardTab(valid, linkedBoardId) : valid;
+        // AF2.2, итоговое ревью M-5: ссылка на доску, которой не хватает вкладки (открыто 8), не переводит молча на
+        // первую вкладку — вкладки и активная доска прежние, сообщение о пределе, ?shape= этой ссылки убираем.
+        const tabs = openLinkedBoardTabs({
+          currentActiveBoardId: tabsRef.current.activeBoardId,
+          currentOpenBoardIds: tabsRef.current.openBoardIds,
+          linkedBoardId,
+          savedTabs,
+          validBoardIds: validIds,
         });
-        setActiveBoardId(
-          (current) => linkedBoardId ?? (current && validIds.has(current) ? current : savedTabs.activeBoardId)
-        );
+        setOpenBoardIds(tabs.openBoardIds);
+        setActiveBoardId(tabs.activeBoardId);
+        if (tabs.tabLimit) {
+          setActionError(ppmT("canvas.board_tab_limit"));
+          const url = new URL(window.location.href);
+          url.searchParams.delete(PPM_CANVAS_SHAPE_PARAM);
+          window.history.replaceState(window.history.state, "", url);
+        }
         setLoadedBoardTabScopeKey(boardTabScopeKey);
         setError(undefined);
       } catch (reason) {
@@ -279,6 +292,8 @@ export default function PpmCanvasWorkspace({
     const url = new URL(window.location.href);
     if (url.searchParams.get("board") !== activeBoardId) {
       url.searchParams.set("board", activeBoardId);
+      // AF2.2 F: ?shape= («На карте» в задаче) принадлежит доске ссылки — другая активная доска его не берёт.
+      url.searchParams.delete(PPM_CANVAS_SHAPE_PARAM);
       window.history.replaceState(window.history.state, "", url);
     }
   }, [activeBoardId, boardTabScope, boardTabScopeKey, loadedBoardTabScopeKey, loading, openBoardIds]);
@@ -710,6 +725,18 @@ export default function PpmCanvasWorkspace({
                   },
                 ]
               : []),
+            // ── AF2.2 F: «Карта спринта» — только v2; команду обрабатывает блок M в editor.tsx (CanvasControls) ──
+            ...(designV2
+              ? [
+                  {
+                    command: "build-sprint-map" as const,
+                    id: "build-sprint-map",
+                    keywords: ["sprint", "cycle", "map", "planning"],
+                    label: ppmT("canvas.af22.sprint_map"),
+                  },
+                ]
+              : []),
+            // ── /AF2.2 F ──
             {
               command: "add-group" as const,
               id: "add-group",
@@ -1001,6 +1028,14 @@ export default function PpmCanvasWorkspace({
                 isActive={boardId === activeBoardId}
                 onEditabilityChange={handleEditabilityChange}
                 onOpenBoard={openBoard}
+                // AF2.2 F: «Собрать карту спринта» создаёт доску из редактора — она попадает в список и открывается.
+                onBoardCreated={(board) => {
+                  upsertBoard(board);
+                  openBoard(board.board_id);
+                }}
+                // ── AF2.2 M: открытые вкладки — карта спринта создаётся, только если новой доске есть вкладка ──
+                openBoardCount={openBoardIds.length}
+                // ── /AF2.2 M ──
                 onOrchestratorRunVersionsChange={handleOrchestratorRunVersionsChange}
                 onSelectionChange={handleSelectionChange}
                 onSavedAtChange={designV2 ? handleSavedAtChange : undefined}

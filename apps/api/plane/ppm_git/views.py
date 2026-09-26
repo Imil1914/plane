@@ -93,6 +93,9 @@ def serialize_link(link):
         "status": link.status,
         "origin": link.origin,
         "git_object_id": str(link.git_object_id) if link.git_object_id else None,
+        # AF2.2 M-6: состояние Git-объекта (у PR — `open`, `closed` — закрыт без слияния, `merged`); у ручной ссылки без
+        # объекта — None. Запросы, чьи строки идут сюда, берут объект через select_related("git_object").
+        "git_object_state": link.git_object.state if link.git_object_id else None,
         "created_at": link.created_at.isoformat(),
         "updated_at": link.updated_at.isoformat(),
     }
@@ -325,7 +328,7 @@ class PpmGitOverviewView(PpmGitAPIView):
             project_id=project_id,
             status=PpmGitRepositoryStatus.ACTIVE,
         )
-        links = PpmGitLink.objects.select_related("repository", "work_item__project").filter(
+        links = PpmGitLink.objects.select_related("repository", "work_item__project", "git_object").filter(
             workspace_id=workspace_id,
             project_id=project_id,
             status=PpmGitLinkStatus.ACTIVE,
@@ -641,7 +644,7 @@ class PpmGitLinkListView(PpmGitAPIView):
         capabilities, denied = self.require_capability(request, workspace_id, project_id)
         if denied:
             return denied
-        links = PpmGitLink.objects.select_related("repository", "work_item__project").filter(
+        links = PpmGitLink.objects.select_related("repository", "work_item__project", "git_object").filter(
             workspace_id=workspace_id,
             project_id=project_id,
             status=PpmGitLinkStatus.ACTIVE,
@@ -658,7 +661,7 @@ class PpmGitLinkListView(PpmGitAPIView):
             payload=request.data,
             user_id=request.user.id,
         )
-        link = PpmGitLink.objects.select_related("repository", "work_item__project").get(id=link.id)
+        link = PpmGitLink.objects.select_related("repository", "work_item__project", "git_object").get(id=link.id)
         self.audit(
             request,
             workspace_id=workspace_id,

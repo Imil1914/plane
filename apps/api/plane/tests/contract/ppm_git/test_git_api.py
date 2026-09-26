@@ -1,11 +1,21 @@
 import uuid
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from rest_framework import status
 
 from plane.db.models import Issue, State
 from plane.ppm_canvas.models import PpmGlobalAdmin
-from plane.ppm_git.models import PpmGitAudit, PpmGitLink, PpmGitRepository
+from plane.ppm_git.models import (
+    PpmGitAudit,
+    PpmGitConnection,
+    PpmGitInstallation,
+    PpmGitLink,
+    PpmGitLinkOrigin,
+    PpmGitObject,
+    PpmGitRepository,
+)
 from plane.tests.factories import (
     ProjectFactory,
     ProjectMemberFactory,
@@ -279,3 +289,104 @@ def test_global_admin_can_manage_without_project_membership_and_responses_have_n
     forbidden_keys = {"token", "password", "private_key", "secret", "credentials"}
     assert response_keys(overview.data).isdisjoint(forbidden_keys)
     assert PpmGitAudit.objects.filter(actor_id=global_admin.id, action="repository.create").exists()
+
+
+# ── AF2.2 финальная волна (FW-S), M-6: состояние PR у Git-связи ──
+
+
+def provider_pull_request_link(repository, git_connection, issue, *, number, state):
+    """Связь, которую создаёт синхронизация провайдера: у неё есть Git-объект с состоянием PR."""
+    git_object = PpmGitObject.objects.create(
+        workspace_id=repository.workspace_id,
+        project_id=repository.project_id,
+        connection=git_connection,
+        repository=repository,
+        object_type="pull_request",
+        provider_object_id=str(5000 + number),
+        ref=str(number),
+        title=f"GIT-{issue.sequence_id} — PR {number}",
+        canonical_url=f"https://github.com/Imil1914/PPM/pull/{number}",
+        state=state,
+        source_version=f"pr:{number}",
+    )
+    return PpmGitLink.objects.create(
+        workspace_id=repository.workspace_id,
+        project_id=repository.project_id,
+        repository=repository,
+        git_object=git_object,
+        work_item=issue,
+        object_type="pull_request",
+        ref=git_object.ref,
+        title=git_object.title,
+        canonical_url=git_object.canonical_url,
+        origin=PpmGitLinkOrigin.PROVIDER,
+        created_by=repository.created_by,
+        updated_by=repository.created_by,
+    )
+
+
+def github_connection(repository):
+    installation = PpmGitInstallation.objects.create(
+        workspace_id=repository.workspace_id,
+        project_id=repository.project_id,
+        provider_installation_id=4101,
+        provider_account_id=4201,
+        account_login="Imil1914",
+        created_by=repository.created_by,
+        updated_by=repository.created_by,
+    )
+    return PpmGitConnection.objects.create(
+        workspace_id=repository.workspace_id,
+        project_id=repository.project_id,
+        installation=installation,
+        repository=repository,
+        provider_repository_id=4301,
+        provider_full_name="Imil1914/PPM",
+        created_by=repository.created_by,
+        updated_by=repository.created_by,
+    )
+
+
+def test_links_carry_the_pull_request_state_without_a_query_per_link(api_client, git_project):
+    owner, workspace, project, issue = git_project
+    authenticate(api_client, owner)
+    repository = PpmGitRepository.objects.get(id=create_repository(api_client, workspace, project).data["id"])
+    git_connection = github_connection(repository)
+    opened = provider_pull_request_link(repository, git_connection, issue, number=1, state="open")
+    closed = provider_pull_request_link(repository, git_connection, issue, number=2, state="closed")
+    merged = provider_pull_request_link(repository, git_connection, issue, number=3, state="merged")
+    manual = api_client.post(
+        git_url(workspace, project, "links/"), link_payload(str(repository.id), issue), format="json"
+    )
+
+    with CaptureQueriesContext(connection) as few_queries:
+        few = api_client.get(git_url(workspace, project, "links/"))
+    with CaptureQueriesContext(connection) as overview_few_queries:
+        overview = api_client.get(git_url(workspace, project))
+    for number in range(4, 8):
+        provider_pull_request_link(repository, git_connection, issue, number=number, state="closed")
+    with CaptureQueriesContext(connection) as many_queries:
+        many = api_client.get(git_url(workspace, project, "links/"))
+    with CaptureQueriesContext(connection) as overview_many_queries:
+        api_client.get(git_url(workspace, project))
+
+    expected = {
+        str(opened.id): "open",
+        # Закрыт без слияния: клиент не показывает такой PR в «Не на карте».
+        str(closed.id): "closed",
+        str(merged.id): "merged",
+        # Ручная ссылка без Git-объекта — состояние неизвестно.
+        manual.data["id"]: None,
+    }
+    assert manual.status_code == status.HTTP_201_CREATED
+    assert manual.data["git_object_id"] is None
+    assert manual.data["git_object_state"] is None
+    assert few.status_code == status.HTTP_200_OK
+    assert {link["id"]: link["git_object_state"] for link in few.data["links"]} == expected
+    assert {
+        link["id"]: link["git_object_state"] for link in overview.data["links"] if link["id"] in expected
+    } == expected
+    assert len(many.data["links"]) == len(few.data["links"]) + 4
+    # Состояние читается вместе со связью (select_related), без запроса на каждую связь — и в списке, и в обзоре.
+    assert len(many_queries.captured_queries) == len(few_queries.captured_queries)
+    assert len(overview_many_queries.captured_queries) == len(overview_few_queries.captured_queries)

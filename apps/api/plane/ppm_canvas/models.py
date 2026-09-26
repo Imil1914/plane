@@ -235,6 +235,11 @@ class PpmCanvasVersion(models.Model):
     request_id = models.UUIDField()
     created_by = models.UUIDField()
     created_at = models.DateTimeField(auto_now_add=True)
+    # AF2.2 S2a: отметки для ленты «Что изменилось» (время и автор событий доски), пишутся при сохранении версии:
+    # фигуры, которых не было в предыдущей версии (у первой — все), и карточки PPM, у которых сменился `updated_at`
+    # узла. NULL — версия сохранена до S2a.
+    added_shape_ids = models.JSONField(null=True, blank=True)
+    changed_shape_ids = models.JSONField(null=True, blank=True)
 
     class Meta:
         db_table = "ppm_canvas_versions"
@@ -349,3 +354,25 @@ class PpmCanvasSemanticEdge(models.Model):
             models.Index(fields=["board", "to_shape_id"], name="ppm_edge_to_shape_idx"),
         ]
         ordering = ("created_at", "id")
+
+
+class PpmCanvasBoardUserState(models.Model):
+    """AF2.2 S3: личная отметка «просмотрено» для ленты «Что изменилось» (одна строка на пару доска + пользователь)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    board = models.ForeignKey(PpmCanvasBoard, on_delete=models.CASCADE, related_name="user_states")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="ppm_canvas_board_states",
+    )
+    seen_at = models.DateTimeField()
+    seen_version = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "ppm_canvas_board_user_states"
+        constraints = [
+            models.UniqueConstraint(fields=["board", "user"], name="ppm_board_user_state_unique"),
+        ]

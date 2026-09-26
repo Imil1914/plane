@@ -358,6 +358,8 @@ class PpmGitObject(models.Model):
     metadata = models.JSONField(default=dict, blank=True)
     source_version = models.CharField(max_length=255)
     provider_updated_at = models.DateTimeField(null=True, blank=True)
+    # AF2.2 S2a: настоящее время слияния PR (GitHub `merged_at`) — `provider_updated_at` сдвигает любая активность.
+    provider_merged_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     first_seen_at = models.DateTimeField(auto_now_add=True)
     last_seen_at = models.DateTimeField(auto_now=True)

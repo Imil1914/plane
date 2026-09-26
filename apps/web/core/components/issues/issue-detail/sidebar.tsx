@@ -41,6 +41,9 @@ import { SidebarPropertyListItem } from "@/components/common/layout/sidebar/prop
 import { IssueCycleSelect } from "./cycle-select";
 import { IssueLabel } from "./label";
 import { IssueModuleSelect } from "./module-select";
+// ── AF2.2 C: (C3) «На карте» ──
+import { PpmIssueCanvasBoards } from "./ppm-canvas-boards";
+// ── /AF2.2 C ──
 import type { TIssueOperations } from "./root";
 
 type Props = {
@@ -248,6 +251,10 @@ export const IssueDetailsSidebar = observer(function IssueDetailsSidebar(props: 
                 disabled={!isEditable}
               />
             </SidebarPropertyListItem>
+
+            {/* ── AF2.2 C: (C3) «На карте» — доски, где задача лежит живой карточкой; только облик v2 ── */}
+            <PpmIssueCanvasBoards workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
+            {/* ── /AF2.2 C ── */}
           </div>
         </div>
       </div>

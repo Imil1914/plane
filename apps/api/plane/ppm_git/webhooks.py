@@ -60,9 +60,11 @@ def parse_github_webhook(raw_body, *, event_name):
         if not isinstance(pull_request, dict):
             raise PpmGitProviderError("GITHUB_WEBHOOK_INVALID", "В событии GitHub отсутствует pull request.")
         normalized_pull_request = GitHubAppClient().normalize_pull_request(pull_request)
-        provider_updated_at = normalized_pull_request.get("provider_updated_at")
-        if hasattr(provider_updated_at, "isoformat"):
-            normalized_pull_request["provider_updated_at"] = provider_updated_at.isoformat()
+        # Доставка хранится в JSON: даты — строками ISO 8601 (upsert_git_object разбирает их обратно).
+        for key in ("provider_updated_at", "provider_merged_at"):
+            moment = normalized_pull_request.get(key)
+            if hasattr(moment, "isoformat"):
+                normalized_pull_request[key] = moment.isoformat()
         normalized["pull_request"] = normalized_pull_request
     return normalized
 

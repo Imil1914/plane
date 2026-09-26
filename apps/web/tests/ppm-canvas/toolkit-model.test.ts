@@ -102,6 +102,8 @@ describe("rail (R1)", () => {
       "add-file",
       "add-git",
       "add-page-ref",
+      // AF2.2 F: «Карта спринта» — последний пункт «Из проекта».
+      "build-sprint-map",
     ]);
     expect(PPM_RAIL_MENUS.shapes.items).toHaveLength(PPM_GEO_SHAPES.length);
     for (const item of PPM_RAIL_MENUS.docs.items) expect(item.hintKey, item.command).toBeDefined();

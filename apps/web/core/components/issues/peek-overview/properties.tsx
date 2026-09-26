@@ -42,6 +42,9 @@ import type { TIssueOperations } from "../issue-detail";
 import { IssueCycleSelect } from "../issue-detail/cycle-select";
 import { IssueLabel } from "../issue-detail/label";
 import { IssueModuleSelect } from "../issue-detail/module-select";
+// ── AF2.2 C: (C3) «На карте» ──
+import { PpmIssueCanvasBoards } from "../issue-detail/ppm-canvas-boards";
+// ── /AF2.2 C ──
 
 const INTAKE_AUTHOR_NAME = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED)
   ? PPM_BRAND.name
@@ -250,6 +253,10 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
         <SidebarPropertyListItem icon={LabelPropertyIcon} label={t("common.labels")}>
           <IssueLabel workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} disabled={disabled} />
         </SidebarPropertyListItem>
+
+        {/* ── AF2.2 C: (C3) «На карте» — доски, где задача лежит живой карточкой; только облик v2 ── */}
+        <PpmIssueCanvasBoards workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
+        {/* ── /AF2.2 C ── */}
       </div>
     </div>
   );

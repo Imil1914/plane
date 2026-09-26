@@ -91,6 +91,37 @@ export function openBoardTab(openBoardIds: string[], boardId: string, limit = MA
   return openBoardIds;
 }
 
+/**
+ * Tabs after the board list loads (AF2.2, final review M-5). The open tabs stay (the saved ones on the first load);
+ * a `?board=` link («На карте» in a task, a copied board link) opens its board as the active tab. When every tab is
+ * taken the link is refused instead of silently switching to the first tab: the tabs and the active board stay as
+ * they were and `tabLimit` tells the workspace to show canvas.board_tab_limit (and drop the link's `?shape=`).
+ */
+export function openLinkedBoardTabs(input: {
+  currentActiveBoardId: string | undefined;
+  currentOpenBoardIds: readonly string[];
+  limit?: number;
+  linkedBoardId: string | undefined;
+  savedTabs: TPpmCanvasBoardTabState;
+  validBoardIds: ReadonlySet<string>;
+}): TPpmCanvasBoardTabState & { tabLimit: boolean } {
+  const { currentActiveBoardId, validBoardIds } = input;
+  const restored = input.currentOpenBoardIds.filter((id) => validBoardIds.has(id));
+  const openBoardIds = (restored.length > 0 ? restored : input.savedTabs.openBoardIds).filter((id) =>
+    validBoardIds.has(id)
+  );
+  const activeBoardId =
+    currentActiveBoardId && validBoardIds.has(currentActiveBoardId)
+      ? currentActiveBoardId
+      : input.savedTabs.activeBoardId;
+  const linked = input.linkedBoardId && validBoardIds.has(input.linkedBoardId) ? input.linkedBoardId : undefined;
+  if (!linked) return { activeBoardId, openBoardIds, tabLimit: false };
+  const withLinked = openBoardTab(openBoardIds, linked, input.limit);
+  return withLinked.includes(linked)
+    ? { activeBoardId: linked, openBoardIds: withLinked, tabLimit: false }
+    : { activeBoardId, openBoardIds, tabLimit: true };
+}
+
 export function closeBoardTab(openBoardIds: string[], boardId: string, activeBoardId: string) {
   if (openBoardIds.length <= 1) return { activeBoardId, openBoardIds };
   const closingIndex = openBoardIds.indexOf(boardId);

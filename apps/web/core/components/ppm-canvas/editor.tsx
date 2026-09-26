@@ -23,6 +23,7 @@ import {
   Download,
   FileArchive,
   Frame,
+  MapIcon,
   MousePointer2,
   Plus,
   Search,
@@ -105,7 +106,7 @@ import {
   expandOrchestratorRun,
   type TPpmCanvasShape,
 } from "./shape";
-import { PPM_CANVAS_COMMAND_EVENT, type TPpmCanvasCommandDetail } from "./commands";
+import { dispatchPpmCanvasCommand, PPM_CANVAS_COMMAND_EVENT, type TPpmCanvasCommandDetail } from "./commands";
 import {
   presenceCursorColors,
   resolveBoardChangeAction,
@@ -230,6 +231,25 @@ import {
   type TInlineMoveMemory,
 } from "./canvas-image-migration";
 // ── /AF2.1 B ──
+// ── AF2.2 F: «Живая карта» — провайдер, правая колонка, глубокая ссылка ?shape= ──
+import { PpmLivingMapProvider } from "./living-map/living-map-provider";
+import type { TLivingMapArgs } from "./living-map/living-map-types";
+import { revealCanvasShape, takeCanvasShapeLink } from "./living-map/shape-link";
+// ── /AF2.2 F ──
+// ── AF2.2 M: «Карта спринта», связи «из Задач», «Светофор», «Не на карте» ──
+import { useProject } from "@/hooks/store/use-project";
+import { openSprintMapDialog, PpmSprintMapDialog } from "./living-map/map-assembly-dialog";
+import { usePpmGroupDeleteGuard } from "./living-map/map-guard";
+import { watchProjectIdentifier } from "./living-map/map-data";
+import { hasFreeBoardTab, mergeRefreshedBindings } from "./living-map/map-model";
+import { PpmNotOnMapTray } from "./living-map/not-on-map-tray";
+import { PpmTaskRelationsLayer } from "./living-map/task-relations-layer";
+import { PpmTrafficLightToggle } from "./living-map/traffic-light-toggle";
+// ── /AF2.2 M ──
+// ── AF2.2 C: «Что изменилось» — кнопка и панель правой колонки ──
+import { PpmChangesButton } from "./living-map/changes-button";
+import { PpmChangesPanel } from "./living-map/changes-panel";
+// ── /AF2.2 C ──
 // oxlint-disable-next-line import/no-unassigned-import -- tldraw owns the canvas interaction styles
 import "tldraw/tldraw.css";
 // oxlint-disable-next-line import/no-unassigned-import -- PPM theme is intentionally scoped to this route
@@ -240,6 +260,8 @@ import "./canvas-v2.css";
 import "./canvas-toolkit.css";
 // oxlint-disable-next-line import/no-unassigned-import -- AF2.1 line B: note, code, document and file cards (v2 only)
 import "./canvas-content.css";
+// oxlint-disable-next-line import/no-unassigned-import -- AF2.2: «Живая карта» — правая колонка, карта, светофор (v2 only)
+import "./living-map/living-map.css";
 
 type TPpmCanvasEditorProps = {
   authorId: string;
@@ -258,6 +280,11 @@ type TPpmCanvasEditorProps = {
   onSavedAtChange?: (boardId: string, savedAt: string | null) => void;
   onZoomChange?: (boardId: string, zoom: number) => void;
   onToolChange?: (boardId: string, toolId: string) => void;
+  // AF2.2 (v2 workspace): a board created from the editor (the sprint map) joins the workspace's list and opens.
+  onBoardCreated?: (board: TPpmCanvasBoard) => void;
+  // ── AF2.2 M: открытые вкладки досок (workspace.tsx) — новая карта создаётся, только если ей есть вкладка ──
+  openBoardCount?: number;
+  // ── /AF2.2 M ──
   presence?: TPpmBoardPresenceController;
   projectId: string;
   // "card": the status card inside the editor (minimal workspace, the only status there).
@@ -324,6 +351,10 @@ export default function PpmCanvasEditor({
   onSavedAtChange,
   onZoomChange,
   onToolChange,
+  onBoardCreated,
+  // ── AF2.2 M: открытые вкладки досок — для args.canOpenBoard ──
+  openBoardCount,
+  // ── /AF2.2 M ──
   presence,
   projectId,
   statusPlacement = "card",
@@ -1221,8 +1252,18 @@ export default function PpmCanvasEditor({
   const refreshWorkItems = useCallback(async () => {
     setIsRefreshingWorkItems(true);
     try {
+      // ── AF2.2 M: опрос не стирает положенные, но ещё не сохранённые привязки (сервер отдаёт только active) ──
+      // Ревью M4: очередь активаций и сохранение в пути — на момент запроса и ответа (сохранение могло закончиться, пока
+      // шёл опрос). Иначе лоток «Не на карте» снова показал бы эти задачи, а его предел активаций не увидел бы очереди.
+      const unsavedBindingIds = () => [
+        ...queuedBindingActivationsRef.current,
+        ...(pendingSaveRef.current?.binding_changes.activate ?? []),
+      ];
+      const unsavedAtRequest = unsavedBindingIds();
       const response = await service.getBindings(workspaceId, projectId, boardId);
-      setBindingsByShapeId(new Map(response.bindings.map((binding) => [binding.shape_id, binding])));
+      const unsaved = new Set([...unsavedAtRequest, ...unsavedBindingIds()]);
+      setBindingsByShapeId((current) => mergeRefreshedBindings(current, response.bindings, unsaved));
+      // ── /AF2.2 M ──
       setWorkItemOptions(response.work_item_options);
       setProjectionErrors(new Map());
     } catch {
@@ -2716,6 +2757,107 @@ export default function PpmCanvasEditor({
   );
   // ── /AF2.1 B ──
 
+  // ── AF2.2 F: «Живая карта» — окружение линий M и C, запись привязок, глубокая ссылка ?shape= ──
+  // Колбэки рабочего пространства пересоздаются на каждой его отрисовке (выделение, инструмент): через ref окружение
+  // карты остаётся стабильным, и карточки не перерисовываются от каждого щелчка по холсту.
+  const onBoardCreatedRef = useRef(onBoardCreated);
+  onBoardCreatedRef.current = onBoardCreated;
+  const onOpenBoardRef = useRef(onOpenBoard);
+  onOpenBoardRef.current = onOpenBoard;
+  // Карточки, которые линия уже положила на холст со свежими (pending) привязками: активация — с ближайшим
+  // сохранением, проекция на карточке — сразу, автосохранение — по расписанию (тот же путь, что «Задача» из рейки).
+  const registerLivingMapBindings = useCallback((bindings: readonly TPpmCanvasBinding[]) => {
+    if (bindings.length === 0) return;
+    for (const binding of bindings) queuedBindingActivationsRef.current.add(binding.binding_id);
+    setBindingsByShapeId((current) => {
+      const next = new Map(current);
+      for (const binding of bindings) next.set(binding.shape_id, binding);
+      return next;
+    });
+    scheduleSaveRef.current();
+  }, []);
+  const livingMapLoaded = initializationTick > 0;
+  // ── AF2.2 M: окружение линии M сверх общего (необязательные поля TLivingMapArgs из блока M) ──
+  // RM15 + RM-a (ревью M1): страж живых карточек при удалении групп и рамок PPM — целостность доски в любом облике
+  // (v1, v2, минимальный режим), пока доску можно править; не зависит от grammarV2.
+  usePpmGroupDeleteGuard(editor, effectiveCanEdit);
+  // Уведомление холста (AF2.1 B1), идентификатор проекта («ROBOT-12» у блокирующих и в лотке), статусы и участники
+  // проекта (группы статусов блокирующих задач, имена в лотке) — всё, что уже есть у редактора. PpmCanvasEditor не
+  // observer (MobX): идентификатор держим в состоянии, его обновляет реакция на стор проекта (final-pass M1) — проект
+  // догрузился позже или получил новый идентификатор, и «заблокирована ROBOT-12» и лоток обновляются.
+  const { getProjectIdentifierById } = useProject();
+  const [livingMapProjectIdentifier, setLivingMapProjectIdentifier] = useState<string | null>(
+    () => getProjectIdentifierById(projectId) || null
+  );
+  useEffect(
+    () => watchProjectIdentifier(() => getProjectIdentifierById(projectId), setLivingMapProjectIdentifier),
+    [getProjectIdentifierById, projectId]
+  );
+  // Свободная вкладка для новой карты (ревью M1): число вкладок — через ref, окружение карты остаётся стабильным.
+  const openBoardCountRef = useRef(openBoardCount);
+  openBoardCountRef.current = openBoardCount;
+  const livingMapArgsM = useMemo<Partial<TLivingMapArgs>>(
+    () => ({
+      canOpenBoard: () => hasFreeBoardTab(openBoardCountRef.current),
+      notify: (message: string) => setContentNotice(message),
+      projectIdentifier: livingMapProjectIdentifier,
+      workItemOptions,
+    }),
+    [livingMapProjectIdentifier, workItemOptions]
+  );
+  // ── /AF2.2 M ──
+  // ── AF2.2 C: окружение линии C сверх общего (необязательные поля TLivingMapArgs из блока C) ──
+  const livingMapArgsC = useMemo<Partial<TLivingMapArgs>>(() => ({}), []);
+  // ── /AF2.2 C ──
+  const livingMapArgs = useMemo<TLivingMapArgs>(
+    () => ({
+      ...livingMapArgsM,
+      ...livingMapArgsC,
+      authorId,
+      bindingsByShapeId,
+      boardId,
+      boards,
+      canEdit: effectiveCanEdit,
+      editor,
+      enabled: grammarV2,
+      isActive,
+      loaded: livingMapLoaded,
+      onBoardCreated: (board) => onBoardCreatedRef.current?.(board),
+      onOpenBoard: (targetBoardId) => onOpenBoardRef.current(targetBoardId),
+      projectId,
+      registerBindings: registerLivingMapBindings,
+      workspaceId,
+      workspaceSlug,
+    }),
+    [
+      authorId,
+      bindingsByShapeId,
+      boardId,
+      boards,
+      editor,
+      effectiveCanEdit,
+      grammarV2,
+      isActive,
+      livingMapArgsC,
+      livingMapArgsM,
+      livingMapLoaded,
+      projectId,
+      registerLivingMapBindings,
+      workspaceId,
+      workspaceSlug,
+    ]
+  );
+  useEffect(() => {
+    // «На карте» в задаче ведёт сюда с ?board=<эта доска>&shape=<id>: выделить карточку и подвести к ней камеру,
+    // масштаб прежний. Только активная вкладка v2 и только после загрузки доски. Ссылку забираем из адреса
+    // синхронно, как «На холст» выше: повтор эффекта и другие вкладки её уже не увидят.
+    if (!editor || !grammarV2 || !isActive || !livingMapLoaded) return;
+    const link = takeCanvasShapeLink(window.location.search, boardId);
+    if (!link || !replaceCanvasSearch(link.search)) return;
+    if (!revealCanvasShape(editor, link.shapeId)) setContentNotice(ppmT("canvas.af22.shape_not_found"));
+  }, [boardId, editor, grammarV2, isActive, livingMapLoaded, ppmT]);
+  // ── /AF2.2 F ──
+
   const components = useMemo<TLComponents>(
     () => ({
       ...HIDDEN_TLDRAW_UI,
@@ -3141,28 +3283,36 @@ export default function PpmCanvasEditor({
                 <PpmCanvasContentActionsContext.Provider value={contentActions}>
                   {/* AF2.1 B (final): «Из проекта → Файл/Git-объект» — CanvasControls берёт их из этого контекста */}
                   <PpmCanvasProjectSourcesContext.Provider value={projectSources}>
-                    <Tldraw
-                      acceptedImageMimeTypes={grammarV2 ? PPM_VAULT_ACCEPT : undefined}
-                      acceptedVideoMimeTypes={grammarV2 ? [] : undefined}
-                      // Мультидоска: читается при создании редактора — скрытая вкладка создаётся «не в фокусе»; дальше
-                      // фокус ведёт один эффект (syncCanvasEditorFocus). Это проп tldraw (isFocused редактора), DOM-фокус
-                      // он не двигает; по умолчанию у tldraw true — теперь true только у активной вкладки.
-                      // oxlint-disable-next-line jsx_a11y/no-autofocus -- проп tldraw: состояние редактора, не DOM-фокус
-                      autoFocus={isActive}
-                      cameraOptions={{ wheelBehavior: "pan" }}
-                      components={components}
-                      shapeUtils={shapeUtils}
-                      onMount={handleTldrawMount}
-                    >
-                      {presence && <PpmCanvasRealtimeCursors presence={presence} />}
-                      {grammarV2 && onZoomChange && (
-                        <PpmCanvasZoomReporter boardId={boardId} onZoomChange={onZoomChange} />
-                      )}
-                      {/* ── AF2.1 R: overlays — leaf children of <Tldraw>, never inside the components memo ── */}
-                      {grammarV2 && <PpmCanvasStyleToolbar canEdit={effectiveCanEdit} />}
-                      {grammarV2 && <PpmCanvasQuickConnect authorId={authorId} canEdit={effectiveCanEdit} />}
-                      {/* ── /AF2.1 R ── */}
-                    </Tldraw>
+                    {/* ── AF2.2 F: «Живая карта» — факты (M), изменения (C), «Светофор»: карточки и колонка ── */}
+                    <PpmLivingMapProvider args={livingMapArgs}>
+                      <Tldraw
+                        acceptedImageMimeTypes={grammarV2 ? PPM_VAULT_ACCEPT : undefined}
+                        acceptedVideoMimeTypes={grammarV2 ? [] : undefined}
+                        // Мультидоска: читается при создании редактора — скрытая вкладка создаётся «не в фокусе»; дальше
+                        // фокус ведёт один эффект (syncCanvasEditorFocus). Это проп tldraw (isFocused редактора), DOM-фокус
+                        // он не двигает; по умолчанию у tldraw true — теперь true только у активной вкладки.
+                        // oxlint-disable-next-line jsx_a11y/no-autofocus -- проп tldraw: состояние редактора, не DOM-фокус
+                        autoFocus={isActive}
+                        cameraOptions={{ wheelBehavior: "pan" }}
+                        components={components}
+                        shapeUtils={shapeUtils}
+                        onMount={handleTldrawMount}
+                      >
+                        {presence && <PpmCanvasRealtimeCursors presence={presence} />}
+                        {grammarV2 && onZoomChange && (
+                          <PpmCanvasZoomReporter boardId={boardId} onZoomChange={onZoomChange} />
+                        )}
+                        {/* ── AF2.1 R: overlays — leaf children of <Tldraw>, never inside the components memo ── */}
+                        {grammarV2 && <PpmCanvasStyleToolbar canEdit={effectiveCanEdit} />}
+                        {grammarV2 && <PpmCanvasQuickConnect authorId={authorId} canEdit={effectiveCanEdit} />}
+                        {/* ── /AF2.1 R ── */}
+                        {/* ── AF2.2 M: связи «из Задач» и диалог «Собрать карту спринта» (дочерние <Tldraw>) ── */}
+                        {grammarV2 && <PpmTaskRelationsLayer />}
+                        {grammarV2 && <PpmSprintMapDialog />}
+                        {/* ── /AF2.2 M ── */}
+                      </Tldraw>
+                    </PpmLivingMapProvider>
+                    {/* ── /AF2.2 F ── */}
                   </PpmCanvasProjectSourcesContext.Provider>
                 </PpmCanvasContentActionsContext.Provider>
               </PpmSemanticEdgeFocusContext.Provider>
@@ -3686,6 +3836,11 @@ function CanvasControls({
           if (canEdit) createNode(editor, authorId, "checklist", ppmT("canvas.checklist_title"));
           break;
         // ── /AF2.1 B ──
+        // ── AF2.2 M: команда build-sprint-map («Карта спринта»: рейка, палитра, пустая доска) — диалог линии M ──
+        case "build-sprint-map":
+          if (canEdit && grammarV2) openSprintMapDialog({ boardId });
+          break;
+        // ── /AF2.2 M ──
         case "undo":
           if (canEdit) editor.undo();
           break;
@@ -3940,6 +4095,43 @@ function CanvasControls({
       )}
     </details>
   );
+  // «Доска · Объектов» (экспорт, импорт, объекты): одна пилюля; под v2 она стоит в правой колонке «Живой карты».
+  const boardInfo = (
+    <div className="ppm-canvas-board-info">
+      <button
+        ref={boardInfoToggleRef}
+        type="button"
+        className="ppm-canvas-board-info__toggle"
+        aria-controls={boardInfoOpen ? boardInfoPanelId : undefined}
+        aria-expanded={boardInfoOpen}
+        onClick={onToggleBoardInfo}
+      >
+        <Frame aria-hidden="true" />
+        <span>
+          {ppmT("canvas.board_info")} · {ppmT("canvas.board_info_objects").replace("{count}", String(objectCount))}
+        </span>
+        <ChevronDown aria-hidden="true" />
+      </button>
+      {/* Always mounted so a file can be imported while "Board" is collapsed. */}
+      {canEdit && importInput}
+      {boardInfoOpen && (
+        <section
+          className="ppm-canvas-status ppm-canvas-board-info__panel"
+          id={boardInfoPanelId}
+          aria-label={ppmT("canvas.board_info")}
+        >
+          <div className="ppm-canvas-status__actions ppm-canvas-status__actions--always">
+            {exportButton}
+            {canEdit && importButton}
+          </div>
+          {desktopImportPreview}
+          {desktopImportResult}
+          {importErrorNotice}
+          {objectsList}
+        </section>
+      )}
+    </div>
+  );
 
   return (
     <>
@@ -4061,41 +4253,29 @@ function CanvasControls({
                 {syncActions}
               </section>
             )}
-            <div className="ppm-canvas-board-info">
-              <button
-                ref={boardInfoToggleRef}
-                type="button"
-                className="ppm-canvas-board-info__toggle"
-                aria-controls={boardInfoOpen ? boardInfoPanelId : undefined}
-                aria-expanded={boardInfoOpen}
-                onClick={onToggleBoardInfo}
-              >
-                <Frame aria-hidden="true" />
-                <span>
-                  {ppmT("canvas.board_info")} ·{" "}
-                  {ppmT("canvas.board_info_objects").replace("{count}", String(objectCount))}
-                </span>
-                <ChevronDown aria-hidden="true" />
-              </button>
-              {/* Always mounted so a file can be imported while "Board" is collapsed. */}
-              {canEdit && importInput}
-              {boardInfoOpen && (
-                <section
-                  className="ppm-canvas-status ppm-canvas-board-info__panel"
-                  id={boardInfoPanelId}
-                  aria-label={ppmT("canvas.board_info")}
-                >
-                  <div className="ppm-canvas-status__actions ppm-canvas-status__actions--always">
-                    {exportButton}
-                    {canEdit && importButton}
-                  </div>
-                  {desktopImportPreview}
-                  {desktopImportResult}
-                  {importErrorNotice}
-                  {objectsList}
-                </section>
-              )}
-            </div>
+            {/* ── AF2.2 F: правая колонка «Живой карты» (K5): кнопки рядом с «Доска · Объектов», ниже — панели ── */}
+            {grammarV2 ? (
+              <div className="ppm-living-map-aside">
+                <div className="ppm-living-map-aside__bar">
+                  {/* ── AF2.2 M: «Светофор» ── */}
+                  <PpmTrafficLightToggle />
+                  {/* ── /AF2.2 M ── */}
+                  {/* ── AF2.2 C: «Что изменилось · N» ── */}
+                  <PpmChangesButton />
+                  {/* ── /AF2.2 C ── */}
+                  {boardInfo}
+                </div>
+                {/* ── AF2.2 C: панель «Что изменилось» ── */}
+                <PpmChangesPanel />
+                {/* ── /AF2.2 C ── */}
+                {/* ── AF2.2 M: лоток «Не на карте» ── */}
+                <PpmNotOnMapTray />
+                {/* ── /AF2.2 M ── */}
+              </div>
+            ) : (
+              boardInfo
+            )}
+            {/* ── /AF2.2 F ── */}
           </div>
         </>
       )}
@@ -4111,6 +4291,18 @@ function CanvasControls({
               {ppmT("canvas.add_note")}
             </button>
           )}
+          {/* ── AF2.2 F: «Собрать карту спринта» — вторая кнопка пустой доски v2 (та же команда, что в рейке) ── */}
+          {grammarV2 && canEdit && (
+            <button
+              type="button"
+              className="ppm-living-map-empty-action"
+              onClick={() => dispatchPpmCanvasCommand({ boardId, command: "build-sprint-map" })}
+            >
+              <MapIcon aria-hidden="true" />
+              {ppmT("canvas.af22.empty_sprint_map")}
+            </button>
+          )}
+          {/* ── /AF2.2 F ── */}
         </div>
       )}
     </>

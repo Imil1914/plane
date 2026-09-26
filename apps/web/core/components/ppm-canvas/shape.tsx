@@ -116,6 +116,15 @@ import { isShrunkWorkItemsView, isWorkItemDrag, PPM_WORK_ITEM_DRAG_TYPE } from "
 // ── AF2.1 B: (B6) чек-лист «Сделать задачами» ──
 import { checklistItemsToConvert, markConvertedItems } from "./canvas-checklist";
 // ── /AF2.1 B ──
+// ── AF2.2 C: (C2) метки «изменено» / «добавлено» на карточках ──
+import { PpmChangeChip } from "./living-map/change-chips";
+// ── /AF2.2 C ──
+// ── AF2.2 M: «Живая карта» — шапки рамки спринта и секций, «Светофор» живой карточки, предел размера карты ──
+import { LivingMapGroupCard } from "./living-map/map-group-card";
+import { duplicateShapeSize, ppmCanvasResizeLimits } from "./living-map/map-model";
+import { usePpmLivingMap } from "./living-map/living-map-context";
+import { PpmTrafficLine } from "./living-map/traffic-light-line";
+// ── /AF2.2 M ──
 
 export const PPM_CANVAS_SHAPE_TYPE = "ppm-canvas-node" as const;
 
@@ -242,7 +251,14 @@ export class PpmCanvasNodeShapeUtil extends ShapeUtil<TPpmCanvasShape> {
   }
 
   override component(shape: TPpmCanvasShape) {
-    return <PpmCanvasNodeCard shape={shape} />;
+    return (
+      <>
+        <PpmCanvasNodeCard shape={shape} />
+        {/* ── AF2.2 C: (C2) метка «изменено/добавлено» — рядом с карточкой: у карточки overflow: hidden ── */}
+        <PpmChangeChip shape={shape} />
+        {/* ── /AF2.2 C ── */}
+      </>
+    );
   }
 
   override indicator(shape: TPpmCanvasShape) {
@@ -255,7 +271,9 @@ export class PpmCanvasNodeShapeUtil extends ShapeUtil<TPpmCanvasShape> {
   }
 
   override onResize(shape: TPpmCanvasShape, info: TLResizeInfo<TPpmCanvasShape>) {
-    const resized = resizeBox(shape, info, { minHeight: 96, minWidth: 160, maxHeight: 1200, maxWidth: 1600 });
+    // ── AF2.2 M: рамка спринта и секции карты — предел группы (PPM_CANVAS_GROUP_MAX_SIZE), прочее — 1600 × 1200 ──
+    const resized = resizeBox(shape, info, ppmCanvasResizeLimits(shape.props.node));
+    // ── /AF2.2 M ──
     const parsed = parseSerializedPpmCanvasNode(shape.props.node);
     if (parsed.status === "unknown" || parsed.status === "corrupt") return resized;
 
@@ -590,6 +608,9 @@ function NodeEditor({ node, shape }: { node: TPpmCanvasNode; shape: TPpmCanvasSh
       />
     );
   }
+  // ── AF2.2 M: «Живая карта» — рамка спринта и секции направлений (group с полем map), только под v2 ──
+  if (grammarV2 && node.kind === "group" && node.map) return <LivingMapGroupCard node={node} shape={shape} />;
+  // ── /AF2.2 M ──
   return <NativeNodeCard editor={editor} node={node} shape={shape} />;
 }
 
@@ -1447,13 +1468,16 @@ function toggleCollapsed(editor: Editor, shape: TPpmCanvasShape, node: TPpmCanva
 function duplicateNode(editor: Editor, shape: TPpmCanvasShape, node: TPpmCanvasOwnedNode) {
   const id = `shape:${crypto.randomUUID()}` as TPpmCanvasShape["id"];
   const duplicate = duplicatePpmCanvasNode(node, node.author_id);
+  // ── AF2.2 M: копия группы — размером своего узла (копия рамки или секции карты — секция ≤ 1600 × 1200) ──
+  const size = duplicateShapeSize(duplicate, shape.props);
   editor.createShape<TPpmCanvasShape>({
     id,
     type: PPM_CANVAS_SHAPE_TYPE,
     x: shape.x + 36,
     y: shape.y + 36,
-    props: { h: shape.props.h, node: serializePpmCanvasNode(duplicate), w: shape.props.w },
+    props: { h: size.h, node: serializePpmCanvasNode(duplicate), w: size.w },
   });
+  // ── /AF2.2 M ──
   editor.select(id);
 }
 
@@ -2655,6 +2679,9 @@ function WorkItemProjectionCard({
   const grammarV2 = usePpmCanvasGrammarV2();
   const { currentLocale } = useTranslation();
   const [copiedLink, setCopiedLink] = useState(false);
+  // ── AF2.2 M: «Светофор» — факты карточки из «Живой карты» (без провайдера F — пусто) ──
+  const livingMap = usePpmLivingMap();
+  // ── /AF2.2 M ──
 
   if (!binding || binding.entity_type !== "work_item") {
     return (
@@ -2678,11 +2705,17 @@ function WorkItemProjectionCard({
     Boolean(source.source_version) &&
     !projectionContext.pendingWorkItemIds.has(binding.entity_id);
   const assigneeIds = display.assignees.map((assignee) => assignee.id);
+  // ── AF2.2 M: «Светофор» — выделение только под v2 и при включённом переключателе ──
+  const traffic = grammarV2 && livingMap.trafficLight ? livingMap.facts.get(binding.entity_id) : undefined;
+  const trafficState = traffic && traffic.traffic !== "none" ? traffic.traffic : undefined;
+  // ── /AF2.2 M ──
 
   return (
     <div
       className={grammarV2 ? "ppm-work-item-card ppm-live-card" : "ppm-work-item-card"}
       data-source-status={display.source_status}
+      // AF2.2 M · «Светофор» (living-map.css): рамка «заблокирована»/«просрочено», приглушённая «готова»
+      data-ppm-traffic={trafficState}
     >
       {grammarV2 ? (
         <>
@@ -2795,6 +2828,9 @@ function WorkItemProjectionCard({
         </p>
       )}
 
+      {/* ── AF2.2 M: «Светофор» — строка «заблокирована ID» / «просрочено · дата» над подвалом ── */}
+      {traffic && trafficState && <PpmTrafficLine facts={traffic} />}
+      {/* ── /AF2.2 M ── */}
       {error && <p className="ppm-work-item-card__error">{error}</p>}
       <footer>
         {grammarV2 ? (

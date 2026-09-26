@@ -5,7 +5,7 @@ import io
 import json
 import uuid
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import Case, Count, F, IntegerField, Max, Q, Value, When
 from django.utils.html import strip_tags
 from django.utils import timezone
@@ -1267,7 +1267,12 @@ def _get_operation_replay(*, board, shape_id, client_operation_id, operation_fin
     return existing
 
 
-def create_work_item_binding(*, board, project, user, shape_id, entity_id, client_operation_id):
+def create_work_item_binding(
+    *, board, project, user, shape_id, entity_id, client_operation_id, visible_work_items=None
+):
+    """`visible_work_items` (AF2.2 FW-S, M-10) — задачи, уже прочитанные вызывающим одним запросом той же
+    `get_visible_work_items(include_inactive=False)` (пакет S1: id → задача); задачи нет в словаре — она не видна.
+    `None` (одиночная привязка) — задача читается здесь, как раньше."""
     operation_fingerprint = _operation_fingerprint(
         {"operation": "bind", "shape_id": shape_id, "entity_id": entity_id, "entity_type": "work_item"}
     )
@@ -1282,7 +1287,11 @@ def create_work_item_binding(*, board, project, user, shape_id, entity_id, clien
         if replay:
             return replay, True
 
-        issue = get_work_item(project=project, user=user, entity_id=entity_id, include_inactive=False)
+        issue = (
+            get_work_item(project=project, user=user, entity_id=entity_id, include_inactive=False)
+            if visible_work_items is None
+            else visible_work_items.get(entity_id)
+        )
         if issue is None:
             raise PpmProjectionConflict(
                 code="WORK_ITEM_NOT_FOUND",
@@ -1311,7 +1320,11 @@ def create_work_item_binding(*, board, project, user, shape_id, entity_id, clien
         return binding, False
 
 
-def create_content_binding(*, board, project, user, shape_id, entity_type, entity_id, client_operation_id):
+def create_content_binding(
+    *, board, project, user, shape_id, entity_type, entity_id, client_operation_id, restricted_guest=None
+):
+    """`restricted_guest` — уже вычисленное `_user_is_restricted_guest` для (проект, пользователь) (пакет S1 считает его
+    один раз на пакет); `None` — вычисляется в `get_content_source`, как у одиночной привязки."""
     if entity_type not in {
         PpmCanvasEntityType.PAGE,
         PpmCanvasEntityType.ATTACHMENT,
@@ -1341,6 +1354,7 @@ def create_content_binding(*, board, project, user, shape_id, entity_type, entit
             user=user,
             entity_type=entity_type,
             entity_id=entity_id,
+            restricted_guest=restricted_guest,
         )
         if source is None:
             raise PpmProjectionConflict(
@@ -1547,6 +1561,80 @@ def update_work_item(*, project, user, entity_id, validated_data):
         return issue
 
 
+# AF2.2 S2a: предыдущая версия доски для отметок новой версии — id фигур (правило id —
+# schema.canvas_snapshot_shape_ids, менять вместе) и текст узла только у тех карточек PPM, чей текст в новом снимке
+# другой (сравнение md5 на стороне Postgres). Снимок до 2 МиБ не передаётся; версия ищется по уникальному индексу
+# (board, version).
+PREVIOUS_VERSION_SHAPES_SQL = """
+    SELECT
+        COALESCE(record.value ->> 'id', record.key),
+        CASE
+            WHEN fresh.digest IS NOT NULL AND md5(record.value -> 'props' ->> 'node') IS DISTINCT FROM fresh.digest
+            THEN record.value -> 'props' ->> 'node'
+        END
+    FROM ppm_canvas_versions AS saved
+    CROSS JOIN LATERAL jsonb_each(
+        CASE
+            WHEN jsonb_typeof(saved.snapshot_json -> 'document' -> 'store') = 'object'
+            THEN saved.snapshot_json -> 'document' -> 'store'
+            ELSE '{}'::jsonb
+        END
+    ) AS record(key, value)
+    LEFT JOIN unnest(%s::text[], %s::text[]) AS fresh(shape_id, digest)
+        ON fresh.shape_id = COALESCE(record.value ->> 'id', record.key)
+        AND record.value ->> 'type' = 'ppm-canvas-node'
+    WHERE saved.board_id = %s
+      AND saved.version = %s
+      AND jsonb_typeof(record.value) = 'object'
+      AND record.value ->> 'typeName' = 'shape'
+"""
+
+
+def _snapshot_node_texts(snapshot):
+    """Текст узла (`props.node`) карточек PPM снимка по id фигуры. Правило id — schema.canvas_snapshot_shape_ids
+    (`record.id`, иначе ключ записи); менять вместе."""
+    store = snapshot.get("document", {}).get("store", {})
+    if not isinstance(store, dict):
+        return {}
+    texts = {}
+    for record_id, record in store.items():
+        if not isinstance(record, dict) or record.get("typeName") != "shape" or record.get("type") != "ppm-canvas-node":
+            continue
+        props = record.get("props")
+        text = props.get("node") if isinstance(props, dict) else None
+        if isinstance(text, str):
+            texts[str(record.get("id", record_id))] = text
+    return texts
+
+
+def _node_updated_at(text):
+    try:
+        node = json.loads(text)
+    except ValueError:
+        return None
+    return node.get("updated_at") if isinstance(node, dict) else None
+
+
+def _version_shape_marks(*, board_id, previous_version, snapshot):
+    """AF2.2 S2a: отметки новой версии доски для ленты «Что изменилось» — `added_shape_ids` (фигуры, которых не было в
+    предыдущей версии; у первой версии — все) и `changed_shape_ids` (карточки PPM, у которых сменился `updated_at` узла:
+    перемещение и размер его не меняют). Один запрос к предыдущей версии; разбираются только узлы с другим текстом."""
+    shape_ids = canvas_snapshot_shape_ids(snapshot)
+    if not previous_version:
+        return sorted(shape_ids), []
+    texts = _snapshot_node_texts(snapshot)
+    digests = [hashlib.md5(text.encode("utf-8"), usedforsecurity=False).hexdigest() for text in texts.values()]
+    with connection.cursor() as cursor:
+        cursor.execute(PREVIOUS_VERSION_SHAPES_SQL, [list(texts), digests, board_id, previous_version])
+        previous = cursor.fetchall()
+    changed = {
+        shape_id
+        for shape_id, previous_text in previous
+        if previous_text is not None and _node_updated_at(previous_text) != _node_updated_at(texts[shape_id])
+    }
+    return sorted(shape_ids - {shape_id for shape_id, _ in previous}), sorted(changed)
+
+
 def save_canvas_snapshot(
     *,
     board,
@@ -1601,6 +1689,11 @@ def save_canvas_snapshot(
             snapshot=snapshot,
             binding_changes=normalized_binding_changes,
         )
+        added_shape_ids, changed_shape_ids = _version_shape_marks(
+            board_id=locked_board.id,
+            previous_version=locked_board.current_version,
+            snapshot=snapshot,
+        )
 
         saved_version = PpmCanvasVersion.objects.create(
             canvas=locked_canvas,
@@ -1613,6 +1706,8 @@ def save_canvas_snapshot(
             client_operation_id=client_operation_id,
             request_id=request_id,
             created_by=user_id,
+            added_shape_ids=added_shape_ids,
+            changed_shape_ids=changed_shape_ids,
         )
         if activate_ids:
             PpmCanvasBinding.objects.filter(id__in=activate_ids).update(
@@ -1893,6 +1988,9 @@ def duplicate_canvas_board(*, board, name, user_id, client_operation_id, request
                 client_operation_id=uuid.uuid5(uuid.NAMESPACE_URL, f"ppm:duplicate:{client_operation_id}:version"),
                 request_id=request_id,
                 created_by=user_id,
+                # AF2.2 S2a: первая версия копии — все её фигуры добавлены тем, кто скопировал доску.
+                added_shape_ids=sorted(canvas_snapshot_shape_ids(current.snapshot_json)),
+                changed_shape_ids=[],
             )
         for binding in source.bindings.filter(status=PpmCanvasBindingStatus.ACTIVE):
             PpmCanvasBinding.objects.create(

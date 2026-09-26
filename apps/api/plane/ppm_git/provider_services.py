@@ -472,6 +472,10 @@ def upsert_git_object(*, connection, payload):
         "provider_updated_at": provider_updated_at,
         "is_active": payload.get("state") != "deleted",
     }
+    # AF2.2 S2a: время слияния несёт только нормализованный PR; ветки, коммиты и webhook-доставки, сохранённые до
+    # обновления, его не передают — известное значение не затирается.
+    if "provider_merged_at" in payload:
+        defaults["provider_merged_at"] = _coerce_datetime(payload.get("provider_merged_at"))
     git_object, _ = PpmGitObject.objects.update_or_create(
         repository=connection.repository,
         object_type=object_type,

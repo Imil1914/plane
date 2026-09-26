@@ -72,6 +72,7 @@ describe("«Из проекта» in the rail: every item does something (final 
       "add-file",
       "add-git",
       "add-page-ref",
+      "build-sprint-map",
     ]);
     const done: Record<string, string[]> = {};
     for (const item of items) {
@@ -90,7 +91,10 @@ describe("«Из проекта» in the rail: every item does something (final 
     expect(items.filter((item) => !isProjectSourceCommand(item.command)).map((item) => item.command)).toEqual([
       "add-work-item",
       "add-work-items-view",
+      "build-sprint-map",
     ]);
+    // AF2.2: «Карта спринта» — case блока M в CanvasControls, открывает диалог сборки карты (линия M).
+    expect(caseBody("build-sprint-map")).toContain("openSprintMapDialog(");
     expect(caseBody("add-work-item")).toMatch(/if \(canEdit\) setPickerOpen\(true\);/);
     expect(caseBody("add-work-items-view")).toMatch(/if \(canEdit\) createNode\(editor, authorId, "work_items_view",/);
     // Читателю рейка эти пункты не показывает; команда, пришедшая иначе (палитра, чужое событие), тоже ничего не делает.

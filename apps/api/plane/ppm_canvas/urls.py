@@ -1,19 +1,24 @@
 from django.urls import path
 
 from .views import (
+    PpmCanvasBindingBatchView,
     PpmCanvasBindingDetailView,
     PpmCanvasBindingListCreateView,
     PpmCanvasBoardArchiveView,
+    PpmCanvasBoardChangesView,
     PpmCanvasBoardDetailView,
     PpmCanvasBoardDuplicateView,
     PpmCanvasBoardListCreateView,
     PpmCanvasBoardReorderView,
     PpmCanvasBoardRestoreView,
+    PpmCanvasBoardSeenView,
     PpmCanvasBoardSnapshotView,
+    PpmCanvasBoardUserStateView,
     PpmCanvasBoardVersionDetailView,
     PpmCanvasBoardVersionListView,
     PpmCanvasSemanticEdgeDetailView,
     PpmCanvasSemanticEdgeListCreateView,
+    PpmCanvasWorkItemBoardsView,
     PpmCanvasWorkItemsView,
     PpmCanvasWorkItemsViewExport,
     PpmCanvasView,
@@ -85,6 +90,33 @@ urlpatterns = [
         PpmCanvasBindingDetailView.as_view(),
         name="ppm-canvas-board-binding-detail",
     ),
+    # ── AF2.2 S: живая карта проекта ──
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/bindings/batch/",
+        PpmCanvasBindingBatchView.as_view(),
+        name="ppm-canvas-board-bindings-batch",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/changes/",
+        PpmCanvasBoardChangesView.as_view(),
+        name="ppm-canvas-board-changes",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/me/",
+        PpmCanvasBoardUserStateView.as_view(),
+        name="ppm-canvas-board-user-state",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/me/seen/",
+        PpmCanvasBoardSeenView.as_view(),
+        name="ppm-canvas-board-seen",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/work-items/<uuid:work_item_id>/boards/",
+        PpmCanvasWorkItemBoardsView.as_view(),
+        name="ppm-canvas-work-item-boards",
+    ),
+    # ── /AF2.2 S ──
     path(
         "workspaces/<uuid:workspace_id>/projects/<uuid:project_id>/canvas/boards/<uuid:board_id>/work-items/",
         PpmWorkItemListCreateView.as_view(),

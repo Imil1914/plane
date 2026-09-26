@@ -195,10 +195,32 @@ export const ppmCanvasCodeSchema = z
   })
   .passthrough();
 
+// AF2.2 F: «Живая карта». Рамка спринта и секции направлений — обычные секции (группы) с необязательным полем `map`:
+// `{ role: "sprint", cycle_id }` у рамки, `{ role: "section", module_id }` у секции («Без направления» — null).
+// Группы без `map` и старые доски читаются как раньше; неизвестные поля (и внутри `map`) сохраняются; версия — 2.
+// Секция карты вмещает сетку карточек любой длины, поэтому предел размера группы шире общего 1600 × 1200;
+// ручное изменение размера по-прежнему ограничивает onResize карточки (shape.tsx).
+export const PPM_CANVAS_GROUP_MAX_SIZE = 20_000;
+export const PPM_CANVAS_MAP_ROLES = ["sprint", "section"] as const;
+export type TPpmCanvasMapRole = (typeof PPM_CANVAS_MAP_ROLES)[number];
+
+export const ppmCanvasMapSchema = z.discriminatedUnion("role", [
+  z.object({ role: z.literal("sprint"), cycle_id: z.string().uuid() }).passthrough(),
+  z.object({ role: z.literal("section"), module_id: z.string().uuid().nullable() }).passthrough(),
+]);
+
+const groupVisualSchema = visualSchema.extend({
+  expanded_height: z.number().finite().min(96).max(PPM_CANVAS_GROUP_MAX_SIZE).optional(),
+  width: z.number().finite().min(160).max(PPM_CANVAS_GROUP_MAX_SIZE),
+  height: z.number().finite().min(96).max(PPM_CANVAS_GROUP_MAX_SIZE),
+});
+
 export const ppmCanvasGroupSchema = z
   .object({
     ...sharedOwnedNodeFields,
     kind: z.literal("group"),
+    visual: groupVisualSchema,
+    map: ppmCanvasMapSchema.optional(),
   })
   .passthrough();
 
@@ -690,6 +712,10 @@ export type TPpmCanvasWorkItemRefNode = z.infer<typeof ppmCanvasWorkItemRefSchem
 export type TPpmCanvasWorkItemsViewNode = z.infer<typeof ppmCanvasWorkItemsViewSchema>;
 export type TPpmCanvasVaultFileRefNode = z.infer<typeof ppmCanvasVaultFileRefSchema>;
 export type TPpmCanvasPageRefNode = z.infer<typeof ppmCanvasPageRefSchema>;
+export type TPpmCanvasGroupNode = z.infer<typeof ppmCanvasGroupSchema>;
+export type TPpmCanvasMap = z.infer<typeof ppmCanvasMapSchema>;
+export type TPpmCanvasSprintMap = Extract<TPpmCanvasMap, { role: "sprint" }>;
+export type TPpmCanvasSectionMap = Extract<TPpmCanvasMap, { role: "section" }>;
 export type TPpmCanvasMediaNode = z.infer<
   typeof ppmCanvasPdfSchema | typeof ppmCanvasImageSchema | typeof ppmCanvasReferenceSchema
 >;
@@ -1367,6 +1393,68 @@ export function createPpmWorkItemRefNode({
   });
 }
 
+type TPpmMapGroupInput = {
+  authorId: string;
+  /** Palette colour; the living map keeps the neutral one, as the v2 sections do. */
+  color?: TPpmCanvasColor;
+  /** Page px; the section default (560 × 360) when omitted, up to PPM_CANVAS_GROUP_MAX_SIZE. */
+  height?: number;
+  now?: string;
+  /** A Plane name — clipped to the 160-unit title limit. */
+  title: string;
+  width?: number;
+};
+
+/** AF2.2 F: the sprint frame of a living map — a section with `map: { role: "sprint", cycle_id }`. */
+export function createPpmSprintFrameNode({
+  cycleId,
+  ...input
+}: TPpmMapGroupInput & { cycleId: string }): TPpmCanvasGroupNode {
+  return createPpmMapGroupNode(input, { role: "sprint", cycle_id: cycleId });
+}
+
+/** AF2.2 F: a module section of a living map; `moduleId: null` is «Без направления». */
+export function createPpmMapSectionNode({
+  moduleId,
+  ...input
+}: TPpmMapGroupInput & { moduleId: string | null }): TPpmCanvasGroupNode {
+  return createPpmMapGroupNode(input, { role: "section", module_id: moduleId });
+}
+
+function createPpmMapGroupNode(
+  { authorId, color = "neutral", height, now = new Date().toISOString(), title, width }: TPpmMapGroupInput,
+  map: TPpmCanvasMap
+): TPpmCanvasGroupNode {
+  const definition = PPM_CANVAS_NODE_REGISTRY.group;
+  return ppmCanvasGroupSchema.parse({
+    schema_version: PPM_CANVAS_SCHEMA_VERSION,
+    kind: "group",
+    title: clipPpmCanvasTitle(title),
+    body: "",
+    map,
+    author_id: authorId,
+    created_at: now,
+    updated_at: now,
+    visual: {
+      color,
+      width: width ?? definition.defaultWidth,
+      height: height ?? definition.defaultHeight,
+    },
+  });
+}
+
+/** AF2.2 F: the living-map role of a node — `map` of a sprint frame or a map section; undefined otherwise. */
+export function getPpmCanvasMap(node: TPpmCanvasNode): TPpmCanvasMap | undefined {
+  return node.kind === "group" ? node.map : undefined;
+}
+
+// A Plane name as a card title: at most 160 UTF-16 units (as the schema counts), never cut inside a surrogate pair.
+function clipPpmCanvasTitle(title: string, limit = 160): string {
+  if (title.length <= limit) return title;
+  const last = title.charCodeAt(limit - 1);
+  return title.slice(0, last >= 0xd800 && last <= 0xdbff ? limit - 1 : limit);
+}
+
 export function createPpmVaultFileRefNode({
   authorId,
   entryId,
@@ -2013,6 +2101,27 @@ export function createPpmAgentAnswerNode({
   });
 }
 
+// AF2.2 F (review fix): PPM_CANVAS_GROUP_MAX_SIZE widens groupVisualSchema for every group so a sprint frame or a
+// map section can grow past the card limit — but a plain group (no `map`) must keep the pre-AF2.2 ceiling, the
+// same 1600 × 1200 every other kind has. A discriminated-union member cannot carry `.superRefine` (it would stop
+// being a plain ZodObject), and refining the outer `ppmCanvasNodeSchema` would turn it from a ZodDiscriminatedUnion
+// into a ZodEffects, losing `.options` for any call site that relies on it. So this narrower ceiling is enforced
+// on the parse path instead, right where the pre-AF2.2 schema-level ceiling used to reject: a plain group over the
+// base size becomes "corrupt", same outcome as before.
+const PPM_CANVAS_PLAIN_GROUP_MAX_WIDTH = 1600;
+const PPM_CANVAS_PLAIN_GROUP_MAX_HEIGHT = 1200;
+
+function isOversizedPlainGroup(node: TPpmCanvasNode): boolean {
+  if (node.kind !== "group") return false;
+  if (node.map) return false;
+  const { width, height, expanded_height } = node.visual;
+  return (
+    width > PPM_CANVAS_PLAIN_GROUP_MAX_WIDTH ||
+    height > PPM_CANVAS_PLAIN_GROUP_MAX_HEIGHT ||
+    (expanded_height ?? 0) > PPM_CANVAS_PLAIN_GROUP_MAX_HEIGHT
+  );
+}
+
 export function parseAndMigratePpmCanvasNode(raw: unknown): TPpmCanvasParseResult {
   if (!isPlainObject(raw)) return { status: "corrupt", raw, reason: "Node payload must be an object." };
 
@@ -2034,6 +2143,9 @@ export function parseAndMigratePpmCanvasNode(raw: unknown): TPpmCanvasParseResul
       raw,
       reason: parsed.error.issues[0]?.message ?? "Node payload is invalid.",
     };
+
+  if (isOversizedPlainGroup(parsed.data))
+    return { status: "corrupt", raw, reason: "Group size exceeds the base limit." };
 
   return { status: rawVersion < PPM_CANVAS_SCHEMA_VERSION ? "migrated" : "valid", node: parsed.data };
 }
@@ -2090,6 +2202,22 @@ export function duplicatePpmCanvasNode<TNode extends TPpmCanvasOwnedNode>(
   if (node.kind === "deck") {
     duplicate.slides = node.slides.map((slide) => ({ ...slide, id: createPortableId() }));
     duplicate.active_slide = 0;
+  }
+  // AF2.2 F: a copied sprint frame or map section is an ordinary section — the map keeps one frame per sprint.
+  if (node.kind === "group") delete duplicate.map;
+  // AF2.2 F (review fix): dropping `map` exposes the plain-group ceiling (isOversizedPlainGroup) — a sprint frame
+  // or a map section is usually bigger than that, so the copy is clamped to the same base a plain group must fit,
+  // with the same constants, or it would render as a corrupt placeholder on the very next parse.
+  if (node.kind === "group" && node.map) {
+    const visual = node.visual;
+    duplicate.visual = {
+      ...visual,
+      width: Math.min(visual.width, PPM_CANVAS_PLAIN_GROUP_MAX_WIDTH),
+      height: Math.min(visual.height, PPM_CANVAS_PLAIN_GROUP_MAX_HEIGHT),
+      ...(visual.expanded_height === undefined
+        ? {}
+        : { expanded_height: Math.min(visual.expanded_height, PPM_CANVAS_PLAIN_GROUP_MAX_HEIGHT) }),
+    };
   }
   return ppmCanvasNodeSchema.parse(duplicate) as TNode;
 }

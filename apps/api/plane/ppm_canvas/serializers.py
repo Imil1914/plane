@@ -11,20 +11,25 @@ from .models import (
 from .schema import PPM_CANVAS_SCHEMA_VERSION, validate_canvas_snapshot
 
 
+# AF2.2 S1: пакет привязок и одно сохранение доски принимают одинаковое число проекций — карта спринта на
+# 200 задач привязывается одним запросом и активируется одним снимком (одним шагом истории).
+PPM_CANVAS_BATCH_MAX_ITEMS = 200
+
+
 class PpmCanvasBindingChangesSerializer(serializers.Serializer):
     activate = serializers.ListField(
         child=serializers.UUIDField(),
         required=False,
         default=list,
         allow_empty=True,
-        max_length=100,
+        max_length=PPM_CANVAS_BATCH_MAX_ITEMS,
     )
     remove = serializers.ListField(
         child=serializers.UUIDField(),
         required=False,
         default=list,
         allow_empty=True,
-        max_length=100,
+        max_length=PPM_CANVAS_BATCH_MAX_ITEMS,
     )
 
     def validate(self, attrs):
@@ -275,3 +280,30 @@ class PpmWorkItemPatchSerializer(serializers.Serializer):
         if not any(field in attrs for field in ("state_id", "priority", "assignee_ids", "due_date")):
             raise serializers.ValidationError("At least one editable field is required.")
         return attrs
+
+
+# ── AF2.2 S: живая карта проекта ──
+
+
+class PpmCanvasBatchBindingItemSerializer(serializers.Serializer):
+    """AF2.2 S1: один пункт пакета — те же поля, что у одиночной привязки; `client_operation_id` необязателен
+    (без него сервер выводит детерминированный id из доски, фигуры и источника — повтор пакета идемпотентен)."""
+
+    shape_id = serializers.RegexField(r"^shape:[A-Za-z0-9_-]+$", max_length=255)
+    entity_type = serializers.ChoiceField(choices=PpmCanvasEntityType.choices)
+    entity_id = serializers.UUIDField()
+    client_operation_id = serializers.UUIDField(required=False, allow_null=True, default=None)
+
+
+# AF2.2 S2: не больше 200 событий в ленте «Что изменилось».
+PPM_CANVAS_CHANGES_MAX_ITEMS = 200
+
+
+class PpmCanvasBoardChangesQuerySerializer(serializers.Serializer):
+    since = serializers.DateTimeField()
+    limit = serializers.IntegerField(
+        required=False,
+        default=PPM_CANVAS_CHANGES_MAX_ITEMS,
+        min_value=1,
+        max_value=PPM_CANVAS_CHANGES_MAX_ITEMS,
+    )

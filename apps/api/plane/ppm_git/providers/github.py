@@ -575,6 +575,7 @@ class GitHubAppClient:
             "source_version": _optional_string(payload, "node_id", maximum=255)
             or f"pr:{number}:{updated_at.isoformat() if updated_at else state}",
             "provider_updated_at": updated_at,
+            "provider_merged_at": _parse_datetime(payload.get("merged_at")),
         }
 
     def _app_jwt(self):

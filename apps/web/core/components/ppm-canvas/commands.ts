@@ -47,6 +47,8 @@ export const PPM_CANVAS_COMMANDS = [
   "add-list",
   "add-file",
   "add-git",
+  // AF2.2 (the M block of editor.tsx opens «Собрать карту спринта»)
+  "build-sprint-map",
   "add-agent-answer",
   "add-orchestrator-run",
   "add-search-results",

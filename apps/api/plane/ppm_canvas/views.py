@@ -18,6 +18,9 @@ from plane.bgtasks.issue_description_version_task import issue_description_versi
 from plane.bgtasks.webhook_task import model_activity
 from plane.utils.host import base_host
 
+from .batch_bindings import create_bindings_batch
+from .board_user_state import get_board_user_state, mark_board_seen
+from .changes import get_board_changes
 from .permissions import PpmCanvasAccess, get_ppm_canvas_access, get_ppm_canvas_capabilities
 from .realtime import broadcast_canvas_board_changed
 from .models import (
@@ -30,7 +33,9 @@ from .models import (
 )
 from .responses import get_request_id, ppm_error_response
 from .serializers import (
+    PPM_CANVAS_BATCH_MAX_ITEMS,
     PpmCanvasBindingCreateSerializer,
+    PpmCanvasBoardChangesQuerySerializer,
     PpmCanvasBoardCreateSerializer,
     PpmCanvasBoardDuplicateSerializer,
     PpmCanvasBoardOperationSerializer,
@@ -69,6 +74,7 @@ from .services import (
     get_project,
     get_content_source,
     get_git_source,
+    get_visible_work_items,
     get_work_item_edit_options,
     get_work_item,
     get_work_items_view,
@@ -89,6 +95,7 @@ from .services import (
     export_work_items_markdown,
     update_work_item,
 )
+from .work_item_boards import get_work_item_boards
 
 
 logger = logging.getLogger("plane.api")
@@ -1264,6 +1271,162 @@ class PpmCanvasWorkItemsViewExport(PpmMultiBoardAPIView):
         response = HttpResponse(content, content_type=content_type)
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
+
+
+# ── AF2.2 S: живая карта проекта ──
+
+
+class PpmCanvasBindingBatchView(PpmMultiBoardAPIView):
+    """S1: до 200 привязок одним запросом; ответ — по каждому пункту, в порядке входа."""
+
+    def post(self, request, workspace_id, project_id, board_id):
+        access, project, _, denied = self.require_canvas_capability(request, workspace_id, project_id, "edit")
+        if denied:
+            return denied
+        items = request.data.get("items") if isinstance(request.data, dict) else None
+        if not isinstance(items, list):
+            return ppm_error_response(
+                request,
+                code="CANVAS_BATCH_INVALID",
+                message="Передайте пункты пакета списком в поле items.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        if not items:
+            return ppm_error_response(
+                request,
+                code="CANVAS_BATCH_EMPTY",
+                message="Пакет привязок пуст.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(items) > PPM_CANVAS_BATCH_MAX_ITEMS:
+            return ppm_error_response(
+                request,
+                code="CANVAS_BATCH_TOO_LARGE",
+                message=f"В одном пакете можно привязать не больше {PPM_CANVAS_BATCH_MAX_ITEMS} фигур.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                details={"max_items": PPM_CANVAS_BATCH_MAX_ITEMS, "received": len(items)},
+            )
+        canvas = get_or_create_active_canvas(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            user_id=request.user.id,
+        )
+        board, missing = self.resolve_board(request, canvas, board_id)
+        if missing:
+            return missing
+        try:
+            results = create_bindings_batch(
+                board=board,
+                project=project,
+                user=request.user,
+                access=access,
+                items=items,
+            )
+        except PpmCanvasConflict as conflict:
+            return self.canvas_conflict_response(request, conflict)
+        logger.info(
+            "PPM Canvas batch projections bound",
+            extra={
+                "board_id": str(board.id),
+                "project_id": str(project.id),
+                "user_id": str(request.user.id),
+                "items": len(items),
+                "errors": sum(1 for result in results if result["status"] == "error"),
+            },
+        )
+        return Response({"results": results}, status=status.HTTP_200_OK)
+
+
+class PpmCanvasBoardChangesView(PpmMultiBoardAPIView):
+    """S2: лента «Что изменилось» с момента `since` (не раньше 30 дней, не больше 200 событий, новые первыми)."""
+
+    def get(self, request, workspace_id, project_id, board_id):
+        _, project, _, denied = self.require_canvas_capability(request, workspace_id, project_id, "read")
+        if denied:
+            return denied
+        canvas = get_or_create_active_canvas(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            user_id=request.user.id,
+        )
+        board, missing = self.resolve_board(request, canvas, board_id)
+        if missing:
+            return missing
+        serializer = PpmCanvasBoardChangesQuerySerializer(data=request.query_params)
+        if not serializer.is_valid():
+            return self.invalid_payload(request, serializer, code="CANVAS_CHANGES_INVALID")
+        payload = get_board_changes(
+            board=board,
+            project=project,
+            user=request.user,
+            since=serializer.validated_data["since"],
+            limit=serializer.validated_data["limit"],
+        )
+        return Response(payload, status=status.HTTP_200_OK)
+
+
+class PpmCanvasBoardUserStateView(PpmMultiBoardAPIView):
+    """S3: личная отметка «просмотрено» — `GET …/me/`."""
+
+    def get(self, request, workspace_id, project_id, board_id):
+        _, _, _, denied = self.require_canvas_capability(request, workspace_id, project_id, "read")
+        if denied:
+            return denied
+        canvas = get_or_create_active_canvas(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            user_id=request.user.id,
+        )
+        board, missing = self.resolve_board(request, canvas, board_id)
+        if missing:
+            return missing
+        return Response(get_board_user_state(board=board, user=request.user), status=status.HTTP_200_OK)
+
+
+class PpmCanvasBoardSeenView(PpmMultiBoardAPIView):
+    """S3: «Отметить просмотренным» — `PUT …/me/seen/`: серверное «сейчас» и текущая версия доски."""
+
+    def put(self, request, workspace_id, project_id, board_id):
+        _, _, _, denied = self.require_canvas_capability(request, workspace_id, project_id, "read")
+        if denied:
+            return denied
+        canvas = get_or_create_active_canvas(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            user_id=request.user.id,
+        )
+        board, missing = self.resolve_board(request, canvas, board_id)
+        if missing:
+            return missing
+        return Response(mark_board_seen(board=board, user=request.user), status=status.HTTP_200_OK)
+
+
+class PpmCanvasWorkItemBoardsView(PpmMultiBoardAPIView):
+    """S4: доски, на которых задача лежит живой карточкой (для строки «На карте» в задаче)."""
+
+    def get(self, request, workspace_id, project_id, work_item_id):
+        _, project, _, denied = self.require_canvas_capability(request, workspace_id, project_id, "read")
+        if denied:
+            return denied
+        visible = (
+            get_visible_work_items(project=project, user=request.user, include_inactive=True)
+            .filter(id=work_item_id, deleted_at__isnull=True)
+            .exists()
+        )
+        if not visible:
+            return ppm_error_response(
+                request,
+                code="WORK_ITEM_NOT_FOUND",
+                message="Задача не найдена в текущем проекте.",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(
+            {"results": get_work_item_boards(project=project, work_item_id=work_item_id)},
+            status=status.HTTP_200_OK,
+        )
+
+
+# ── /AF2.2 S ──
 
 
 def _plane_issue_request_data(validated_data):
