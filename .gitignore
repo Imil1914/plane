@@ -120,3 +120,10 @@ packages/i18n/src/types/keys.generated.ts
 
 # Local security notes (not for version control)
 /security/
+
+# PPM: local dev storage (uploads, Vault private objects)
+apps/api/plane/uploads/
+apps/api/plane/private/
+# PPM: AF1.2 MinIO test-image scripts (apps/api/tests/RUNNING_TESTS.md)
+!scripts/ppm-build-local-minio-test-image.sh
+!scripts/ppm-minio-release.Dockerfile
