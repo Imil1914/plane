@@ -31,6 +31,8 @@ class PpmGitError(Exception):
     code: str
     message: str
     details: dict | None = None
+    # Explicit HTTP status for errors whose status depends on the step (G1.3 write flow); None → views.error_status.
+    status_code: int | None = None
 
 
 def normalize_name(value, *, field="name", maximum=160):

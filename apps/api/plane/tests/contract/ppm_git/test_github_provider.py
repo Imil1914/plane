@@ -431,6 +431,7 @@ def test_github_branch_creation_uses_contents_write_and_replays_exact_ref():
             "org/repo",
             base_ref="main",
             head_ref="GH-7/safe-write",
+            allow_replay=True,
         )
 
     assert created == {
@@ -482,11 +483,12 @@ def test_github_branch_creation_rejects_existing_ref_at_other_commit():
     assert exc_info.value.code == "GITHUB_BRANCH_CONFLICT"
 
 
-def test_github_draft_pull_request_requires_commit_and_replays_exact_pr():
+def test_github_draft_pull_request_requires_commit_and_replays_only_its_marked_pr():
     base_sha = "a" * 40
     head_sha = "b" * 40
     title = "GH-7 — Безопасный Git write"
     body = "Проверяемое описание"
+    marker = "<!-- ppm-write-action:00000000-0000-4000-8000-000000000007 -->"
 
     class Response:
         headers = {}
@@ -504,13 +506,13 @@ def test_github_draft_pull_request_requires_commit_and_replays_exact_pr():
             self.pull_request = None
             self.requests = []
 
-        def pr_payload(self):
+        def pr_payload(self, sent_body):
             return {
                 "id": 92001,
                 "node_id": "PR_write_test",
                 "number": 7,
                 "title": title,
-                "body": body,
+                "body": sent_body,
                 "html_url": "https://github.com/org/repo/pull/7",
                 "state": "open",
                 "draft": True,
@@ -537,12 +539,12 @@ def test_github_draft_pull_request_requires_commit_and_replays_exact_pr():
             if method == "POST" and url.endswith("/pulls"):
                 assert kwargs["json"] == {
                     "title": title,
-                    "body": body,
+                    "body": f"{body}\n\n{marker}",
                     "head": "GH-7/safe-write",
                     "base": "main",
                     "draft": True,
                 }
-                self.pull_request = self.pr_payload()
+                self.pull_request = self.pr_payload(kwargs["json"]["body"])
                 return Response(201, self.pull_request)
             raise AssertionError(f"Unexpected GitHub request: {method} {url}")
 
@@ -557,6 +559,7 @@ def test_github_draft_pull_request_requires_commit_and_replays_exact_pr():
             head_ref="GH-7/safe-write",
             title=title,
             body=body,
+            marker=marker,
         )
         replayed = client.create_draft_pull_request(
             81001,
@@ -566,6 +569,8 @@ def test_github_draft_pull_request_requires_commit_and_replays_exact_pr():
             head_ref="GH-7/safe-write",
             title=title,
             body=body,
+            marker=marker,
+            reconciling=True,
         )
 
     assert created["created"] is True
@@ -608,6 +613,7 @@ def test_github_draft_pull_request_rejects_head_without_new_commit():
                 head_ref="GH-7/safe-write",
                 title="GH-7 — Безопасный Git write",
                 body="Проверяемое описание",
+                marker="<!-- ppm-write-action:00000000-0000-4000-8000-000000000007 -->",
             )
 
     assert exc_info.value.code == "GITHUB_PULL_REQUEST_EMPTY"

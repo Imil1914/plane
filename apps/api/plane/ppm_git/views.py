@@ -45,9 +45,12 @@ from .services import PpmGitError, archive_repository, create_link, create_repos
 from .tasks import process_git_delivery_task, reconcile_git_connection_task, synchronize_git_code_task
 from .webhooks import body_sha256, parse_github_webhook, verify_github_signature
 from .write_actions import (
+    apply_git_write_action,
+    cancel_git_write_action,
     create_git_write_action_preview,
     decide_git_write_action,
     serialize_git_write_action,
+    serialize_git_write_actions,
     serialize_git_write_readiness,
 )
 
@@ -213,7 +216,7 @@ class PpmGitAPIView(APIView):
                 self.request,
                 code=exc.code,
                 message=exc.message,
-                status_code=error_status(exc.code),
+                status_code=exc.status_code or error_status(exc.code),
                 details=exc.details,
             )
         if isinstance(exc, PpmGitProviderError):
@@ -351,6 +354,7 @@ class PpmGitOverviewView(PpmGitAPIView):
             "connection__installation",
             "work_item__project",
         ).filter(workspace_id=workspace_id, project_id=project_id)[:20]
+        readiness = serialize_git_write_readiness(connections)
         return Response(
             {
                 "capabilities": capabilities,
@@ -361,10 +365,10 @@ class PpmGitOverviewView(PpmGitAPIView):
                 "objects": [serialize_git_object(git_object) for git_object in git_objects],
                 "links": [serialize_link(link) for link in links],
                 "write_actions": {
-                    "provider_writes_enabled": bool(getattr(settings, "PPM_GIT_WRITE_ENABLED", False)),
-                    "apply_available": False,
-                    "readiness": serialize_git_write_readiness(connections),
-                    "items": [serialize_git_write_action(action) for action in write_actions],
+                    "provider_writes_enabled": readiness["provider_writes_enabled"],
+                    "apply_available": readiness["apply_available"],
+                    "readiness": readiness,
+                    "items": serialize_git_write_actions(write_actions),
                 },
                 "conventions": {
                     "branch": "<WORK_ITEM_KEY>/<short-slug>",
@@ -389,12 +393,13 @@ class PpmGitWriteActionListView(PpmGitAPIView):
             workspace_id=workspace_id,
             project_id=project_id,
         )
+        readiness = serialize_git_write_readiness(connections)
         return Response(
             {
-                "provider_writes_enabled": bool(getattr(settings, "PPM_GIT_WRITE_ENABLED", False)),
-                "apply_available": False,
-                "readiness": serialize_git_write_readiness(connections),
-                "items": [serialize_git_write_action(action) for action in actions],
+                "provider_writes_enabled": readiness["provider_writes_enabled"],
+                "apply_available": readiness["apply_available"],
+                "readiness": readiness,
+                "items": serialize_git_write_actions(actions),
             }
         )
 
@@ -407,6 +412,7 @@ class PpmGitWriteActionListView(PpmGitAPIView):
             project_id=project_id,
             payload=request.data,
             user_id=request.user.id,
+            request_id=get_request_id(request),
         )
         self.audit(
             request,
@@ -419,6 +425,13 @@ class PpmGitWriteActionListView(PpmGitAPIView):
                 "action_type": action.action_type,
                 "repository_id": str(action.repository_id),
                 "work_item_id": str(action.work_item_id),
+                "parent_action_id": str(action.parent_action_id) if action.parent_action_id else None,
+                "request": {
+                    "base_ref": action.base_ref,
+                    "base_sha": action.base_sha,
+                    "head_ref": action.head_ref,
+                    "head_sha": action.head_sha,
+                },
                 "provider_write_performed": False,
             },
         )
@@ -473,12 +486,35 @@ class PpmGitWriteActionDecisionView(PpmGitAPIView):
             target_type="write_action",
             target_id=action.id,
             metadata={
+                "action_type": action.action_type,
                 "status": action.status,
                 "repository_id": str(action.repository_id),
                 "work_item_id": str(action.work_item_id),
                 "provider_write_performed": False,
             },
         )
+        return Response(serialize_git_write_action(action))
+
+
+class PpmGitWriteActionApplyView(PpmGitAPIView):
+    """G1.3: apply one approved step (branch or draft PR). The service audits every outcome itself."""
+
+    def post(self, request, workspace_id, project_id, action_id):
+        _, denied = self.require_capability(request, workspace_id, project_id, "manage_write_actions")
+        if denied:
+            return denied
+        action = self.get_write_action(workspace_id=workspace_id, project_id=project_id, action_id=action_id)
+        action, _ = apply_git_write_action(action=action, user_id=request.user.id, request_id=get_request_id(request))
+        return Response(serialize_git_write_action(action))
+
+
+class PpmGitWriteActionCancelView(PpmGitAPIView):
+    def post(self, request, workspace_id, project_id, action_id):
+        _, denied = self.require_capability(request, workspace_id, project_id, "manage_write_actions")
+        if denied:
+            return denied
+        action = self.get_write_action(workspace_id=workspace_id, project_id=project_id, action_id=action_id)
+        action, _ = cancel_git_write_action(action=action, user_id=request.user.id, request_id=get_request_id(request))
         return Response(serialize_git_write_action(action))
 
 

@@ -1,8 +1,9 @@
 import base64
 import binascii
 import hashlib
+import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote, urlencode
 
 import jwt
@@ -19,6 +20,11 @@ REQUEST_TIMEOUT = (3.05, 15)
 READ_PERMISSIONS = {"contents": "read", "pull_requests": "read"}
 BRANCH_WRITE_PERMISSIONS = {"contents": "write"}
 DRAFT_PULL_REQUEST_WRITE_PERMISSIONS = {"contents": "read", "pull_requests": "write"}
+COMMIT_SUMMARY_LIMIT = 20
+# G1.3: every SHA that PPM shows, stores or puts into a manual command must be a plain hex object id.
+SHA_PATTERN = re.compile(r"^[0-9a-f]{40,64}$")
+# A PR without our marker counts as someone else's only if it clearly predates our first attempt (clock skew).
+FOREIGN_PULL_REQUEST_MARGIN = timedelta(minutes=2)
 
 
 def github_app_is_configured():
@@ -55,6 +61,94 @@ def _parse_datetime(value):
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def _error_message(response):
+    """GitHub's short error text, used only to classify an answer — never shown or logged verbatim."""
+    try:
+        payload = response.json()
+    except (AttributeError, TypeError, ValueError):
+        return ""
+    message = payload.get("message") if isinstance(payload, dict) else None
+    return message[:500] if isinstance(message, str) else ""
+
+
+def _is_rate_limited(response):
+    """Primary limits carry ``X-RateLimit-Remaining: 0``; secondary limits come as 403/429 with ``Retry-After``
+    and/or a "secondary rate limit" message while the primary budget is still positive."""
+    if response.status_code == 429:
+        return True
+    if response.status_code != 403:
+        return False
+    headers = response.headers or {}
+    if headers.get("X-RateLimit-Remaining") == "0" or headers.get("Retry-After"):
+        return True
+    return "rate limit" in _error_message(response).casefold()
+
+
+def _require_sha(payload, key):
+    sha = _required_string(payload, key, maximum=64)
+    if not SHA_PATTERN.fullmatch(sha):
+        raise PpmGitProviderError("GITHUB_INVALID_RESPONSE", "GitHub вернул некорректный идентификатор коммита.")
+    return sha
+
+
+def pull_request_marker(action_id):
+    """Hidden, per-action marker PPM puts into every PR body it creates; the only proof a PR is PPM's own."""
+    return f"<!-- ppm-write-action:{action_id} -->"
+
+
+def pull_request_body_with_marker(body, marker):
+    return f"{body}\n\n{marker}" if body else marker
+
+
+def _definitive_rejection(error):
+    """A 4xx answer means GitHub refused the write; transport errors, 5xx and broken 2xx bodies leave it unknown."""
+    return error.http_status is not None and 400 <= error.http_status < 500
+
+
+def _mark_write_outcome(error):
+    definitive = _definitive_rejection(error)
+    error.write_outcome = "not_performed" if definitive else "unknown"
+    error.write_request_unanswered = not definitive
+    return error
+
+
+def _classify_ref_rejection(message):
+    if "already exists" in message.casefold():
+        return (
+            "GITHUB_BRANCH_CONFLICT",
+            "GitHub не создал ветку: ветка с таким именем уже существует. PPM её не изменяет.",
+        )
+    return (
+        "GITHUB_BRANCH_REJECTED",
+        "GitHub отклонил создание ветки. Проверьте правила репозитория (защищённые ветки, rulesets) и права "
+        "приложения.",
+    )
+
+
+def _classify_pull_request_rejection(message):
+    text = message.casefold()
+    if "draft pull requests are not supported" in text:
+        return (
+            "GITHUB_DRAFT_UNSUPPORTED",
+            "GitHub не поддерживает черновики PR в этом репозитории (ограничение тарифа GitHub). "
+            "Создайте PR в GitHub вручную.",
+        )
+    if "already exists" in text:
+        return (
+            "GITHUB_PULL_REQUEST_EXISTS",
+            "Для этой ветки в GitHub уже есть pull request. PPM не создаёт дубликаты.",
+        )
+    if "no commits between" in text:
+        return (
+            "GITHUB_PULL_REQUEST_EMPTY",
+            "Между ветками нет новых коммитов. Сначала отправьте коммит в новую ветку.",
+        )
+    return (
+        "GITHUB_PULL_REQUEST_REJECTED",
+        "GitHub отклонил создание черновика PR. Проверьте ветки, правила репозитория и права приложения.",
+    )
 
 
 class GitHubAppClient:
@@ -264,7 +358,88 @@ class GitHubAppClient:
                 ) from exc
         return contents
 
-    def create_branch(self, installation_id, repository_id, full_name, *, base_ref, head_ref):
+    def get_branch_heads(self, installation_id, repository_id, full_name, refs):
+        """Read-only: the exact head SHA of each branch (``None`` when it does not exist). Never writes."""
+        token = self.create_installation_token(installation_id, repository_ids=[int(repository_id)])
+        safe_full_name = "/".join(quote(part, safe="-._") for part in full_name.split("/"))
+        heads = {}
+        for ref in refs:
+            value = self._get_git_ref(token, safe_full_name, ref, required=False)
+            heads[ref] = value["sha"] if value else None
+        return heads
+
+    def get_pull_request_preview(
+        self,
+        installation_id,
+        repository_id,
+        full_name,
+        *,
+        base_ref,
+        head_ref,
+        commit_limit=COMMIT_SUMMARY_LIMIT,
+    ):
+        """Read-only state for the draft PR preview: exact base/head SHA, commits ahead and PRs for these branches.
+
+        Only an open PR blocks a new one (GitHub allows a new PR after a closed one); closed and merged PRs are
+        returned separately for reference.
+        """
+        token = self.create_installation_token(installation_id, repository_ids=[int(repository_id)])
+        safe_full_name = "/".join(quote(part, safe="-._") for part in full_name.split("/"))
+        base = self._get_git_ref(token, safe_full_name, base_ref)
+        head = self._get_git_ref(token, safe_full_name, head_ref)
+        comparison = self._compare(token, safe_full_name, base["sha"], head["sha"])
+        ahead_by = comparison.get("ahead_by")
+        behind_by = comparison.get("behind_by")
+        if not isinstance(ahead_by, int) or isinstance(ahead_by, bool) or ahead_by < 0:
+            raise PpmGitProviderError("GITHUB_INVALID_RESPONSE", "GitHub вернул некорректное сравнение веток.")
+        raw_commits = comparison.get("commits") if isinstance(comparison.get("commits"), list) else []
+        commits = [self._normalize_compare_commit(item) for item in raw_commits if isinstance(item, dict)]
+        raw_pull_requests = self._branch_pull_requests(token, safe_full_name, full_name, base_ref, head_ref)
+        pull_requests = []
+        for raw in raw_pull_requests:
+            item = self.normalize_pull_request(raw)
+            pull_requests.append(
+                {
+                    "provider_object_id": item["provider_object_id"],
+                    "number": item["ref"],
+                    "title": item["title"],
+                    "canonical_url": item["canonical_url"],
+                    "state": item["state"],
+                    "is_draft": item["is_draft"],
+                }
+            )
+        return {
+            "base_ref": base_ref,
+            "base_sha": base["sha"],
+            "head_ref": head_ref,
+            "head_sha": head["sha"],
+            "ahead_by": ahead_by,
+            "behind_by": behind_by if isinstance(behind_by, int) and not isinstance(behind_by, bool) else 0,
+            "truncated": ahead_by > min(len(commits), commit_limit),
+            "commits": commits[:commit_limit],
+            "existing_pull_requests": [item for item in pull_requests if item["state"] == "open"],
+            "previous_pull_requests": [item for item in pull_requests if item["state"] != "open"],
+        }
+
+    def create_branch(
+        self,
+        installation_id,
+        repository_id,
+        full_name,
+        *,
+        base_ref,
+        head_ref,
+        base_sha=None,
+        allow_replay=False,
+    ):
+        """Create only the new ref ``head_ref`` at the exact base commit. Never updates, deletes or force-moves refs.
+
+        ``base_sha`` fences the write to the commit shown in the preview. ``allow_replay`` (reconciling) is set only
+        while an earlier attempt of the same action may have written: a branch with exactly this name that stands
+        on the previewed commit or descends from it (pushed to since) is then that attempt's result. Any other
+        existing branch cannot be proven either way and is reported as unconfirmed — never as someone else's. On a
+        first attempt (nothing written before) an existing branch is someone else's.
+        """
         token = self.create_installation_token(
             installation_id,
             repository_ids=[int(repository_id)],
@@ -272,31 +447,53 @@ class GitHubAppClient:
         )
         safe_full_name = "/".join(quote(part, safe="-._") for part in full_name.split("/"))
         base = self._get_git_ref(token, safe_full_name, base_ref)
+        target_sha = base_sha or base["sha"]
         existing = self._get_git_ref(token, safe_full_name, head_ref, required=False)
-        base_sha = base["sha"]
         if existing is not None:
-            if existing["sha"] != base_sha:
+            if allow_replay and self._is_our_branch(token, safe_full_name, target_sha, existing["sha"], base_sha):
+                return self._branch_result(full_name, head_ref, existing["sha"], created=False)
+            if allow_replay:
+                raise self._unconfirmed_branch(full_name, head_ref)
+            if existing["sha"] != target_sha:
                 raise PpmGitProviderError(
                     "GITHUB_BRANCH_CONFLICT",
-                    "Ветка с таким именем уже существует и указывает на другой commit.",
+                    "Ветка с таким именем уже существует и указывает на другой commit. "
+                    "PPM не изменяет чужие ветки — выберите другое имя.",
+                    write_outcome="not_performed",
                 )
-            return self._branch_result(full_name, head_ref, existing["sha"], created=False)
-
-        payload = self._request(
-            "POST",
-            f"{GITHUB_API_URL}/repos/{safe_full_name}/git/refs",
-            token=token,
-            json={"ref": f"refs/heads/{head_ref}", "sha": base_sha},
-            conflict_code="GITHUB_BRANCH_CONFLICT",
-            conflict_message="GitHub не создал ветку: имя уже занято или исходная ветка изменилась.",
-        )
-        created = self._normalize_git_ref(payload)
-        if created["ref"] != f"refs/heads/{head_ref}" or created["sha"] != base_sha:
             raise PpmGitProviderError(
-                "GITHUB_INVALID_RESPONSE",
-                "GitHub вернул неожиданную созданную ветку.",
+                "GITHUB_BRANCH_CONFLICT",
+                "Ветка с таким именем уже существует в GitHub. PPM не присваивает чужие ветки — выберите другое имя.",
+                write_outcome="not_performed",
             )
-        return self._branch_result(full_name, head_ref, base_sha, created=True)
+        # The branch is absent: no earlier attempt of this action created it.
+        if base_sha is not None and base["sha"] != base_sha:
+            raise PpmGitProviderError(
+                "GITHUB_BASE_MOVED",
+                "Базовая ветка изменилась после предпросмотра. Подготовьте новый предпросмотр ветки.",
+                write_outcome="not_performed",
+            )
+        try:
+            payload = self._request(
+                "POST",
+                f"{GITHUB_API_URL}/repos/{safe_full_name}/git/refs",
+                token=token,
+                json={"ref": f"refs/heads/{head_ref}", "sha": target_sha},
+                conflict_code=_classify_ref_rejection,
+            )
+            created = self._normalize_git_ref(payload)
+            if created["ref"] != f"refs/heads/{head_ref}" or created["sha"] != target_sha:
+                raise PpmGitProviderError("GITHUB_INVALID_RESPONSE", "GitHub вернул неожиданную созданную ветку.")
+        except PpmGitProviderError as exc:
+            if allow_replay and exc.code == "GITHUB_BRANCH_CONFLICT":
+                # 422 «Reference already exists»: the branch appeared between our read and our write — possibly
+                # the earlier attempt landing late. Look again instead of guessing.
+                again = self._get_git_ref(token, safe_full_name, head_ref, required=False)
+                if again is not None and self._is_our_branch(token, safe_full_name, target_sha, again["sha"], base_sha):
+                    return self._branch_result(full_name, head_ref, again["sha"], created=False)
+                raise self._unconfirmed_branch(full_name, head_ref) from exc
+            raise _mark_write_outcome(exc)
+        return self._branch_result(full_name, head_ref, target_sha, created=True)
 
     def create_draft_pull_request(
         self,
@@ -308,7 +505,21 @@ class GitHubAppClient:
         head_ref,
         title,
         body,
+        marker,
+        base_sha=None,
+        head_sha=None,
+        reconciling=False,
+        first_attempt_at=None,
     ):
+        """Create only a draft pull request. Never merges, never marks ready for review, never pushes commits.
+
+        Every PR PPM creates carries ``marker`` (hidden HTML comment tied to the write action) in its body; only an
+        OPEN PR with that marker for exactly these branches is ever taken as this action's result — never a closed
+        one, never a look-alike without the marker. ``base_sha``/``head_sha`` fence the write to the previewed
+        commits. While ``reconciling`` (an earlier attempt may have written), an open PR without the marker is
+        called someone else's only when it clearly predates ``first_attempt_at``; otherwise the outcome is reported
+        as unconfirmed.
+        """
         token = self.create_installation_token(
             installation_id,
             repository_ids=[int(repository_id)],
@@ -317,48 +528,177 @@ class GitHubAppClient:
         safe_full_name = "/".join(quote(part, safe="-._") for part in full_name.split("/"))
         base = self._get_git_ref(token, safe_full_name, base_ref)
         head = self._get_git_ref(token, safe_full_name, head_ref)
-        if base["sha"] == head["sha"]:
-            raise PpmGitProviderError(
-                "GITHUB_PULL_REQUEST_EMPTY",
-                "Сначала добавьте и отправьте хотя бы один commit в новую ветку.",
-            )
+        empty = PpmGitProviderError(
+            "GITHUB_PULL_REQUEST_EMPTY",
+            "Сначала добавьте и отправьте хотя бы один commit в новую ветку.",
+            write_outcome="not_performed",
+        )
+        if not reconciling and base["sha"] == head["sha"]:
+            raise empty
 
+        pull_requests = self._branch_pull_requests(token, safe_full_name, full_name, base_ref, head_ref)
+        ours = self._our_pull_request(pull_requests, marker, base_ref=base_ref, head_ref=head_ref)
+        if ours is not None:
+            return ours
+        foreign_open = [
+            item for item in pull_requests if item.get("state") == "open" and marker not in (item.get("body") or "")
+        ]
+        if foreign_open:
+            if reconciling and not self._predates(foreign_open, first_attempt_at):
+                raise self._unconfirmed_pull_request(full_name, head_ref)
+            first = self.normalize_pull_request(foreign_open[0])
+            raise PpmGitProviderError(
+                "GITHUB_PULL_REQUEST_EXISTS",
+                "Для этой ветки в GitHub уже есть открытый pull request, созданный не через PPM. PPM не присваивает "
+                "чужие PR — откройте его в GitHub.",
+                details={"canonical_url": first["canonical_url"]},
+                write_outcome="not_performed",
+            )
+        # No PR of this action exists in GitHub (checked above, PRs cannot be deleted); fence to the previewed commits.
+        if base["sha"] == head["sha"]:
+            raise empty
+        if head_sha is not None and head["sha"] != head_sha:
+            raise PpmGitProviderError(
+                "GITHUB_HEAD_MOVED",
+                "В ветку отправлены новые коммиты после предпросмотра. Подготовьте новый предпросмотр, "
+                "чтобы проверить их перед созданием черновика PR.",
+                write_outcome="not_performed",
+            )
+        if base_sha is not None and base["sha"] != base_sha:
+            raise PpmGitProviderError(
+                "GITHUB_BASE_MOVED",
+                "Базовая ветка изменилась после предпросмотра. Подготовьте новый предпросмотр черновика PR.",
+                write_outcome="not_performed",
+            )
+        try:
+            payload = self._request(
+                "POST",
+                f"{GITHUB_API_URL}/repos/{safe_full_name}/pulls",
+                token=token,
+                json={
+                    "title": title,
+                    "body": pull_request_body_with_marker(body, marker),
+                    "head": head_ref,
+                    "base": base_ref,
+                    "draft": True,
+                },
+                conflict_code=_classify_pull_request_rejection,
+            )
+            result = self._normalize_written_pull_request(payload)
+        except PpmGitProviderError as exc:
+            if exc.code == "GITHUB_PULL_REQUEST_EXISTS":
+                # 422 «A pull request already exists»: a PR appeared between our listing and our write — possibly
+                # the earlier attempt landing late. Look again instead of guessing.
+                again = self._branch_pull_requests(token, safe_full_name, full_name, base_ref, head_ref)
+                ours = self._our_pull_request(again, marker, base_ref=base_ref, head_ref=head_ref)
+                if ours is not None:
+                    return ours
+                if reconciling:
+                    raise self._unconfirmed_pull_request(full_name, head_ref) from exc
+            raise _mark_write_outcome(exc)
+        return {**result, "created": True}
+
+    def _our_pull_request(self, pull_requests, marker, *, base_ref, head_ref):
+        """This action's open PR (by marker and exact branches); a closed one is reported, never adopted."""
+        ours = [item for item in pull_requests if marker in (item.get("body") or "")]
+        for item in ours:
+            head = item.get("head") if isinstance(item.get("head"), dict) else {}
+            base = item.get("base") if isinstance(item.get("base"), dict) else {}
+            if item.get("state") == "open" and head.get("ref") == head_ref and base.get("ref") == base_ref:
+                return {**self._normalize_written_pull_request(item), "created": False}
+        if ours:
+            closed = self.normalize_pull_request(ours[0])
+            raise PpmGitProviderError(
+                "GITHUB_PULL_REQUEST_CLOSED",
+                "Черновик PR, созданный прошлой попыткой этого действия, уже закрыт в GitHub. PPM не открывает его "
+                "заново и не создаёт дубликат — при необходимости подготовьте новый черновик.",
+                details={"canonical_url": closed["canonical_url"]},
+                write_outcome="exists",
+            )
+        return None
+
+    def _normalize_written_pull_request(self, payload):
+        result = self.normalize_pull_request(payload)
+        if result["commit_sha"] and not SHA_PATTERN.fullmatch(result["commit_sha"]):
+            result["commit_sha"] = ""
+        return result
+
+    @staticmethod
+    def _predates(pull_requests, first_attempt_at):
+        if first_attempt_at is None:
+            return False
+        for item in pull_requests:
+            created_at = _parse_datetime(item.get("created_at"))
+            if created_at is None or created_at >= first_attempt_at - FOREIGN_PULL_REQUEST_MARGIN:
+                return False
+        return True
+
+    def _is_our_branch(self, token, safe_full_name, target_sha, sha, base_sha):
+        return sha == target_sha or (
+            base_sha is not None and self._descends_from(token, safe_full_name, target_sha, sha)
+        )
+
+    @staticmethod
+    def _unconfirmed_branch(full_name, head_ref):
+        return PpmGitProviderError(
+            "GITHUB_BRANCH_UNCONFIRMED",
+            "Не удалось подтвердить, создана ли ветка прошлой попыткой — проверьте в GitHub. Ветка с этим именем "
+            "есть, но PPM не может доказать, что она своя, и ничего с ней не делает.",
+            details={"canonical_url": f"https://github.com/{full_name}/tree/{quote(head_ref, safe='/-._')}"},
+            write_outcome="unknown",
+        )
+
+    @staticmethod
+    def _unconfirmed_pull_request(full_name, head_ref):
+        search = quote(f"is:pr head:{head_ref}", safe="")
+        return PpmGitProviderError(
+            "GITHUB_PULL_REQUEST_UNCONFIRMED",
+            "Не удалось подтвердить, создан ли PR — проверьте в GitHub. Для этой ветки есть открытый PR без отметки "
+            "PPM, появившийся после первой попытки: PPM не может доказать, что он свой, и не создаёт второй.",
+            details={"canonical_url": f"https://github.com/{full_name}/pulls?q={search}"},
+            write_outcome="unknown",
+        )
+
+    def _branch_pull_requests(self, token, safe_full_name, full_name, base_ref, head_ref):
         owner = full_name.split("/", 1)[0]
-        existing = self._request(
+        pull_requests = self._request(
             "GET",
             f"{GITHUB_API_URL}/repos/{safe_full_name}/pulls",
             token=token,
             params={"state": "all", "head": f"{owner}:{head_ref}", "base": base_ref, "per_page": 100},
         )
-        if not isinstance(existing, list):
+        if not isinstance(pull_requests, list):
             raise PpmGitProviderError(
                 "GITHUB_INVALID_RESPONSE",
                 "GitHub вернул некорректный список pull requests.",
             )
-        matching = [item for item in existing if isinstance(item, dict)]
-        if matching:
-            if len(matching) != 1:
-                raise PpmGitProviderError(
-                    "GITHUB_PULL_REQUEST_CONFLICT",
-                    "Для выбранных веток найдено несколько pull requests.",
-                )
-            pull_request = matching[0]
-            if pull_request.get("title") != title or (pull_request.get("body") or "") != body:
-                raise PpmGitProviderError(
-                    "GITHUB_PULL_REQUEST_CONFLICT",
-                    "Pull request для этих веток уже существует с другим названием или описанием.",
-                )
-            return {**self.normalize_pull_request(pull_request), "created": False}
+        return [item for item in pull_requests if isinstance(item, dict)]
 
-        payload = self._request(
-            "POST",
-            f"{GITHUB_API_URL}/repos/{safe_full_name}/pulls",
-            token=token,
-            json={"title": title, "body": body, "head": head_ref, "base": base_ref, "draft": True},
-            conflict_code="GITHUB_PULL_REQUEST_CONFLICT",
-            conflict_message="GitHub не создал draft PR: проверьте ветки и существующие pull requests.",
-        )
-        return {**self.normalize_pull_request(payload), "created": True}
+    def _compare(self, token, safe_full_name, base_sha, head_sha):
+        spec = f"{quote(base_sha, safe='')}...{quote(head_sha, safe='')}"
+        comparison = self._request("GET", f"{GITHUB_API_URL}/repos/{safe_full_name}/compare/{spec}", token=token)
+        if not isinstance(comparison, dict):
+            raise PpmGitProviderError("GITHUB_INVALID_RESPONSE", "GitHub вернул некорректное сравнение веток.")
+        return comparison
+
+    def _descends_from(self, token, safe_full_name, ancestor_sha, sha):
+        """True when ``sha`` is ``ancestor_sha`` or has it in its history (the branch was pushed to since)."""
+        comparison = self._compare(token, safe_full_name, ancestor_sha, sha)
+        return comparison.get("status") in {"ahead", "identical"}
+
+    @staticmethod
+    def _normalize_compare_commit(item):
+        commit = item.get("commit") if isinstance(item.get("commit"), dict) else {}
+        author_block = commit.get("author") if isinstance(commit.get("author"), dict) else {}
+        github_author = item.get("author") if isinstance(item.get("author"), dict) else {}
+        message = _optional_string(commit, "message", maximum=10000)
+        return {
+            "sha": _require_sha(item, "sha"),
+            "title": (message.splitlines()[0] if message else "")[:200],
+            "author": _optional_string(github_author, "login", maximum=255)
+            or _optional_string(author_block, "name", maximum=255),
+            "canonical_url": _optional_string(item, "html_url"),
+        }
 
     def _get_git_ref(self, token, safe_full_name, ref, *, required=True):
         try:
@@ -386,8 +726,7 @@ class GitHubAppClient:
             git_object = {}
         if not isinstance(reference, str) or not reference.startswith("refs/heads/"):
             raise PpmGitProviderError("GITHUB_INVALID_RESPONSE", "GitHub вернул некорректную ветку.")
-        sha = _required_string(git_object, "sha", maximum=64)
-        return {"ref": reference, "sha": sha}
+        return {"ref": reference, "sha": _require_sha(git_object, "sha")}
 
     @staticmethod
     def _branch_result(full_name, head_ref, sha, *, created):
@@ -402,12 +741,34 @@ class GitHubAppClient:
         body = {"permissions": dict(permissions or READ_PERMISSIONS)}
         if repository_ids:
             body["repository_ids"] = [int(value) for value in repository_ids]
-        payload = self._request(
-            "POST",
-            f"{GITHUB_API_URL}/app/installations/{int(installation_id)}/access_tokens",
-            token=self._app_jwt(),
-            json=body,
-        )
+        wants_write = "write" in body["permissions"].values()
+        try:
+            payload = self._request(
+                "POST",
+                f"{GITHUB_API_URL}/app/installations/{int(installation_id)}/access_tokens",
+                token=self._app_jwt(),
+                json=body,
+                conflict_code="GITHUB_WRITE_PERMISSION_MISSING" if wants_write else "GITHUB_PERMISSIONS_MISSING",
+                conflict_message=(
+                    "GitHub App не получила запрошенные права для этого репозитория. Проверьте права приложения "
+                    "в GitHub и нажмите «Проверить права»."
+                ),
+            )
+        except PpmGitProviderRateLimited:
+            raise
+        except PpmGitProviderError as exc:
+            # G1.3 (RC-C): a revoked or suspended installation must read as such, not as a generic 404/403.
+            if exc.code == "GITHUB_NOT_FOUND":
+                raise PpmGitProviderError(
+                    "GITHUB_INSTALLATION_REVOKED",
+                    "Установка GitHub App удалена или больше недоступна. Подключите репозиторий заново.",
+                ) from exc
+            if exc.code == "GITHUB_PERMISSION_DENIED":
+                raise PpmGitProviderError(
+                    "GITHUB_INSTALLATION_SUSPENDED",
+                    "GitHub не выдал доступ приложению: установка приостановлена или ограничена.",
+                ) from exc
+            raise
         return _required_string(payload, "token", maximum=4096)
 
     def normalize_installation(self, payload):
@@ -677,34 +1038,46 @@ class GitHubAppClient:
         except requests.RequestException as exc:
             raise PpmGitProviderError("GITHUB_REQUEST_FAILED", "Не удалось выполнить запрос к GitHub.") from exc
 
-        if response.status_code in {403, 429} and (
-            response.status_code == 429 or response.headers.get("X-RateLimit-Remaining") == "0"
-        ):
+        status_code = response.status_code
+        if _is_rate_limited(response):
             retry_after = self._retry_after_seconds(response)
             raise PpmGitProviderRateLimited(
                 "GITHUB_RATE_LIMITED",
-                "GitHub временно ограничил частоту синхронизации.",
+                "GitHub временно ограничил частоту запросов.",
                 retry_after_seconds=retry_after,
+                http_status=status_code,
             )
-        if response.status_code == 401:
-            raise PpmGitProviderError("GITHUB_AUTH_FAILED", "GitHub отклонил авторизацию приложения.")
-        if response.status_code == 403:
-            raise PpmGitProviderError("GITHUB_PERMISSION_DENIED", "GitHub не предоставил необходимые права.")
-        if response.status_code == 404:
-            raise PpmGitProviderError("GITHUB_NOT_FOUND", "Объект GitHub не найден или больше недоступен.")
-        if response.status_code in {409, 422} and conflict_code:
+        if status_code == 401:
+            raise PpmGitProviderError(
+                "GITHUB_AUTH_FAILED", "GitHub отклонил авторизацию приложения.", http_status=status_code
+            )
+        if status_code == 403:
+            raise PpmGitProviderError(
+                "GITHUB_PERMISSION_DENIED", "GitHub не предоставил необходимые права.", http_status=status_code
+            )
+        if status_code == 404:
+            raise PpmGitProviderError(
+                "GITHUB_NOT_FOUND", "Объект GitHub не найден или больше недоступен.", http_status=status_code
+            )
+        if status_code in {409, 422} and conflict_code:
+            if callable(conflict_code):
+                code, message = conflict_code(_error_message(response))
+                raise PpmGitProviderError(code, message, http_status=status_code)
             raise PpmGitProviderError(
                 conflict_code,
                 conflict_message or "GitHub отклонил действие из-за конфликта.",
+                http_status=status_code,
             )
-        if response.status_code >= 400:
-            raise PpmGitProviderError("GITHUB_REQUEST_FAILED", "GitHub не выполнил запрос.")
-        if response.status_code == 204:
+        if status_code >= 400:
+            raise PpmGitProviderError("GITHUB_REQUEST_FAILED", "GitHub не выполнил запрос.", http_status=status_code)
+        if status_code == 204:
             return {}, response
         try:
             payload = response.json()
         except ValueError as exc:
-            raise PpmGitProviderError("GITHUB_INVALID_RESPONSE", "GitHub вернул некорректный ответ.") from exc
+            raise PpmGitProviderError(
+                "GITHUB_INVALID_RESPONSE", "GitHub вернул некорректный ответ.", http_status=status_code
+            ) from exc
         return payload, response
 
     def _retry_after_seconds(self, response):

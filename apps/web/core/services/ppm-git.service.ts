@@ -164,41 +164,117 @@ export type TPpmGitLink = {
   updated_at: string;
 };
 
+// G1.3 (RC-C): two separately approved steps — a branch, then (after the first push) a draft PR.
+export type TPpmGitWriteActionType = "create_branch" | "create_draft_pr" | "create_branch_draft_pr";
+export type TPpmGitWriteActionStage = "branch" | "pull_request" | "legacy";
+export type TPpmGitWriteApplyBlocker =
+  | "LEGACY_FLOW"
+  | "STATUS_FINAL"
+  | "APPLY_IN_PROGRESS"
+  | "APPROVAL_REQUIRED"
+  | "RETRY_LATER"
+  | "PROVIDER_WRITE_DISABLED"
+  | "CONNECTION_INACTIVE"
+  | "GITHUB_PERMISSIONS_MISSING";
+
+export type TPpmGitWriteCommit = { sha: string; title: string; author: string; canonical_url: string };
+
+export type TPpmGitWritePreview = {
+  /** Absent on legacy single-step proposals. */
+  stage?: "branch" | "pull_request";
+  repository: {
+    id: string;
+    provider: TPpmGitProvider;
+    name: string;
+    full_name: string;
+    canonical_url: string;
+  };
+  provider: {
+    connection_id: string;
+    installation_id?: string;
+    account_login: string;
+    permissions: Record<string, string>;
+    write_ready: boolean;
+  };
+  branch: { base_ref: string; base_sha?: string; head_ref: string; head_sha?: string; canonical_url?: string };
+  /**
+   * Branch step: the planned PR text (created only by step 2). Draft PR step: exactly what will be created — the
+   * body plus the hidden per-action `marker` (HTML comment) by which PPM recognises only its own PR on a retry.
+   */
+  draft_pull_request: { title: string; body: string; is_draft: true; planned?: boolean; marker?: string };
+  commits?: { ahead_by: number; truncated: boolean; items: TPpmGitWriteCommit[] };
+  /** Closed or merged PRs for the same branches: they do not block a new draft PR, shown for reference. */
+  previous_pull_requests?: Array<{
+    provider_object_id: string;
+    number: string;
+    title: string;
+    canonical_url: string;
+    state: string;
+    is_draft: boolean;
+  }>;
+  work_item: { id: string; identifier: string; title: string; updated_at: string };
+  parent_action_id?: string;
+  safety: { provider_write_performed: false; merge_allowed: false; message: string };
+};
+
+export type TPpmGitWriteResult = {
+  branch?: { ref: string; sha: string; canonical_url: string; created: boolean };
+  pull_request?: {
+    provider_object_id: string;
+    number: string;
+    canonical_url: string;
+    is_draft: boolean;
+    state: string;
+    base_ref: string;
+    head_ref: string;
+    head_sha: string;
+    created: boolean;
+  };
+  git_object_id?: string | null;
+  link_id?: string | null;
+  error_details?: { canonical_url?: string };
+  /** An interrupted attempt may have written to GitHub; only a reconciling retry is allowed. */
+  outcome_unknown?: boolean;
+  first_attempt_at?: string;
+};
+
 export type TPpmGitWriteAction = {
   id: string;
-  action_type: "create_branch_draft_pr";
+  action_type: TPpmGitWriteActionType;
+  stage: TPpmGitWriteActionStage;
   status: TPpmGitWriteActionStatus;
   client_operation_id: string;
-  preview: {
-    repository: {
-      id: string;
-      provider: TPpmGitProvider;
-      name: string;
-      full_name: string;
-      canonical_url: string;
-    };
-    provider: {
-      connection_id: string;
-      account_login: string;
-      permissions: Record<string, string>;
-      write_ready: boolean;
-    };
-    branch: { base_ref: string; head_ref: string };
-    draft_pull_request: { title: string; body: string; is_draft: true };
-    work_item: { id: string; identifier: string; title: string; updated_at: string };
-    safety: { provider_write_performed: false; merge_allowed: false; message: string };
-  };
-  result: Record<string, unknown>;
+  parent_action_id: string | null;
+  base_sha: string;
+  head_sha: string;
+  preview: TPpmGitWritePreview;
+  result: TPpmGitWriteResult;
   error: { code: string; message: string } | null;
   created_by: string;
   decided_by: string | null;
+  applied_by: string | null;
+  cancelled_by: string | null;
   created_at: string;
   updated_at: string;
   decided_at: string | null;
+  applied_at: string | null;
+  cancelled_at: string | null;
+  apply_attempts: number;
+  retry_after: string | null;
   apply_available: boolean;
+  apply_blockers: TPpmGitWriteApplyBlocker[];
+  can_cancel: boolean;
+  outcome_unknown: boolean;
+  follow_up: {
+    pull_request_ready: boolean;
+    branch_head_sha: string | null;
+    branch_active: boolean;
+    pull_request_action: { id: string; status: TPpmGitWriteActionStatus } | null;
+  } | null;
 };
 
-export type TPpmGitWriteActionRequest = {
+export type TPpmGitBranchActionRequest = {
+  action_type: "create_branch";
   repository_id: string;
   work_item_id: string;
   base_ref: string;
@@ -208,6 +284,16 @@ export type TPpmGitWriteActionRequest = {
   client_operation_id: string;
 };
 
+export type TPpmGitPullRequestActionRequest = {
+  action_type: "create_draft_pr";
+  parent_action_id: string;
+  title: string;
+  body: string;
+  client_operation_id: string;
+};
+
+export type TPpmGitWriteActionRequest = TPpmGitBranchActionRequest | TPpmGitPullRequestActionRequest;
+
 export type TPpmGitWriteReadiness = {
   provider: "github";
   flow: "branch_then_commit_then_draft_pr";
@@ -216,9 +302,7 @@ export type TPpmGitWriteReadiness = {
   provider_writes_enabled: boolean;
   permission_ready: boolean;
   apply_available: boolean;
-  blockers: Array<
-    "OWNER_DECISION_REQUIRED" | "APPLY_ENDPOINT_PENDING" | "PROVIDER_WRITE_DISABLED" | "GITHUB_PERMISSIONS_MISSING"
-  >;
+  blockers: Array<"PROVIDER_WRITE_DISABLED" | "GITHUB_PERMISSIONS_MISSING">;
   connections: Array<{
     connection_id: string;
     repository_id: string;
@@ -274,12 +358,14 @@ export type TPpmGitLinkRequest = {
 export class PpmGitServiceError extends Error {
   code?: string;
   status?: number;
+  details?: Record<string, unknown>;
 
-  constructor(message: string, options: { code?: string; status?: number } = {}) {
+  constructor(message: string, options: { code?: string; status?: number; details?: Record<string, unknown> } = {}) {
     super(message);
     this.name = "PpmGitServiceError";
     this.code = options.code;
     this.status = options.status;
+    this.details = options.details;
   }
 }
 
@@ -466,6 +552,15 @@ export class PpmGitService extends APIService {
     }
   }
 
+  async getWriteAction(workspaceId: string, projectId: string, actionId: string): Promise<TPpmGitWriteAction> {
+    try {
+      const response = await this.get(`${this.gitPath(workspaceId, projectId)}write-actions/${actionId}/`);
+      return response.data as TPpmGitWriteAction;
+    } catch (error) {
+      throw normalizeGitError(error);
+    }
+  }
+
   async decideWriteAction(
     workspaceId: string,
     projectId: string,
@@ -482,6 +577,25 @@ export class PpmGitService extends APIService {
     }
   }
 
+  /** G1.3: create the approved branch or draft PR in GitHub (refused while PPM_GIT_WRITE_ENABLED is off). */
+  async applyWriteAction(workspaceId: string, projectId: string, actionId: string): Promise<TPpmGitWriteAction> {
+    try {
+      const response = await this.post(`${this.gitPath(workspaceId, projectId)}write-actions/${actionId}/apply/`);
+      return response.data as TPpmGitWriteAction;
+    } catch (error) {
+      throw normalizeGitError(error);
+    }
+  }
+
+  async cancelWriteAction(workspaceId: string, projectId: string, actionId: string): Promise<TPpmGitWriteAction> {
+    try {
+      const response = await this.post(`${this.gitPath(workspaceId, projectId)}write-actions/${actionId}/cancel/`);
+      return response.data as TPpmGitWriteAction;
+    } catch (error) {
+      throw normalizeGitError(error);
+    }
+  }
+
   private gitPath(workspaceId: string, projectId: string) {
     return `/api/ppm/v1/workspaces/${workspaceId}/projects/${projectId}/git/`;
   }
@@ -489,10 +603,13 @@ export class PpmGitService extends APIService {
 
 function normalizeGitError(error: unknown) {
   if (isAxiosError(error)) {
-    const payload = error.response?.data?.error as { code?: string; message?: string } | undefined;
+    const payload = error.response?.data?.error as
+      | { code?: string; message?: string; details?: Record<string, unknown> }
+      | undefined;
     return new PpmGitServiceError(payload?.message ?? "Не удалось выполнить Git-операцию.", {
       code: payload?.code,
       status: error.response?.status,
+      details: payload?.details,
     });
   }
   return error instanceof Error ? error : new PpmGitServiceError("Не удалось выполнить Git-операцию.");

@@ -4,21 +4,15 @@ import pytest
 from django.test import override_settings
 from rest_framework import status
 
-from plane.db.models import Issue, State
 from plane.ppm_git.models import (
     PpmGitAudit,
-    PpmGitConnection,
-    PpmGitInstallation,
     PpmGitObject,
-    PpmGitRepository,
     PpmGitWriteAction,
     PpmGitWriteActionStatus,
 )
 from plane.tests.factories import (
-    ProjectFactory,
     ProjectMemberFactory,
     UserFactory,
-    WorkspaceFactory,
     WorkspaceMemberFactory,
 )
 
@@ -29,69 +23,6 @@ pytestmark = [pytest.mark.contract, pytest.mark.django_db]
 def make_user(prefix):
     marker = uuid.uuid4().hex
     return UserFactory(username=f"{prefix}-{marker}", email=f"{prefix}-{marker}@plane.test")
-
-
-@pytest.fixture
-def git_write_project():
-    owner = make_user("git-write-owner")
-    workspace = WorkspaceFactory(owner=owner)
-    WorkspaceMemberFactory(workspace=workspace, member=owner, role=20)
-    project = ProjectFactory(workspace=workspace, identifier="GWA")
-    ProjectMemberFactory(workspace=workspace, project=project, member=owner, role=20)
-    state = State.objects.create(
-        name="Backlog",
-        color="#60646C",
-        group="backlog",
-        default=True,
-        project=project,
-        created_by=owner,
-    )
-    issue = Issue(name="Подготовить безопасный Git write", project=project, state=state)
-    issue.save(created_by_id=owner.id)
-    installation = PpmGitInstallation.objects.create(
-        workspace_id=workspace.id,
-        project_id=project.id,
-        provider="github",
-        provider_installation_id=81001,
-        provider_account_id=71001,
-        account_login="ppm-test-org",
-        account_type="Organization",
-        repository_selection="selected",
-        permissions={"metadata": "read", "contents": "read", "pull_requests": "read"},
-        events=["push", "pull_request"],
-        created_by=owner.id,
-        updated_by=owner.id,
-    )
-    repository = PpmGitRepository.objects.create(
-        workspace_id=workspace.id,
-        project_id=project.id,
-        name="PPM",
-        normalized_name="ppm",
-        provider="github",
-        provider_repository_id=91001,
-        provider_full_name="ppm-test-org/ppm",
-        canonical_url="https://github.com/ppm-test-org/ppm",
-        clone_https="https://github.com/ppm-test-org/ppm.git",
-        clone_ssh="git@github.com:ppm-test-org/ppm.git",
-        default_branch="main",
-        visibility="private",
-        is_default=True,
-        created_by=owner.id,
-        updated_by=owner.id,
-    )
-    connection = PpmGitConnection.objects.create(
-        workspace_id=workspace.id,
-        project_id=project.id,
-        installation=installation,
-        repository=repository,
-        provider_repository_id=repository.provider_repository_id,
-        provider_full_name=repository.provider_full_name,
-        permissions=installation.permissions,
-        events=installation.events,
-        created_by=owner.id,
-        updated_by=owner.id,
-    )
-    return owner, workspace, project, issue, repository, connection
 
 
 def write_actions_url(workspace, project, suffix=""):
@@ -116,13 +47,14 @@ def authenticate(api_client, user):
     api_client.force_authenticate(user=user)
 
 
-def test_preview_is_exact_idempotent_and_never_mutates_provider_state(api_client, git_write_project):
+def test_preview_is_exact_idempotent_and_never_mutates_provider_state(api_client, git_write_project, github):
     owner, workspace, project, issue, repository, _ = git_write_project
     authenticate(api_client, owner)
     operation_id = uuid.uuid4()
     payload = preview_payload(repository, issue, operation_id)
 
     created = api_client.post(write_actions_url(workspace, project), payload, format="json")
+    requests_after_preview = len(github.requests)
     replayed = api_client.post(write_actions_url(workspace, project), payload, format="json")
     reused = api_client.post(
         write_actions_url(workspace, project),
@@ -133,13 +65,21 @@ def test_preview_is_exact_idempotent_and_never_mutates_provider_state(api_client
     assert created.status_code == status.HTTP_201_CREATED
     assert replayed.status_code == status.HTTP_200_OK
     assert replayed.data["id"] == created.data["id"]
+    # The replay returns the stored preview without asking GitHub again.
+    assert len(github.requests) == requests_after_preview
     assert reused.status_code == status.HTTP_409_CONFLICT
     assert reused.data["error"]["code"] == "GIT_WRITE_OPERATION_REUSED"
     assert PpmGitWriteAction.objects.count() == 1
     assert PpmGitObject.objects.count() == 0
+    assert github.write_requests() == []
+    assert all(body["permissions"] == {"contents": "read", "pull_requests": "read"} for body in github.token_requests())
     assert created.data["status"] == "proposed"
+    assert created.data["action_type"] == "create_branch"
     assert created.data["apply_available"] is False
+    base_sha = github.branches["main"]
+    head_ref = f"GWA-{issue.sequence_id}/safe-git-write"
     assert created.data["preview"] == {
+        "stage": "branch",
         "repository": {
             "id": str(repository.id),
             "provider": "github",
@@ -149,15 +89,22 @@ def test_preview_is_exact_idempotent_and_never_mutates_provider_state(api_client
         },
         "provider": {
             "connection_id": str(repository.connection.id),
+            "installation_id": str(repository.connection.installation_id),
             "account_login": "ppm-test-org",
             "permissions": {"metadata": "read", "contents": "read", "pull_requests": "read"},
             "write_ready": False,
         },
-        "branch": {"base_ref": "main", "head_ref": f"GWA-{issue.sequence_id}/safe-git-write"},
+        "branch": {
+            "base_ref": "main",
+            "base_sha": base_sha,
+            "head_ref": head_ref,
+            "canonical_url": f"https://github.com/ppm-test-org/ppm/tree/{head_ref}",
+        },
         "draft_pull_request": {
             "title": f"GWA-{issue.sequence_id} — Безопасный Git write",
             "body": "## Что изменится\n\nВетка и draft PR будут созданы только после отдельного применения.",
             "is_draft": True,
+            "planned": True,
         },
         "work_item": {
             "id": str(issue.id),
@@ -168,7 +115,10 @@ def test_preview_is_exact_idempotent_and_never_mutates_provider_state(api_client
         "safety": {
             "provider_write_performed": False,
             "merge_allowed": False,
-            "message": "Это предварительный просмотр. GitHub не изменяется до отдельной команды применения.",
+            "message": (
+                "Это предварительный просмотр: GitHub не изменится до отдельных подтверждения и применения. "
+                "Будет создана только ветка от показанного коммита — без коммитов и изменения файлов."
+            ),
         },
     }
     assert set(PpmGitAudit.objects.values_list("action", flat=True)) == {
@@ -177,7 +127,7 @@ def test_preview_is_exact_idempotent_and_never_mutates_provider_state(api_client
     }
 
 
-def test_member_can_approve_or_reject_but_guest_cannot(api_client, git_write_project):
+def test_member_can_approve_or_reject_but_guest_cannot(api_client, git_write_project, github):
     owner, workspace, project, issue, repository, _ = git_write_project
     member = make_user("git-write-member")
     guest = make_user("git-write-guest")
@@ -219,6 +169,7 @@ def test_member_can_approve_or_reject_but_guest_cannot(api_client, git_write_pro
     assert changed_decision.status_code == status.HTTP_409_CONFLICT
     assert changed_decision.data["error"]["code"] == "GIT_WRITE_DECISION_FINAL"
     assert not PpmGitObject.objects.exists()
+    assert github.write_requests() == []
 
     authenticate(api_client, guest)
     denied = api_client.post(write_actions_url(workspace, project), preview_payload(repository, issue), format="json")
@@ -233,17 +184,12 @@ def test_member_can_approve_or_reject_but_guest_cannot(api_client, git_write_pro
     assert overview.data["write_actions"]["readiness"] == {
         "provider": "github",
         "flow": "branch_then_commit_then_draft_pr",
-        "decision_status": "proposed",
+        "decision_status": "accepted",
         "required_permissions": {"metadata": "read", "contents": "write", "pull_requests": "write"},
         "provider_writes_enabled": False,
         "permission_ready": False,
         "apply_available": False,
-        "blockers": [
-            "OWNER_DECISION_REQUIRED",
-            "APPLY_ENDPOINT_PENDING",
-            "PROVIDER_WRITE_DISABLED",
-            "GITHUB_PERMISSIONS_MISSING",
-        ],
+        "blockers": ["PROVIDER_WRITE_DISABLED", "GITHUB_PERMISSIONS_MISSING"],
         "connections": [
             {
                 "connection_id": str(repository.connection.id),
@@ -260,24 +206,28 @@ def test_member_can_approve_or_reject_but_guest_cannot(api_client, git_write_pro
 
 
 @override_settings(PPM_GIT_WRITE_ENABLED=True)
-def test_write_readiness_keeps_apply_closed_after_scopes_are_ready(api_client, git_write_project):
+def test_write_readiness_opens_apply_only_with_flag_and_write_scopes(api_client, git_write_project):
     owner, workspace, project, _, _, connection = git_write_project
+    authenticate(api_client, owner)
+    before = api_client.get(f"/api/ppm/v1/workspaces/{workspace.id}/projects/{project.id}/git/")
     connection.permissions = {"metadata": "read", "contents": "write", "pull_requests": "write"}
     connection.save(update_fields=["permissions", "updated_at"])
-    authenticate(api_client, owner)
 
     response = api_client.get(f"/api/ppm/v1/workspaces/{workspace.id}/projects/{project.id}/git/")
 
+    assert before.data["write_actions"]["readiness"]["blockers"] == ["GITHUB_PERMISSIONS_MISSING"]
     assert response.status_code == status.HTTP_200_OK
     readiness = response.data["write_actions"]["readiness"]
+    assert readiness["decision_status"] == "accepted"
     assert readiness["provider_writes_enabled"] is True
     assert readiness["permission_ready"] is True
-    assert readiness["apply_available"] is False
-    assert readiness["blockers"] == ["OWNER_DECISION_REQUIRED", "APPLY_ENDPOINT_PENDING"]
+    assert readiness["apply_available"] is True
+    assert readiness["blockers"] == []
     assert readiness["connections"][0]["missing_permissions"] == []
+    assert response.data["write_actions"]["apply_available"] is True
 
 
-def test_source_change_blocks_approval_without_partial_write(api_client, git_write_project):
+def test_source_change_blocks_approval_without_partial_write(api_client, git_write_project, github):
     owner, workspace, project, issue, repository, _ = git_write_project
     authenticate(api_client, owner)
     preview = api_client.post(write_actions_url(workspace, project), preview_payload(repository, issue), format="json")
@@ -296,14 +246,58 @@ def test_source_change_blocks_approval_without_partial_write(api_client, git_wri
     assert action.status == PpmGitWriteActionStatus.CONFLICT
     assert action.error_code == "GIT_WRITE_SOURCE_CHANGED"
     assert not PpmGitObject.objects.exists()
+    assert github.write_requests() == []
     assert PpmGitAudit.objects.filter(action="write_action.conflict", target_id=action.id).exists()
+
+
+def test_background_sync_does_not_invalidate_a_preview_but_reinstallation_does(api_client, git_write_project, github):
+    owner, workspace, project, issue, repository, connection = git_write_project
+    authenticate(api_client, owner)
+    synced = api_client.post(
+        write_actions_url(workspace, project),
+        preview_payload(repository, issue, head_ref="gwa-1/synced"),
+        format="json",
+    )
+    # Reconciliation and webhooks touch the connection row all the time; that is not a change of the preview.
+    connection.last_event_at = connection.updated_at
+    connection.status = "syncing"
+    connection.save(update_fields=["last_event_at", "status", "updated_at"])
+    approved = api_client.post(
+        write_actions_url(workspace, project, f"{synced.data['id']}/decision/"),
+        {"decision": "approve"},
+        format="json",
+    )
+    assert approved.status_code == status.HTTP_200_OK, approved.data
+    assert approved.data["status"] == "approved"
+
+    connection.status = "active"
+    connection.save(update_fields=["status", "updated_at"])
+    reinstalled = api_client.post(
+        write_actions_url(workspace, project),
+        preview_payload(repository, issue, head_ref="gwa-1/reinstalled"),
+        format="json",
+    )
+    other_installation = connection.installation
+    other_installation.pk = None
+    other_installation.id = uuid.uuid4()
+    other_installation.provider_installation_id = 81002
+    other_installation.save()
+    connection.installation = other_installation
+    connection.save(update_fields=["installation", "updated_at"])
+    conflict = api_client.post(
+        write_actions_url(workspace, project, f"{reinstalled.data['id']}/decision/"),
+        {"decision": "approve"},
+        format="json",
+    )
+    assert conflict.status_code == status.HTTP_409_CONFLICT
+    assert conflict.data["error"]["code"] == "GIT_WRITE_SOURCE_CHANGED"
 
 
 @pytest.mark.parametrize(
     "head_ref",
     ["main", "bad branch", "../escape", "refs//heads", "feature.lock", "feature@{old}", "feature\\name"],
 )
-def test_preview_rejects_unsafe_or_conflicting_branch_names(api_client, git_write_project, head_ref):
+def test_preview_rejects_unsafe_or_conflicting_branch_names(api_client, git_write_project, github, head_ref):
     owner, workspace, project, issue, repository, _ = git_write_project
     authenticate(api_client, owner)
 
@@ -316,3 +310,4 @@ def test_preview_rejects_unsafe_or_conflicting_branch_names(api_client, git_writ
     assert response.status_code in {status.HTTP_400_BAD_REQUEST, status.HTTP_409_CONFLICT}
     assert response.data["error"]["code"] in {"GIT_WRITE_INVALID_REF", "GIT_WRITE_REF_CONFLICT"}
     assert not PpmGitWriteAction.objects.exists()
+    assert github.requests == []

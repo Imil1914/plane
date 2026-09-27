@@ -15,6 +15,8 @@ from .views import (
     PpmGitOverviewView,
     PpmGitRepositoryDetailView,
     PpmGitRepositoryListView,
+    PpmGitWriteActionApplyView,
+    PpmGitWriteActionCancelView,
     PpmGitWriteActionDecisionView,
     PpmGitWriteActionDetailView,
     PpmGitWriteActionListView,
@@ -76,5 +78,15 @@ urlpatterns = [
         f"{PROJECT}write-actions/<uuid:action_id>/decision/",
         PpmGitWriteActionDecisionView.as_view(),
         name="ppm-git-write-action-decision",
+    ),
+    path(
+        f"{PROJECT}write-actions/<uuid:action_id>/apply/",
+        PpmGitWriteActionApplyView.as_view(),
+        name="ppm-git-write-action-apply",
+    ),
+    path(
+        f"{PROJECT}write-actions/<uuid:action_id>/cancel/",
+        PpmGitWriteActionCancelView.as_view(),
+        name="ppm-git-write-action-cancel",
     ),
 ]

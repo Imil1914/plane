@@ -74,7 +74,11 @@ class PpmGitCodeSnapshotStatus(models.TextChoices):
 
 
 class PpmGitWriteActionType(models.TextChoices):
-    CREATE_BRANCH_DRAFT_PR = "create_branch_draft_pr", "Create branch and draft pull request"
+    # G1.3 (RC-C): two separately approved steps — a branch first, a draft PR only after the first push.
+    CREATE_BRANCH = "create_branch", "Create branch"
+    CREATE_DRAFT_PR = "create_draft_pr", "Create draft pull request"
+    # Legacy single proposal (before the two-stage decision); kept for history, never applied.
+    CREATE_BRANCH_DRAFT_PR = "create_branch_draft_pr", "Legacy: branch and draft pull request in one proposal"
 
 
 class PpmGitWriteActionStatus(models.TextChoices):
@@ -495,12 +499,20 @@ class PpmGitWriteAction(models.Model):
     action_type = models.CharField(
         max_length=32,
         choices=PpmGitWriteActionType.choices,
-        default=PpmGitWriteActionType.CREATE_BRANCH_DRAFT_PR,
+        default=PpmGitWriteActionType.CREATE_BRANCH,
     )
     status = models.CharField(
         max_length=16,
         choices=PpmGitWriteActionStatus.choices,
         default=PpmGitWriteActionStatus.PROPOSED,
+    )
+    # G1.3 (RC-C): the draft PR step points at the applied branch step it continues.
+    parent_action = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="follow_up_actions",
+        null=True,
+        blank=True,
     )
     client_operation_id = models.UUIDField()
     request_fingerprint = models.CharField(max_length=64)
@@ -511,17 +523,28 @@ class PpmGitWriteAction(models.Model):
     head_ref = models.CharField(max_length=255)
     title = models.CharField(max_length=500)
     body = models.TextField(blank=True, default="")
+    # Exact provider state shown in the preview: branch step — base SHA; draft PR step — base and head SHA.
+    # DB defaults keep the previous application version able to insert rows after an app-only rollback.
+    base_sha = models.CharField(max_length=64, blank=True, default="", db_default="")
+    head_sha = models.CharField(max_length=64, blank=True, default="", db_default="")
     preview = models.JSONField(default=dict)
     result = models.JSONField(default=dict, blank=True)
     error_code = models.CharField(max_length=64, blank=True, default="")
     error_message = models.CharField(max_length=500, blank=True, default="")
+    # Apply fencing: only the attempt holding `apply_fence` may finish an APPLYING action.
+    apply_attempts = models.PositiveIntegerField(default=0, db_default=0)
+    apply_fence = models.UUIDField(null=True, blank=True)
+    apply_started_at = models.DateTimeField(null=True, blank=True)
+    retry_after = models.DateTimeField(null=True, blank=True)
     created_by = models.UUIDField(db_index=True)
     decided_by = models.UUIDField(null=True, blank=True)
     applied_by = models.UUIDField(null=True, blank=True)
+    cancelled_by = models.UUIDField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     decided_at = models.DateTimeField(null=True, blank=True)
     applied_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "ppm_git_write_actions"

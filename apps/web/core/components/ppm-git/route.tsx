@@ -27,12 +27,14 @@ import { PageHead } from "@/components/core/page-title";
 import { usePpmConfirm } from "@/components/ppm-shell/use-ppm-confirm";
 import { handlePpmDialogKeyDown, shouldDismissPpmDialog } from "@/helpers/ppm-dialog-dismiss.helper";
 import { getPpmGitWebhookStatus, type TPpmGitWebhookStatus } from "@/helpers/ppm-git-webhook-status.helper";
+import { safeGithubUrl, type TPpmGitWriteCommand } from "@/helpers/ppm-git-write-flow.helper";
 import { useProject } from "@/hooks/store/use-project";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { PpmCanvasService } from "@/services/ppm-canvas.service";
 import {
   PpmGitService,
+  PpmGitServiceError,
   type TPpmGitLink,
   type TPpmGitLinkRequest,
   type TPpmGitConnection,
@@ -45,8 +47,17 @@ import {
   type TPpmGitRepositoryRequest,
   type TPpmGitWriteAction,
   type TPpmGitWriteActionRequest,
-  type TPpmGitWriteReadiness,
 } from "@/services/ppm-git.service";
+import { DialogActions, FormInput } from "./git-dialog-parts";
+import {
+  GitWriteActionDetails,
+  GitWriteActionsPanel,
+  GitWriteBranchForm,
+  GitWritePullRequestForm,
+  type TPpmGitWriteDialogError,
+  type TPpmGitWriteForm,
+  type TPpmGitWriteWorkItem,
+} from "./git-write-flow";
 
 type TPpmGitRouteProps = {
   projectId: string;
@@ -106,12 +117,18 @@ const EMPTY_LINK: Omit<TPpmGitLinkRequest, "repository_id" | "work_item_id"> = {
   canonical_url: "",
 };
 
-const EMPTY_WRITE_ACTION: Pick<TPpmGitWriteActionRequest, "base_ref" | "head_ref" | "title" | "body"> = {
+const EMPTY_WRITE_ACTION: TPpmGitWriteForm = {
   base_ref: "main",
   head_ref: "",
   title: "",
   body: "",
 };
+
+// G1.3 (RC-C): step 1 form (branch), step 2 form (draft PR after the first push), or one step's preview/decision.
+type TGitWriteDialog =
+  | { mode: "branch_form" }
+  | { mode: "pull_request_form"; parent: TPpmGitWriteAction }
+  | { mode: "action"; action: TPpmGitWriteAction };
 
 export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
   const { getPartialProjectById } = useProject();
@@ -139,31 +156,36 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
   const [workItems, setWorkItems] = useState<TPpmWorkItemProjection[]>([]);
   const [selectedWorkItem, setSelectedWorkItem] = useState<TPpmWorkItemProjection>();
   const [searching, setSearching] = useState(false);
-  const [writeActionDialog, setWriteActionDialog] = useState(false);
+  const [writeDialog, setWriteDialog] = useState<TGitWriteDialog>();
   const [writeActionForm, setWriteActionForm] = useState(EMPTY_WRITE_ACTION);
   const [writeActionOperationId, setWriteActionOperationId] = useState("");
-  const [writeActionPreview, setWriteActionPreview] = useState<TPpmGitWriteAction>();
+  const [writeWorkItem, setWriteWorkItem] = useState<TPpmGitWriteWorkItem>();
+  const [writeDialogError, setWriteDialogError] = useState<TPpmGitWriteDialogError>();
 
-  const load = useCallback(async () => {
-    if (!workspace) return;
-    setLoading(true);
-    try {
-      const response = await service.getOverview(workspace.id, projectId);
-      setOverview(response);
-      setSelectedRepositoryId((current) =>
-        response.repositories.some((repository) => repository.id === current)
-          ? current
-          : (response.repositories.find((repository) => repository.is_default)?.id ??
-            response.repositories[0]?.id ??
-            "")
-      );
-      setError(undefined);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось открыть Git-раздел.");
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, service, workspace]);
+  // `silent` keeps the page (and an open dialog) mounted while the overview refreshes after a Git write step.
+  const load = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!workspace) return;
+      if (!options?.silent) setLoading(true);
+      try {
+        const response = await service.getOverview(workspace.id, projectId);
+        setOverview(response);
+        setSelectedRepositoryId((current) =>
+          response.repositories.some((repository) => repository.id === current)
+            ? current
+            : (response.repositories.find((repository) => repository.is_default)?.id ??
+              response.repositories[0]?.id ??
+              "")
+        );
+        setError(undefined);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Не удалось открыть Git-раздел.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [projectId, service, workspace]
+  );
 
   useEffect(() => {
     void load();
@@ -380,32 +402,64 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
     }
   };
 
-  const openWriteActionDialog = () => {
-    const connectedRepository = overview?.repositories.find((repository) =>
+  const openWriteActionDialog = (prefill?: TPpmGitWriteAction) => {
+    const activeRepositories = overview?.repositories.filter((repository) =>
       overview.connections.some(
         (connection) => connection.repository_id === repository.id && connection.status === "active"
       )
     );
+    const connectedRepository =
+      activeRepositories?.find((repository) => repository.id === prefill?.preview.repository.id) ??
+      activeRepositories?.[0];
     if (!connectedRepository) {
       setError("Сначала подключите активный репозиторий GitHub.");
       return;
     }
     setSelectedRepositoryId(connectedRepository.id);
-    setSelectedWorkItem(undefined);
+    const prefillWorkItem = prefill?.preview.work_item;
+    setWriteWorkItem(
+      prefillWorkItem
+        ? { id: prefillWorkItem.id, identifier: prefillWorkItem.identifier, title: prefillWorkItem.title }
+        : undefined
+    );
     setWorkItemQuery("");
     setWorkItems([]);
+    setWriteActionForm(
+      prefill
+        ? {
+            base_ref: prefill.preview.branch.base_ref,
+            head_ref: prefill.preview.branch.head_ref,
+            title: prefill.preview.draft_pull_request.title,
+            body: prefill.preview.draft_pull_request.body,
+          }
+        : { ...EMPTY_WRITE_ACTION, base_ref: connectedRepository.default_branch || "main" }
+    );
+    setWriteActionOperationId(crypto.randomUUID());
+    setWriteDialogError(undefined);
+    setWriteDialog({ mode: "branch_form" });
+  };
+
+  const openPullRequestForm = (parent: TPpmGitWriteAction, prefill?: TPpmGitWriteAction) => {
+    const plan = (prefill ?? parent).preview.draft_pull_request;
     setWriteActionForm({
-      ...EMPTY_WRITE_ACTION,
-      base_ref: connectedRepository.default_branch || "main",
+      base_ref: parent.preview.branch.base_ref,
+      head_ref: parent.preview.branch.head_ref,
+      title: plan.title || `${parent.preview.work_item.identifier} — ${parent.preview.work_item.title}`,
+      body: plan.body,
     });
     setWriteActionOperationId(crypto.randomUUID());
-    setWriteActionPreview(undefined);
-    setWriteActionDialog(true);
+    setWriteDialogError(undefined);
+    setWriteDialog({ mode: "pull_request_form", parent });
+  };
+
+  const openWriteAction = (action: TPpmGitWriteAction) => {
+    setWriteDialogError(undefined);
+    setWriteDialog({ mode: "action", action });
   };
 
   const selectWriteActionWorkItem = (item: TPpmWorkItemProjection) => {
     const identifier = item.identity.identifier ?? "work-item";
-    setSelectedWorkItem(item);
+    setWriteWorkItem({ id: item.identity.entity_id, identifier, title: item.display.title });
     setWriteActionForm((current) => ({
       ...current,
       head_ref: current.head_ref || `${identifier.toLowerCase()}/draft-pr`,
@@ -413,47 +467,111 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
     }));
   };
 
+  const showWriteError = (reason: unknown, fallback: string) => {
+    const url = reason instanceof PpmGitServiceError ? reason.details?.canonical_url : undefined;
+    setWriteDialogError({
+      message: reason instanceof Error ? reason.message : fallback,
+      url: typeof url === "string" ? safeGithubUrl(url) : undefined,
+    });
+  };
+
+  const findWriteAction = async (actionId: string) => {
+    if (!workspace) return undefined;
+    return (
+      overview?.write_actions.items.find((item) => item.id === actionId) ??
+      (await service.getWriteAction(workspace.id, projectId, actionId))
+    );
+  };
+
   const createWriteActionPreview = async (event: FormEvent) => {
     event.preventDefault();
-    if (!workspace || !selectedRepositoryId || !selectedWorkItem || !writeActionOperationId) return;
-    setSaving(true);
-    try {
-      const action = await service.createWriteActionPreview(workspace.id, projectId, {
+    if (!workspace || !writeDialog || !writeActionOperationId) return;
+    let request: TPpmGitWriteActionRequest;
+    if (writeDialog.mode === "branch_form") {
+      if (!selectedRepositoryId || !writeWorkItem) return;
+      request = {
+        action_type: "create_branch",
         ...writeActionForm,
         repository_id: selectedRepositoryId,
-        work_item_id: selectedWorkItem.identity.entity_id,
+        work_item_id: writeWorkItem.id,
         client_operation_id: writeActionOperationId,
-      });
-      setWriteActionPreview(action);
-      setError(undefined);
-      await load();
+      };
+    } else if (writeDialog.mode === "pull_request_form") {
+      request = {
+        action_type: "create_draft_pr",
+        parent_action_id: writeDialog.parent.id,
+        title: writeActionForm.title,
+        body: writeActionForm.body,
+        client_operation_id: writeActionOperationId,
+      };
+    } else return;
+    setSaving(true);
+    try {
+      const action = await service.createWriteActionPreview(workspace.id, projectId, request);
+      setWriteDialogError(undefined);
+      setWriteDialog({ mode: "action", action });
+      await load({ silent: true });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось подготовить Git preview.");
+      showWriteError(reason, "Не удалось подготовить предпросмотр.");
     } finally {
       setSaving(false);
     }
   };
 
-  const decideWriteAction = async (decision: "approve" | "reject") => {
-    if (!workspace || !writeActionPreview) return;
+  const refreshWriteAction = async (actionId: string) => {
+    if (!workspace) return;
+    try {
+      const action = await service.getWriteAction(workspace.id, projectId, actionId);
+      setWriteDialog((current) => (current?.mode === "action" ? { mode: "action", action } : current));
+    } catch {
+      // The dialog keeps the last known state; the page banner shows network problems on the next load.
+    }
+    await load({ silent: true });
+  };
+
+  const runWriteCommand = async (command: TPpmGitWriteCommand) => {
+    if (!workspace || writeDialog?.mode !== "action") return;
+    const current = writeDialog.action;
+    if (command === "prepare_pull_request") {
+      openPullRequestForm(current);
+      return;
+    }
     setSaving(true);
     try {
-      const action = await service.decideWriteAction(workspace.id, projectId, writeActionPreview.id, decision);
-      setWriteActionPreview(action);
-      setError(undefined);
-      await load();
+      if (command === "prepare_again" || command === "open_follow_up") {
+        if (command === "open_follow_up" && current.follow_up?.pull_request_action) {
+          const followUp = await findWriteAction(current.follow_up.pull_request_action.id);
+          if (followUp) openWriteAction(followUp);
+        } else if (current.stage === "pull_request" && current.parent_action_id) {
+          const parent = await findWriteAction(current.parent_action_id);
+          if (parent) openPullRequestForm(parent, current);
+        } else {
+          openWriteActionDialog(current);
+        }
+        return;
+      }
+      const action =
+        command === "approve" || command === "reject"
+          ? await service.decideWriteAction(workspace.id, projectId, current.id, command)
+          : command === "cancel"
+            ? await service.cancelWriteAction(workspace.id, projectId, current.id)
+            : await service.applyWriteAction(workspace.id, projectId, current.id);
+      setWriteDialogError(undefined);
+      setWriteDialog({ mode: "action", action });
+      await load({ silent: true });
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось сохранить решение по Git-действию.");
-      await load();
+      showWriteError(reason, "Не удалось выполнить Git-действие.");
+      // A refused or failed step may have changed its status (conflict/failed): show what PPM recorded.
+      await refreshWriteAction(current.id);
     } finally {
       setSaving(false);
     }
   };
 
   const closeWriteActionDialog = () => {
-    setWriteActionDialog(false);
-    setWriteActionPreview(undefined);
-    setSelectedWorkItem(undefined);
+    setWriteDialog(undefined);
+    setWriteDialogError(undefined);
+    setWriteWorkItem(undefined);
     setWorkItemQuery("");
     setWorkItems([]);
   };
@@ -517,9 +635,9 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
                   <button
                     type="button"
                     className="inline-flex items-center gap-2 rounded-md border border-accent-strong/40 bg-accent-primary/5 px-3 py-2 text-12 font-semibold text-accent-primary hover:bg-accent-primary/10"
-                    onClick={openWriteActionDialog}
+                    onClick={() => openWriteActionDialog()}
                   >
-                    <GitPullRequest className="size-4" aria-hidden="true" /> Подготовить ветку и draft PR
+                    <GitPullRequest className="size-4" aria-hidden="true" /> Ветка и черновик PR
                   </button>
                 )}
               {overview.capabilities.manage_links && overview.repositories.length > 0 && (
@@ -572,21 +690,25 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
             <div>
               <p className="text-13 font-semibold text-primary">Без хранения токенов и SSH-ключей</p>
               <p className="mt-1 text-12 leading-5 text-secondary">
-                PPM получает краткоживущий доступ только на чтение и не сохраняет токены. При включённом поиске
+                PPM не сохраняет токены: для каждого запроса берётся краткоживущий доступ только к выбранному
+                репозиторию — на чтение, а для подтверждённой ветки или черновика PR — на запись. При включённом поиске
                 индексируются только разрешённые текстовые файлы точного коммита; секреты, зависимости и двоичные файлы
-                отбрасываются. Коммиты и отправка изменений по-прежнему выполняются обычным Git.
+                отбрасываются. Коммиты и push выполняются обычным Git, слияние (merge) — только в GitHub.
               </p>
             </div>
           </div>
 
           <GitWriteActionsPanel
             actions={overview.write_actions.items}
-            applyAvailable={overview.write_actions.apply_available}
             canRefreshPermissions={
               overview.capabilities.manage_provider && overview.installations.some((item) => item.status === "active")
             }
-            canPrepare={overview.capabilities.manage_write_actions}
-            onPrepare={openWriteActionDialog}
+            canPrepare={
+              overview.capabilities.manage_write_actions &&
+              overview.connections.some((connection) => connection.status === "active")
+            }
+            onOpen={openWriteAction}
+            onPrepare={() => openWriteActionDialog()}
             onRefreshPermissions={() => void refreshGithubPermissions()}
             readiness={overview.write_actions.readiness}
             refreshingPermissions={saving}
@@ -740,37 +862,75 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
           onSubmit={createLink}
         />
       )}
-      {writeActionDialog && (
-        <GitWriteActionDialog
-          action={writeActionPreview}
-          form={writeActionForm}
-          repositories={overview.repositories.filter((repository) =>
-            overview.connections.some(
-              (connection) => connection.repository_id === repository.id && connection.status === "active"
-            )
-          )}
-          repositoryId={selectedRepositoryId}
-          saving={saving}
-          searching={searching}
-          selectedWorkItem={selectedWorkItem}
-          workItemQuery={workItemQuery}
-          workItems={workItems}
-          onChange={setWriteActionForm}
+      {writeDialog && (
+        <DialogFrame
           onClose={closeWriteActionDialog}
-          onDecision={(decision) => void decideWriteAction(decision)}
-          onQueryChange={setWorkItemQuery}
-          onRepositoryChange={(repositoryId) => {
-            const repository = overview.repositories.find((item) => item.id === repositoryId);
-            setSelectedRepositoryId(repositoryId);
-            setWriteActionForm((current) => ({
-              ...current,
-              base_ref: repository?.default_branch || "main",
-            }));
-          }}
-          onSearch={() => void searchWorkItems()}
-          onSelectWorkItem={selectWriteActionWorkItem}
-          onSubmit={createWriteActionPreview}
-        />
+          saving={saving}
+          title={
+            writeDialog.mode === "branch_form"
+              ? "Шаг 1 · новая ветка"
+              : writeDialog.mode === "pull_request_form"
+                ? "Шаг 2 · черновик PR"
+                : writeDialog.action.stage === "pull_request"
+                  ? "Черновик PR: предпросмотр и решение"
+                  : "Ветка: предпросмотр и решение"
+          }
+        >
+          {writeDialog.mode === "branch_form" && (
+            <GitWriteBranchForm
+              error={writeDialogError}
+              form={writeActionForm}
+              repositories={overview.repositories.filter((repository) =>
+                overview.connections.some(
+                  (connection) => connection.repository_id === repository.id && connection.status === "active"
+                )
+              )}
+              repositoryId={selectedRepositoryId}
+              saving={saving}
+              searching={searching}
+              workItem={writeWorkItem}
+              workItemQuery={workItemQuery}
+              workItems={workItems}
+              onChange={setWriteActionForm}
+              onClose={closeWriteActionDialog}
+              onQueryChange={setWorkItemQuery}
+              onRepositoryChange={(repositoryId) => {
+                const repository = overview.repositories.find((item) => item.id === repositoryId);
+                setSelectedRepositoryId(repositoryId);
+                setWriteActionForm((current) => ({
+                  ...current,
+                  base_ref: repository?.default_branch || "main",
+                }));
+              }}
+              onSearch={() => void searchWorkItems()}
+              onSelectWorkItem={selectWriteActionWorkItem}
+              onSubmit={createWriteActionPreview}
+            />
+          )}
+          {writeDialog.mode === "pull_request_form" && (
+            <GitWritePullRequestForm
+              error={writeDialogError}
+              form={writeActionForm}
+              parent={writeDialog.parent}
+              saving={saving}
+              onChange={setWriteActionForm}
+              onClose={closeWriteActionDialog}
+              onSubmit={createWriteActionPreview}
+            />
+          )}
+          {writeDialog.mode === "action" && (
+            <GitWriteActionDetails
+              action={writeDialog.action}
+              canManage={overview.capabilities.manage_write_actions}
+              copied={copied}
+              error={writeDialogError}
+              saving={saving}
+              onCommand={(command) => void runWriteCommand(command)}
+              onCopy={(value, key) => void copy(value, key)}
+              onRefresh={() => void refreshWriteAction(writeDialog.action.id)}
+            />
+          )}
+        </DialogFrame>
       )}
       {confirmDialog}
     </>
@@ -793,424 +953,6 @@ const WEBHOOK_STATUS_CLASS_NAMES: Record<TPpmGitWebhookStatus["tone"], string> =
   waiting: "border-warning-subtle bg-warning-subtle text-warning-primary",
   inactive: "border-subtle bg-surface-2 text-tertiary",
 };
-
-const WRITE_ACTION_STATUS_LABELS: Record<TPpmGitWriteAction["status"], string> = {
-  proposed: "Ожидает решения",
-  approved: "Подтверждено",
-  rejected: "Отклонено",
-  applying: "Применяется",
-  applied: "Создано в GitHub",
-  conflict: "Нужно подготовить заново",
-  failed: "Ошибка",
-  cancelled: "Отменено",
-};
-
-function GitWriteActionsPanel({
-  actions,
-  applyAvailable,
-  canRefreshPermissions,
-  canPrepare,
-  onPrepare,
-  onRefreshPermissions,
-  readiness,
-  refreshingPermissions,
-}: {
-  actions: TPpmGitWriteAction[];
-  applyAvailable: boolean;
-  canRefreshPermissions: boolean;
-  canPrepare: boolean;
-  onPrepare: () => void;
-  onRefreshPermissions: () => void;
-  readiness: TPpmGitWriteReadiness;
-  refreshingPermissions: boolean;
-}) {
-  return (
-    <section className="rounded-xl border border-subtle bg-surface-2 p-5" aria-labelledby="ppm-git-write-title">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 id="ppm-git-write-title" className="text-16 font-semibold text-primary">
-            Ветка и draft PR с подтверждением
-          </h2>
-          <p className="mt-1 max-w-2xl text-12 leading-5 text-secondary">
-            PPM показывает предпросмотр ветки и черновика PR и сохраняет ваше решение. Репозиторий в GitHub при этом не
-            меняется.
-          </p>
-        </div>
-        {canPrepare && (
-          <button
-            type="button"
-            className="inline-flex shrink-0 items-center gap-2 rounded-md border border-subtle px-3 py-2 text-12 font-semibold text-primary hover:bg-layer-1"
-            onClick={onPrepare}
-          >
-            <GitBranch className="size-4" aria-hidden="true" /> Подготовить preview
-          </button>
-        )}
-      </div>
-      {!applyAvailable && (
-        <p className="mt-3 rounded-lg border border-warning-subtle bg-warning-subtle p-3 text-12 leading-5 text-secondary">
-          Запись в GitHub выключена. Можно проверить предпросмотр и принять или отклонить предложение — репозиторий не
-          изменится.
-        </p>
-      )}
-      <GitWriteReadiness
-        canRefresh={canRefreshPermissions}
-        onRefresh={onRefreshPermissions}
-        readiness={readiness}
-        refreshing={refreshingPermissions}
-      />
-      {actions.length > 0 && (
-        <div className="mt-4 grid gap-2 border-t border-subtle pt-4">
-          {actions.slice(0, 5).map((action) => (
-            <div
-              className="flex flex-col gap-1 rounded-lg border border-subtle bg-layer-1 p-3 sm:flex-row sm:items-center"
-              key={action.id}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-12 font-semibold text-primary">{action.preview.draft_pull_request.title}</p>
-                <p className="mt-0.5 truncate text-12 text-secondary">
-                  {action.preview.repository.full_name} · {action.preview.branch.base_ref} →{" "}
-                  {action.preview.branch.head_ref}
-                </p>
-              </div>
-              <span className="text-11 font-semibold text-tertiary">{WRITE_ACTION_STATUS_LABELS[action.status]}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-const WRITE_PERMISSION_LABELS: Record<string, string> = {
-  metadata: "Метаданные — чтение",
-  contents: "Содержимое — создание ветки",
-  pull_requests: "Pull requests — создание draft PR",
-};
-
-const WRITE_BLOCKER_LABELS: Record<TPpmGitWriteReadiness["blockers"][number], string> = {
-  OWNER_DECISION_REQUIRED: "Нужно подтвердить порядок: ветка → commit/push → draft PR",
-  APPLY_ENDPOINT_PENDING: "Кнопка реального применения ещё не подключена",
-  PROVIDER_WRITE_DISABLED: "Внешняя запись выключена настройкой PPM",
-  GITHUB_PERMISSIONS_MISSING: "GitHub App пока имеет только права чтения",
-};
-
-function GitWriteReadiness({
-  canRefresh,
-  onRefresh,
-  readiness,
-  refreshing,
-}: {
-  canRefresh: boolean;
-  onRefresh: () => void;
-  readiness: TPpmGitWriteReadiness;
-  refreshing: boolean;
-}) {
-  return (
-    <div className="mt-3 rounded-lg border border-subtle bg-layer-1 p-4">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-12 font-semibold text-primary">Готовность GitHub App</p>
-          <p className="mt-1 text-12 leading-5 text-secondary">
-            Порядок: ветка → commit → черновик PR. Каждый шаг подтверждается отдельно.
-          </p>
-        </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2 sm:mt-0 sm:justify-end">
-          {canRefresh && (
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-subtle px-2.5 py-1.5 text-12 font-semibold text-secondary hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={refreshing}
-              onClick={onRefresh}
-            >
-              <RefreshCw className={`size-3 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
-              {refreshing ? "Проверяем…" : "Проверить права"}
-            </button>
-          )}
-          <span
-            className={`inline-flex w-fit items-center gap-1 rounded-full border px-2 py-1 text-11 font-semibold ${
-              readiness.apply_available
-                ? "border-success-subtle bg-success-subtle text-success-primary"
-                : "border-warning-subtle bg-warning-subtle text-warning-primary"
-            }`}
-          >
-            {readiness.apply_available ? <Check className="size-3" /> : <X className="size-3" />}
-            {readiness.apply_available ? "Готово к применению" : "Применение закрыто"}
-          </span>
-        </div>
-      </div>
-
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
-        {Object.entries(readiness.required_permissions).map(([permission, level]) => {
-          const ready = readiness.connections.some(
-            (connection) => connection.permission_ready || connection.current_permissions[permission] === level
-          );
-          return (
-            <div className="flex items-start gap-2 rounded-md border border-subtle bg-surface-2 p-2" key={permission}>
-              {ready ? (
-                <Check className="mt-0.5 size-3.5 shrink-0 text-icon-success-primary" aria-hidden="true" />
-              ) : (
-                <X className="mt-0.5 size-3.5 shrink-0 text-icon-warning-primary" aria-hidden="true" />
-              )}
-              <div>
-                <p className="text-12 font-semibold text-primary">
-                  {WRITE_PERMISSION_LABELS[permission] ?? permission}
-                </p>
-                <p className="mt-0.5 text-11 text-tertiary">Требуется: {level}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {readiness.connections.length > 0 && (
-        <div className="mt-3 grid gap-2">
-          {readiness.connections.map((connection) => (
-            <div className="flex flex-wrap items-center justify-between gap-2 text-12" key={connection.connection_id}>
-              <span className="font-medium text-secondary">{connection.repository_full_name}</span>
-              <span className={connection.permission_ready ? "text-success-primary" : "text-warning-primary"}>
-                {connection.permission_ready
-                  ? "Права готовы"
-                  : `Не хватает: ${connection.missing_permissions.join(", ") || "активного подключения"}`}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {readiness.blockers.includes("GITHUB_PERMISSIONS_MISSING") && (
-        <div className="mt-3 rounded-md border border-warning-subtle bg-warning-subtle p-3">
-          <p className="text-12 font-semibold text-primary">Как выдать права безопасно</p>
-          <ol className="mt-2 grid list-decimal gap-1 pl-4 text-12 leading-5 text-secondary">
-            <li>В настройках GitHub App откройте «Permissions &amp; events» → «Repository permissions».</li>
-            <li>Для «Contents» и «Pull requests» выберите «Read and write», затем сохраните изменения.</li>
-            <li>В установке приложения подтвердите запрос новых прав только для нужных репозиториев.</li>
-            {canRefresh ? (
-              <li>Вернитесь сюда и нажмите «Проверить права».</li>
-            ) : (
-              <li>Попросите администратора проекта проверить права на этой странице.</li>
-            )}
-          </ol>
-          <p className="mt-2 text-12 leading-5 text-tertiary">
-            Эти права ещё ничего не создают сами по себе: ветка и draft PR потребуют отдельных подтверждений в PPM.
-          </p>
-        </div>
-      )}
-
-      <ul className="mt-3 grid gap-1 border-t border-subtle pt-3 text-12 leading-5 text-tertiary">
-        {readiness.blockers
-          .filter((blocker) => blocker !== "OWNER_DECISION_REQUIRED" && blocker !== "APPLY_ENDPOINT_PENDING")
-          .map((blocker) => (
-            <li className="flex gap-2" key={blocker}>
-              <span aria-hidden="true">•</span>
-              <span>{WRITE_BLOCKER_LABELS[blocker]}</span>
-            </li>
-          ))}
-      </ul>
-    </div>
-  );
-}
-
-function GitWriteActionDialog({
-  action,
-  form,
-  onChange,
-  onClose,
-  onDecision,
-  onQueryChange,
-  onRepositoryChange,
-  onSearch,
-  onSelectWorkItem,
-  onSubmit,
-  repositories,
-  repositoryId,
-  saving,
-  searching,
-  selectedWorkItem,
-  workItemQuery,
-  workItems,
-}: {
-  action?: TPpmGitWriteAction;
-  form: typeof EMPTY_WRITE_ACTION;
-  onChange: (form: typeof EMPTY_WRITE_ACTION) => void;
-  onClose: () => void;
-  onDecision: (decision: "approve" | "reject") => void;
-  onQueryChange: (value: string) => void;
-  onRepositoryChange: (value: string) => void;
-  onSearch: () => void;
-  onSelectWorkItem: (item: TPpmWorkItemProjection) => void;
-  onSubmit: (event: FormEvent) => void;
-  repositories: TPpmGitRepository[];
-  repositoryId: string;
-  saving: boolean;
-  searching: boolean;
-  selectedWorkItem?: TPpmWorkItemProjection;
-  workItemQuery: string;
-  workItems: TPpmWorkItemProjection[];
-}) {
-  if (action) {
-    const preview = action.preview;
-    return (
-      <DialogFrame onClose={onClose} saving={saving} title="Проверка ветки и draft PR">
-        <div className="grid gap-3">
-          <PreviewRow label="Репозиторий" value={preview.repository.full_name} />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <PreviewRow label="Базовая ветка" value={preview.branch.base_ref} />
-            <PreviewRow label="Новая ветка" value={preview.branch.head_ref} />
-          </div>
-          <PreviewRow label="Связанная задача" value={`${preview.work_item.identifier} · ${preview.work_item.title}`} />
-          <PreviewRow label="Название draft PR" value={preview.draft_pull_request.title} />
-          <div className="rounded-lg border border-subtle bg-layer-1 p-3">
-            <p className="text-11 font-semibold tracking-wide text-tertiary uppercase">Описание draft PR</p>
-            <pre className="mt-2 max-h-48 overflow-auto text-12 leading-5 whitespace-pre-wrap text-secondary">
-              {preview.draft_pull_request.body || "Без описания"}
-            </pre>
-          </div>
-          <div className="rounded-lg border border-subtle bg-layer-1 p-3 text-12 leading-5 text-secondary">
-            {preview.safety.message} Автоматический merge запрещён.
-          </div>
-          {action.error && <p className="text-12 text-danger-primary">{action.error.message}</p>}
-          {action.status === "proposed" ? (
-            <div className="mt-2 flex flex-wrap justify-end gap-2 border-t border-subtle pt-4">
-              <button
-                type="button"
-                className="rounded-md border border-subtle px-3 py-2 text-12 text-primary disabled:opacity-50"
-                disabled={saving}
-                onClick={() => onDecision("reject")}
-              >
-                Отклонить
-              </button>
-              <button
-                type="button"
-                className="rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-accent disabled:opacity-50"
-                disabled={saving}
-                onClick={() => onDecision("approve")}
-              >
-                {saving ? "Сохраняем…" : "Подтвердить предложение"}
-              </button>
-            </div>
-          ) : (
-            <div className="mt-2 rounded-lg border border-subtle bg-layer-1 p-3 text-12 text-secondary">
-              <strong className="text-primary">{WRITE_ACTION_STATUS_LABELS[action.status]}.</strong>{" "}
-              {action.status === "approved"
-                ? "Решение сохранено. Репозиторий в GitHub не изменён."
-                : "GitHub не изменялся."}
-            </div>
-          )}
-        </div>
-      </DialogFrame>
-    );
-  }
-
-  return (
-    <DialogFrame onClose={onClose} saving={saving} title="Подготовить ветку и draft PR">
-      <form className="grid gap-4" onSubmit={onSubmit}>
-        <label className="text-12 font-semibold text-secondary">
-          Подключённый репозиторий
-          <select
-            className="mt-2 w-full rounded-md border border-subtle bg-surface-2 px-3 py-2 text-13 text-primary"
-            value={repositoryId}
-            onChange={(event) => onRepositoryChange(event.target.value)}
-          >
-            {repositories.map((repository) => (
-              <option key={repository.id} value={repository.id}>
-                {repository.provider_full_name || repository.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div>
-          <label className="text-12 font-semibold text-secondary" htmlFor="ppm-git-write-work-item-search">
-            Задача проекта
-          </label>
-          <div className="mt-2 flex gap-2">
-            <input
-              id="ppm-git-write-work-item-search"
-              className="min-w-0 flex-1 rounded-md border border-subtle bg-surface-2 px-3 py-2 text-13 text-primary"
-              placeholder="Ключ или название"
-              value={workItemQuery}
-              onChange={(event) => onQueryChange(event.target.value)}
-            />
-            <button
-              type="button"
-              className="grid size-9 place-items-center rounded-md border border-subtle text-secondary hover:text-primary"
-              aria-label="Найти задачу"
-              onClick={onSearch}
-            >
-              {searching ? <LoaderCircle className="size-4 animate-spin" /> : <Search className="size-4" />}
-            </button>
-          </div>
-          {selectedWorkItem && (
-            <div className="mt-2 rounded-md border border-accent-strong/40 bg-accent-primary/5 p-2 text-12 text-primary">
-              <strong>{selectedWorkItem.identity.identifier}</strong> · {selectedWorkItem.display.title}
-            </div>
-          )}
-          {workItems.length > 0 && !selectedWorkItem && (
-            <div className="mt-2 max-h-36 overflow-y-auto rounded-md border border-subtle bg-surface-2 p-1">
-              {workItems.map((item) => (
-                <button
-                  type="button"
-                  className="block w-full rounded px-2 py-2 text-left text-12 text-secondary hover:bg-layer-1 hover:text-primary"
-                  key={item.identity.entity_id}
-                  onClick={() => onSelectWorkItem(item)}
-                >
-                  <strong className="text-primary">{item.identity.identifier}</strong> · {item.display.title}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <FormInput
-            label="Базовая ветка"
-            required
-            value={form.base_ref}
-            onChange={(value) => onChange({ ...form, base_ref: value })}
-          />
-          <FormInput
-            label="Новая ветка"
-            placeholder="gwa-1/draft-pr"
-            required
-            value={form.head_ref}
-            onChange={(value) => onChange({ ...form, head_ref: value })}
-          />
-        </div>
-        <FormInput
-          label="Название draft PR"
-          required
-          value={form.title}
-          onChange={(value) => onChange({ ...form, title: value })}
-        />
-        <label className="text-12 font-semibold text-secondary">
-          Описание draft PR
-          <textarea
-            className="mt-2 min-h-36 w-full resize-y rounded-md border border-subtle bg-surface-2 px-3 py-2 text-13 text-primary outline-none focus:border-accent-strong"
-            maxLength={20000}
-            value={form.body}
-            onChange={(event) => onChange({ ...form, body: event.target.value })}
-          />
-        </label>
-        <p className="text-12 leading-5 text-tertiary">
-          На этом шаге создаётся только проверяемое предложение. GitHub, ветки и PR не изменяются.
-        </p>
-        <DialogActions
-          disabled={!repositoryId || !selectedWorkItem || !form.base_ref || !form.head_ref || !form.title}
-          onClose={onClose}
-          saving={saving}
-          submitLabel="Показать точный preview"
-        />
-      </form>
-    </DialogFrame>
-  );
-}
-
-function PreviewRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-subtle bg-layer-1 p-3">
-      <p className="text-11 font-semibold tracking-wide text-tertiary uppercase">{label}</p>
-      <p className="mt-1 text-12 font-semibold break-words text-primary">{value}</p>
-    </div>
-  );
-}
 
 function GithubProviderPanel({
   canManage,
@@ -1987,64 +1729,6 @@ function DialogFrame({
         {children}
       </section>
     </ModalCore>
-  );
-}
-
-function DialogActions({
-  disabled,
-  onClose,
-  saving,
-  submitLabel,
-}: {
-  disabled?: boolean;
-  onClose: () => void;
-  saving: boolean;
-  submitLabel: string;
-}) {
-  return (
-    <div className="mt-2 flex justify-end gap-2 border-t border-subtle pt-4">
-      <button
-        type="button"
-        className="rounded-md border border-subtle px-3 py-2 text-12 text-primary"
-        onClick={onClose}
-      >
-        Отмена
-      </button>
-      <button
-        type="submit"
-        className="rounded-md bg-accent-primary px-3 py-2 text-12 font-semibold text-on-accent disabled:opacity-50"
-        disabled={saving || disabled}
-      >
-        {saving ? "Сохраняем…" : submitLabel}
-      </button>
-    </div>
-  );
-}
-
-function FormInput({
-  label,
-  onChange,
-  placeholder,
-  required,
-  value,
-}: {
-  label: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  required?: boolean;
-  value: string;
-}) {
-  return (
-    <label className="text-12 font-semibold text-secondary">
-      {label}
-      <input
-        className="mt-2 w-full rounded-md border border-subtle bg-surface-2 px-3 py-2 text-13 text-primary outline-none focus:border-accent-strong"
-        placeholder={placeholder}
-        required={required}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </label>
   );
 }
 
