@@ -1,3 +1,5 @@
+import io
+import logging
 import os
 from pathlib import Path
 import shutil
@@ -6,6 +8,25 @@ from django.conf import settings
 from botocore.exceptions import BotoCoreError, ClientError
 
 from plane.settings.storage import S3Storage
+
+
+logger = logging.getLogger("plane.api")
+
+# Object-storage failures (unreachable endpoint, timeout, closed connection, missing object) become the
+# Vault's normal "storage failed" outcome instead of a 500.
+STORAGE_ERRORS = (BotoCoreError, ClientError, OSError)
+
+# Largest object a server-side reader holds in memory (the ZIP export's total budget); PPM_VAULT_READ_MAX_BYTES
+# overrides it. Readers with their own smaller limit (preview 16 MiB, export's remaining budget) pass max_bytes.
+READ_MAX_BYTES_DEFAULT = 262_144_000
+
+
+def _log_storage_failure(message, exc):
+    fields = {"error": type(exc).__name__}
+    if isinstance(exc, ClientError):
+        # The S3 error code (NoSuchKey, AccessDenied, SignatureDoesNotMatch, ...) names the cause and is not secret.
+        fields["code"] = str(exc.response.get("Error", {}).get("Code", ""))[:64]
+    logger.warning(message, extra=fields)
 
 
 def use_local_vault_storage():
@@ -37,21 +58,51 @@ def put_private_object(*, object_key, file_obj, content_type):
         return True
 
     storage = S3Storage()
-    return storage.upload_file(
-        file_obj,
-        object_key,
-        content_type=content_type,
-        extra_args={"ACL": "private"},
-    )
+    try:
+        return storage.upload_file(
+            file_obj,
+            object_key,
+            content_type=content_type,
+            extra_args={"ACL": "private"},
+        )
+    except STORAGE_ERRORS as exc:
+        _log_storage_failure("PPM vault object upload failed", exc)
+        return False
 
 
-def open_private_object(object_key):
+def open_private_object(object_key, *, max_bytes=None):
+    """Readable file object with the object's bytes, or None when object storage cannot serve it.
+
+    S3 reads go through the boto3 client: `S3Storage` never initialises `S3Boto3Storage`, so its django-storages
+    `open()` is unusable. The copy is held in memory, so it is bounded: with ``max_bytes`` (below the ceiling) at
+    most ``max_bytes + 1`` bytes are loaded and the caller detects "too large" by length; otherwise an object above
+    PPM_VAULT_READ_MAX_BYTES is refused (None) — by its ContentLength before the body is read. Every storage error
+    surfaces here (as None) instead of inside a later read()."""
     if use_local_vault_storage():
         return _safe_local_path(object_key).open("rb")
+    ceiling = int(getattr(settings, "PPM_VAULT_READ_MAX_BYTES", READ_MAX_BYTES_DEFAULT))
+    if max_bytes is not None and int(max_bytes) < ceiling:
+        read_limit, refuse_above = int(max_bytes), None
+    else:
+        read_limit, refuse_above = ceiling, ceiling
+    storage = S3Storage()
     try:
-        return S3Storage().open(object_key, "rb")
-    except (BotoCoreError, ClientError, OSError):
+        response = storage.s3_client.get_object(Bucket=storage.aws_storage_bucket_name, Key=object_key)
+        body = response["Body"]
+        try:
+            if refuse_above is not None and int(response.get("ContentLength") or 0) > refuse_above:
+                data = None
+            else:
+                data = body.read(read_limit + 1)
+        finally:
+            body.close()
+    except STORAGE_ERRORS as exc:
+        _log_storage_failure("PPM vault object read failed", exc)
         return None
+    if data is None or (refuse_above is not None and len(data) > refuse_above):
+        logger.warning("PPM vault object read refused", extra={"error": "ObjectTooLarge", "limit": refuse_above})
+        return None
+    return io.BytesIO(data)
 
 
 def private_object_url(*, object_key, filename, disposition="inline"):
@@ -73,7 +124,11 @@ def delete_private_object(object_key):
         if path.exists():
             path.unlink()
         return
-    S3Storage().delete_files([object_key])
+    try:
+        S3Storage().delete_files([object_key])
+    except STORAGE_ERRORS as exc:
+        # Best-effort cleanup: never mask the error that triggered it.
+        _log_storage_failure("PPM vault object delete failed", exc)
 
 
 def copy_private_object(*, source_key, destination_key):
@@ -87,4 +142,8 @@ def copy_private_object(*, source_key, destination_key):
         shutil.copyfile(source, temporary)
         os.replace(temporary, destination)
         return True
-    return bool(S3Storage().copy_object(source_key, destination_key))
+    try:
+        return bool(S3Storage().copy_object(source_key, destination_key))
+    except STORAGE_ERRORS as exc:
+        _log_storage_failure("PPM vault object copy failed", exc)
+        return False

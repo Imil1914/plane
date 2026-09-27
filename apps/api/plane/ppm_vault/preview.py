@@ -363,7 +363,7 @@ def _parse_office_payload(*, entry, preview_format, raw, limits):
 
 def _read_object(object_key, max_bytes):
     try:
-        file_obj = open_private_object(object_key)
+        file_obj = open_private_object(object_key, max_bytes=max_bytes)
     except Exception as exc:  # noqa: BLE001 - any storage-open failure is a 503, not a 500
         raise PreviewStorageUnavailable() from exc
     if file_obj is None:

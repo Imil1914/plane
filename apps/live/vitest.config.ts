@@ -16,6 +16,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Tests run against the logger's source (the package entry points at its build output).
+      "@plane/logger": path.resolve(__dirname, "../../packages/logger/src/index.ts"),
     },
   },
 });

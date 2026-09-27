@@ -1,4 +1,6 @@
-FROM python:3.12.10-alpine
+# PPM: the release build (deployments/ppm/ppm-build.sh) pins base images by digest; the defaults stay upstream.
+ARG PYTHON_IMAGE=python:3.12.10-alpine
+FROM ${PYTHON_IMAGE}
 
 # set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1

@@ -32,7 +32,7 @@ def _zip_info(path, *, directory=False):
 
 
 def _read_binary_version(entry, *, remaining_bytes):
-    file_obj = open_private_object(entry.current_version.object_key)
+    file_obj = open_private_object(entry.current_version.object_key, max_bytes=remaining_bytes)
     if file_obj is None:
         raise PpmVaultConflict(
             code="VAULT_STORAGE_FAILED",

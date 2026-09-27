@@ -1,0 +1,133 @@
+# PPM reverse proxy (release candidate). One HTTPS site on PPM_DOMAIN in front of the PPM services.
+#
+# TLS: PPM_TLS=<e-mail>  → automatic ACME certificate (Let's Encrypt by default, PPM_ACME_CA to override);
+#      PPM_TLS=internal  → Caddy's local CA (local rehearsal with a *.localhost domain only).
+# Ports: Caddy listens inside the container on the same ports that are published on the host
+# (PPM_HTTP_PORT/PPM_HTTPS_PORT), so the public URL is identical inside the Compose network
+# (the proxy carries PPM_DOMAIN as a network alias) and in the browser. The HTTPS port is part of the site
+# address (not the global https_port), so the automatic HTTP→HTTPS redirect keeps a non-standard port.
+# Logs: access and error entries go through the same redaction (presigned-URL signatures, OAuth/reset/API
+# tokens in the query or the reset-password path, Cookie/Set-Cookie, Authorization, X-Api-Key, CSRF, Referer).
+# `ppm-deploy.sh scan-logs` checks that nothing usable reaches the logs (`--self-test` proves the scanner).
+{
+	http_port {$PPM_HTTP_PORT:80}
+	acme_ca {$PPM_ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+	skip_install_trust
+	servers {
+		# HTTP/3 needs a published UDP port; the bundle publishes TCP only, so do not advertise h3.
+		protocols h1 h2
+		max_header_size 25MB
+	}
+	# Logged URIs never carry a query string (tokens of reset/invitation links, OAuth code/state, presigned-URL
+	# signatures, e-mail addresses): "?REDACTED"; the reset-password uid/token path segments become "REDACTED".
+	# Error entries (e.g. an upstream is down) carry the request. The global logger is written inline: snippets
+	# defined below are not visible inside the global options block. Keep in sync with (ppm_log_redaction).
+	log default {
+		output stderr
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "(?i)(/reset-password/)[^/?#]+/[^/?#]+|(\?).*$" "${1}${2}REDACTED"
+				request>headers>Cookie delete
+				request>headers>Authorization delete
+				request>headers>Proxy-Authorization delete
+				request>headers>X-Api-Key delete
+				request>headers>X-Csrftoken delete
+				request>headers>Referer delete
+				resp_headers>Set-Cookie delete
+				# 302 to a presigned download: the Location header carries X-Amz-Credential/Signature.
+				resp_headers>Location delete
+			}
+		}
+	}
+}
+
+(ppm_log_redaction) {
+	format filter {
+		wrap json
+		fields {
+			request>uri regexp "(?i)(/reset-password/)[^/?#]+/[^/?#]+|(\?).*$" "${1}${2}REDACTED"
+			request>headers>Cookie delete
+			request>headers>Authorization delete
+			request>headers>Proxy-Authorization delete
+			request>headers>X-Api-Key delete
+			request>headers>X-Csrftoken delete
+			request>headers>Referer delete
+			resp_headers>Set-Cookie delete
+			# 302 to a presigned download: the Location header carries X-Amz-Credential/Signature.
+			resp_headers>Location delete
+		}
+	}
+}
+
+(ppm_security_headers) {
+	header {
+		# Deferred: normalise the value even when an upstream (web nginx, Django) already set it.
+		defer
+		Strict-Transport-Security "max-age={$PPM_HSTS_MAX_AGE:31536000}"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		# Only when the upstream did not decide itself: Vault PDFs are shown in same-origin iframes.
+		?X-Frame-Options "SAMEORIGIN"
+		-Server
+		-X-Powered-By
+	}
+}
+
+{$PPM_DOMAIN}:{$PPM_HTTPS_PORT:443} {
+	tls {$PPM_TLS}
+
+	import ppm_security_headers
+
+	# Access log (JSON to stdout, rotated by Docker) with the same redaction as the error log.
+	log {
+		output stdout
+		import ppm_log_redaction
+	}
+
+	# Canvas snapshots are capped at 2 MiB, uploads at FILE_SIZE_LIMIT; the application returns the
+	# user-facing error, the proxy only stops abusive bodies.
+	request_body {
+		max_size {$PPM_PROXY_MAX_BODY_SIZE:16MB}
+	}
+
+	encode zstd gzip
+
+	# Realtime Canvas presence (Django Channels on the API ASGI server).
+	handle /ws/* {
+		reverse_proxy api:8000
+	}
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+	handle /auth/* {
+		reverse_proxy api:8000
+	}
+	handle /static/* {
+		reverse_proxy api:8000
+	}
+	# Collaborative documents (Hocuspocus).
+	handle /live/* {
+		reverse_proxy live:3000
+	}
+	redir /god-mode /god-mode/ permanent
+	handle /god-mode/* {
+		reverse_proxy admin:3000
+	}
+	redir /spaces /spaces/ permanent
+	handle /spaces/* {
+		reverse_proxy space:3000
+	}
+	# Object storage (presigned uploads/downloads for attachments and Vault). The Host header is kept,
+	# so S3 signatures made for the public URL stay valid.
+	handle /{$PPM_S3_BUCKET:uploads}/* {
+		reverse_proxy plane-minio:9000
+	}
+	handle /{$PPM_S3_BUCKET:uploads} {
+		reverse_proxy plane-minio:9000
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+}

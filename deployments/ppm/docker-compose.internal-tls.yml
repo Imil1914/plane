@@ -1,0 +1,19 @@
+# Local rehearsal only (PPM_TLS=internal, *.localhost domain). The application containers reach the public URL
+# through the proxy alias and must trust Caddy's local CA; with an ACME certificate in production this file is not
+# used. ppm-deploy.sh adds it automatically when PPM_TLS=internal (the smoke gets the CA via its state directory).
+x-internal-ca-env: &internal-ca-env
+  AWS_CA_BUNDLE: /caddy-data/caddy/pki/authorities/local/root.crt
+
+services:
+  api:
+    environment: *internal-ca-env
+    volumes:
+      - caddy_data:/caddy-data:ro
+  worker:
+    environment: *internal-ca-env
+    volumes:
+      - caddy_data:/caddy-data:ro
+  beat-worker:
+    environment: *internal-ca-env
+    volumes:
+      - caddy_data:/caddy-data:ro

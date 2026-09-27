@@ -6,7 +6,9 @@
 import hashlib
 import hmac
 import logging
+import re
 import time
+from urllib.parse import parse_qsl, urlencode
 
 # Django imports
 from django.conf import settings
@@ -21,6 +23,36 @@ from plane.utils.exception_logger import log_exception
 from plane.bgtasks.logger_task import process_logs
 
 api_logger = logging.getLogger("plane.api.request")
+
+# Credentials must never reach the logs (PPM RC review, application logs):
+# - The per-request log line carries the path WITHOUT the query string. Query strings hold one-time credentials
+#   (password-reset and invitation tokens, OAuth code/state, presigned-URL signatures) and personal data (e-mail in
+#   invitation links); a list of "secret" parameter names would always lag behind new ones, while the query adds
+#   nothing to an operational request log (method, route, status, duration).
+# - Path segments that ARE credentials are masked: URL kwargs named like a secret (``reset-password/<uidb64>/<token>/``)
+#   and, for paths that did not resolve (404 probes), the reset-password routes by pattern.
+REDACTED = "[redacted]"
+SECRET_PATH_KWARG = re.compile(r"^(uidb64|token)$|(token|secret|signature|password)$", re.IGNORECASE)
+SECRET_PATH_PATTERN = re.compile(r"(/reset-password/)[^/]+/[^/]+")
+# Query parameters whose values are redacted where a query string is kept (the external API audit record).
+SECRET_QUERY_PARAM = re.compile(r"token|key|code|state|password|secret|signature|uidb64|invitation|^x-amz-", re.I)
+
+
+def loggable_path(request) -> str:
+    """The request path for logs: no query string, credential path segments masked."""
+    path = request.path
+    match = getattr(request, "resolver_match", None)
+    if match is not None:
+        secrets = {str(value) for name, value in match.kwargs.items() if value and SECRET_PATH_KWARG.search(name)}
+        if secrets:
+            path = "/".join(REDACTED if segment in secrets else segment for segment in path.split("/"))
+    return SECRET_PATH_PATTERN.sub(rf"\1{REDACTED}/{REDACTED}", path)
+
+
+def redacted_query_string(query_string: str) -> str:
+    """The query string with the values of credential-like parameters replaced by ``[redacted]``."""
+    pairs = parse_qsl(query_string, keep_blank_values=True)
+    return urlencode([(key, REDACTED if SECRET_QUERY_PARAM.search(key) else value) for key, value in pairs])
 
 
 class RequestLoggerMiddleware:
@@ -59,11 +91,13 @@ class RequestLoggerMiddleware:
 
         user_agent = request.META.get("HTTP_USER_AGENT", "")
 
-        # Log the request information
+        # Log the request information: method, path (no query string, credentials masked), status, timing and who.
+        # Request bodies and headers (other than the user agent) are never part of this record.
+        path = loggable_path(request)
         api_logger.info(
-            f"{request.method} {request.get_full_path()} {response.status_code}",
+            f"{request.method} {path} {response.status_code}",
             extra={
-                "path": request.path,
+                "path": path,
                 "method": request.method,
                 "status_code": response.status_code,
                 "duration_ms": int(duration * 1000),
@@ -113,8 +147,11 @@ class APITokenLogMiddleware:
         except UnicodeDecodeError:
             return "[Could not decode content]"
 
-    # Headers whose values must never be persisted in plaintext logs
-    SENSITIVE_HEADERS = frozenset({"x-api-key", "authorization", "cookie"})
+    # Headers whose values must never be persisted in plaintext logs (the Referer may carry the one-time token of
+    # the page it came from, e.g. a password-reset link)
+    SENSITIVE_HEADERS = frozenset(
+        {"x-api-key", "authorization", "proxy-authorization", "cookie", "x-csrftoken", "referer"}
+    )
 
     def _redacted_headers(self, request):
         """
@@ -146,7 +183,7 @@ class APITokenLogMiddleware:
                 ).hexdigest(),
                 "path": request.path,
                 "method": request.method,
-                "query_params": request.META.get("QUERY_STRING", ""),
+                "query_params": redacted_query_string(request.META.get("QUERY_STRING", "")),
                 "headers": self._redacted_headers(request),
                 "body": self._safe_decode_body(request_body) if request_body else None,
                 "response_body": self._safe_decode_body(response.content) if response.content else None,

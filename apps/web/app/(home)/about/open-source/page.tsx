@@ -6,6 +6,7 @@
 import Link from "next/link";
 import { useTranslation } from "@plane/i18n";
 import { getPpmTranslation, PPM_BRAND, PPM_SOURCE_ATTRIBUTION } from "@ppm/brand";
+import { getPpmSourceCodeUrl } from "@/helpers/ppm-source-url.helper";
 import type { Route } from "./+types/page";
 
 export const meta: Route.MetaFunction = () => [
@@ -24,9 +25,8 @@ export default function OpenSourcePage() {
   const release = process.env.VITE_PPM_RELEASE || (isRussian ? "локальная сборка" : "local build");
   const buildDate = process.env.VITE_PPM_BUILD_DATE || (isRussian ? "не указана" : "not recorded");
   const hasExactRevision = /^[0-9a-f]{40}$/i.test(sourceRevision);
-  const sourceUrl = hasExactRevision
-    ? `${PPM_SOURCE_ATTRIBUTION.repository}/tree/${sourceRevision}`
-    : PPM_SOURCE_ATTRIBUTION.repository;
+  // Images are built from a commit of the Plane fork (AGPL-3.0 §13: the exact source of this build).
+  const sourceUrl = getPpmSourceCodeUrl(process.env.VITE_PPM_SOURCE_REVISION);
 
   return (
     <div className="min-h-screen overflow-y-auto bg-canvas px-6 py-10 text-primary sm:px-10">

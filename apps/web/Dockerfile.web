@@ -1,5 +1,9 @@
 # syntax=docker/dockerfile:1.7
-FROM node:22-alpine AS base
+# PPM: the release build (deployments/ppm/ppm-build.sh) pins base images by digest; the defaults stay upstream.
+ARG NODE_IMAGE=node:22-alpine
+ARG NGINX_IMAGE=nginx:1.31-alpine
+
+FROM ${NODE_IMAGE} AS base
 
 # Setup pnpm package manager with corepack and configure global bin directory for caching
 ENV PNPM_HOME="/pnpm"
@@ -67,6 +71,31 @@ ENV VITE_SPACE_BASE_PATH=$VITE_SPACE_BASE_PATH
 ARG VITE_WEB_BASE_URL=""
 ENV VITE_WEB_BASE_URL=$VITE_WEB_BASE_URL
 
+# PPM: exact source revision, release and build date for «О PPM → открытый код» (AGPL source offer).
+# Empty values keep the page's «локальная сборка» fallback.
+ARG VITE_PPM_SOURCE_REVISION=""
+ENV VITE_PPM_SOURCE_REVISION=$VITE_PPM_SOURCE_REVISION
+ARG VITE_PPM_RELEASE=""
+ENV VITE_PPM_RELEASE=$VITE_PPM_RELEASE
+ARG VITE_PPM_BUILD_DATE=""
+ENV VITE_PPM_BUILD_DATE=$VITE_PPM_BUILD_DATE
+
+# PPM: build-time rollout flags read by apps/web/vite.config.ts (defaults = the same values as there).
+ARG PPM_BRAND_ENABLED="1"
+ENV PPM_BRAND_ENABLED=$PPM_BRAND_ENABLED
+ARG PPM_CANVAS_ENABLED="1"
+ENV PPM_CANVAS_ENABLED=$PPM_CANVAS_ENABLED
+ARG PPM_ANTYFLOW_SHELL_ENABLED="1"
+ENV PPM_ANTYFLOW_SHELL_ENABLED=$PPM_ANTYFLOW_SHELL_ENABLED
+ARG PPM_SHELL_ENABLED="1"
+ENV PPM_SHELL_ENABLED=$PPM_SHELL_ENABLED
+ARG PPM_PROJECT_ASK_ENABLED="0"
+ENV PPM_PROJECT_ASK_ENABLED=$PPM_PROJECT_ASK_ENABLED
+ARG PPM_DESIGN_V2="1"
+ENV PPM_DESIGN_V2=$PPM_DESIGN_V2
+ARG PPM_CANVAS_AUTOMERGE="1"
+ENV PPM_CANVAS_AUTOMERGE=$PPM_CANVAS_AUTOMERGE
+
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV TURBO_TELEMETRY_DISABLED=1
 
@@ -75,7 +104,7 @@ RUN pnpm turbo run build --filter=web
 # *****************************************************************************
 # STAGE 3: Serve with nginx
 # *****************************************************************************
-FROM nginx:1.31-alpine AS production
+FROM ${NGINX_IMAGE} AS production
 
 RUN apk update && apk upgrade --no-cache && rm -rf /var/cache/apk/*
 

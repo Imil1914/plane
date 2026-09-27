@@ -20,6 +20,29 @@ from storages.backends.s3boto3 import S3Boto3Storage
 logger = logging.getLogger(__name__)
 
 
+def _positive_int_env(name, default):
+    """Positive integer from the environment; anything else keeps the safe default."""
+    try:
+        value = int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def s3_client_config():
+    """botocore config for every S3Storage client (PPM RC-6).
+
+    An unreachable object store must fail a request in seconds, not minutes: botocore's defaults (60 s read
+    timeout, legacy retries) held a Vault upload ~310 s while MinIO was down. Tunable via AWS_S3_CONNECT_TIMEOUT,
+    AWS_S3_READ_TIMEOUT (seconds) and AWS_S3_MAX_ATTEMPTS (attempts in total, retries included)."""
+    return boto3.session.Config(
+        signature_version="s3v4",
+        connect_timeout=_positive_int_env("AWS_S3_CONNECT_TIMEOUT", 5),
+        read_timeout=_positive_int_env("AWS_S3_READ_TIMEOUT", 10),
+        retries={"total_max_attempts": _positive_int_env("AWS_S3_MAX_ATTEMPTS", 2), "mode": "standard"},
+    )
+
+
 class S3Storage(S3Boto3Storage):
     def url(self, name, parameters=None, expire=None, http_method=None):
         return name
@@ -56,7 +79,7 @@ class S3Storage(S3Boto3Storage):
                 aws_secret_access_key=self.aws_secret_access_key,
                 region_name=self.aws_region,
                 endpoint_url=endpoint_url,
-                config=boto3.session.Config(signature_version="s3v4"),
+                config=s3_client_config(),
             )
         else:
             # Create an S3 client
@@ -66,7 +89,7 @@ class S3Storage(S3Boto3Storage):
                 aws_secret_access_key=self.aws_secret_access_key,
                 region_name=self.aws_region,
                 endpoint_url=self.aws_s3_endpoint_url,
-                config=boto3.session.Config(signature_version="s3v4"),
+                config=s3_client_config(),
             )
 
     def generate_presigned_post(self, object_name, file_type, file_size, expiration=None):

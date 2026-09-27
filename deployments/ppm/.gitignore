@@ -1,0 +1,6 @@
+# Operator/runtime artifacts: generated secrets (ppm.env), backup passphrase, build exports, smoke state, backups.
+.runtime/
+# Env files and backup passphrases created anywhere else in the bundle must never be committed either.
+*.env
+!ppm.env.example
+*.backup-passphrase
