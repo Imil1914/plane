@@ -1,7 +1,8 @@
 import { createContext, memo, useContext, type PointerEvent } from "react";
 import { SVGContainer, stopEventPropagation, useEditor, useValue, type TLShape, type TLShapeId } from "tldraw";
-import type { TPpmCanvasSemanticEdge } from "@ppm/canvas";
+import type { TPpmCanvasSemanticEdge, TPpmCanvasSemanticRelationType } from "@ppm/canvas";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import type { TPpmArrowMeaningTarget } from "./canvas-arrow-meaning";
 import { buildSemanticEdgeEnd, buildSemanticEdgeGeometry } from "./semantic-edge-geometry";
 import {
   SEMANTIC_EDGE_CHIP_MIN_ZOOM,
@@ -12,10 +13,40 @@ import {
   visibleSemanticEdges,
 } from "./semantic-edge-style";
 
+// ── UXR: раздел «Смысловые связи · N» панели «Доска» (облик v2) ──
+/**
+ * The section's state lives in the editor, not in the overlay: CanvasControls is rebuilt on autosave and when «Доска»
+ * opens, and the section must stay expanded, keep its form open and take the focus once when a command opens it.
+ */
+export type TPpmSemanticSectionState = {
+  open: boolean;
+  /** «Связать без стрелки…» is expanded. */
+  formOpen: boolean;
+  /** Raised by a command, the inspector or a chip; the mounted section focuses its heading once and lowers it. */
+  focusRef: { current: boolean };
+  /** Changes with every focus request, so a section that is already mounted sees it too. */
+  focusTick: number;
+  setOpen: (open: boolean) => void;
+  setFormOpen: (open: boolean) => void;
+  /** The board saved first (the server takes a link only between saved cards); `onWait` — once, if it has to wait. */
+  settleSave: (onWait?: () => void) => Promise<boolean>;
+};
+// ── /UXR ──
+
 export type TPpmSemanticLayerValue = {
   edges: readonly TPpmCanvasSemanticEdge[];
   enabled: boolean;
   onOpenEdge: (edgeId: string) => void;
+  // ── UXR: «Смысл» у стрелки (панель над выделением) и раздел панели «Доска» — только облик v2 ──
+  /**
+   * «Смысл» of the arrow: a type turns it into a semantic link, `undefined` («Просто стрелка») drops the link it became
+   * earlier; no handler (v1) — no choice (a reader has no style toolbar at all).
+   */
+  onSetArrowMeaning?: (target: TPpmArrowMeaningTarget, relation: TPpmCanvasSemanticRelationType | undefined) => void;
+  /** This session: arrow id → the link it became (⌘Z brings the arrow back, the link stays; see arrowMeaningLink). */
+  arrowLinks?: ReadonlyMap<string, string>;
+  section?: TPpmSemanticSectionState;
+  // ── /UXR ──
 };
 
 export const PpmSemanticEdgesContext = createContext<TPpmSemanticLayerValue>({

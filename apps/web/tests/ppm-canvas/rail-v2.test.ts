@@ -32,8 +32,10 @@ describe("AF2.1 R1 rail", () => {
     has(rail, 'role="menuitem"');
     for (const menu of ['trigger("shapes"', 'trigger("docs"', 'trigger("project"', 'trigger("more")']) has(rail, menu);
     has(rail, "visibleRailMenuItems(definition, editReady)");
-    has(rail, 'fillCanvasTemplate(ppmT("canvas.rail.with_shortcut"), { keys: shortcut, label })');
-    has(rail, 'tool("open-semantic-edges", Network, ppmT("canvas.semantic_edges"))');
+    // UXR (2026-09-26): the hover/focus tooltip (name + real keys) replaced the native title «{label} — {keys}», and
+    // «Смысловые связи» left the rail — the list is a section of «Доска» (uxr-canvas-panel.test.ts).
+    has(rail, "hint={{ text: tipKey ? ppmT(tipKey) : label, keys: railKeysLabel(command, apple) }}");
+    expect(rail).not.toContain('tool("open-semantic-edges"');
   });
 
   it("takes V/H/S/T/P by e.code only under v2, outside inputs", () => {

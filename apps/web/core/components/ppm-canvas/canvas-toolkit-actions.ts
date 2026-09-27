@@ -43,6 +43,9 @@ import {
   type TPpmDirection,
   type TPpmGeo,
 } from "./canvas-toolkit-model";
+// ── UXR: «Смысл» у стрелки между карточками — поле выделения панели стилей ──
+import { isSameArrowMeaningTarget, readArrowMeaningTarget, type TPpmArrowMeaningTarget } from "./canvas-arrow-meaning";
+// ── /UXR ──
 import type { TPpmCanvasShape } from "./shape";
 
 // shape.tsx's PPM_CANVAS_SHAPE_TYPE as a checked literal: a runtime import would pull every card component (and all
@@ -142,6 +145,8 @@ export type TPpmStyleSelection = {
   showGeo: boolean;
   showBold: boolean;
   showMore: boolean;
+  /** UXR: the one selected, unlocked arrow between two PPM cards — «Смысл» can turn it into a semantic link. */
+  meaning: TPpmArrowMeaningTarget | undefined;
 };
 
 const TEXT_SHAPE_TYPES = new Set(["note", "geo", "text", "arrow"]);
@@ -230,6 +235,8 @@ export function readStyleSelection(editor: Editor): TPpmStyleSelection | undefin
     showGeo: shapeIds.length === shapes.length && shapes.every((shape) => shape.type === "geo"),
     showBold: onlyNotes,
     showMore: cards === 0 && [...types].some((type) => FONT_SHAPE_TYPES.has(type)),
+    // UXR: only a single arrow that is itself a target (unlocked, coloured) — never one of several shapes.
+    meaning: shapes.length === 1 && shapeIds.length === 1 ? readArrowMeaningTarget(editor, shapes[0]) : undefined,
   };
 }
 
@@ -245,6 +252,7 @@ export function styleSelectionStep(
 export function isSameStyleSelection(a: TPpmStyleSelection | undefined, b: TPpmStyleSelection | undefined): boolean {
   if (!a || !b) return a === b;
   return (Object.keys(a) as (keyof TPpmStyleSelection)[]).every((key) => {
+    if (key === "meaning") return isSameArrowMeaningTarget(a.meaning, b.meaning);
     const left = a[key];
     const right = b[key];
     return Array.isArray(left) && Array.isArray(right)

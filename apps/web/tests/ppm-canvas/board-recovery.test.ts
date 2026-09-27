@@ -311,6 +311,32 @@ describe("Canvas local recovery", () => {
     expect(merge?.snapshot.document).toMatchObject({ store: { [second.id]: second } });
   });
 
+  // ── RC-2: пробел прежнего правила — удаление «своей» рамки/группы на одной стороне и новый ребёнок в ней на другой
+  // проходили проверку (обе записи «свои») и давали сироту с parentId на удалённого родителя. ──
+  it("refuses a manual merge that would orphan a new child of a frame or group removed on the other side", () => {
+    const shape = (id: string, kind: "frame" | "group" | "note", parentId = "page:page") => ({
+      id: `shape:${id}`,
+      typeName: "shape",
+      type: "ppm-canvas-node",
+      parentId,
+      props: { node: serializePpmCanvasNode(createPpmCanvasNode({ authorId: "user-one", kind, title: id })) },
+    });
+    for (const kind of ["frame", "group"] as const) {
+      const container = shape(`${kind}-parent`, kind);
+      const child = shape(`${kind}-child`, "note", container.id);
+      const page = { id: "page:page", typeName: "page", name: "Page 1", index: "a1", meta: {} };
+      const base = {
+        document: { schema: { schemaVersion: 2 }, store: { [page.id]: page, [container.id]: container } },
+      };
+      const withoutContainer = { document: { ...base.document, store: { [page.id]: page } } };
+      const withChild = { document: { ...base.document, store: { ...base.document.store, [child.id]: child } } };
+      // The container is removed locally while a teammate puts a new card into it — and the mirror case.
+      expect(mergeDisjointCanvasSnapshots(base, withoutContainer, withChild)).toBeUndefined();
+      expect(mergeDisjointCanvasSnapshots(base, withChild, withoutContainer)).toBeUndefined();
+    }
+  });
+  // ── /RC-2 ──
+
   it("treats reordered JSON keys as the same saved snapshot", () => {
     const first = { document: { schema: { schemaVersion: 2, sequences: { alpha: 1, beta: 2 } }, store: {} } };
     const reordered = { document: { store: {}, schema: { sequences: { beta: 2, alpha: 1 }, schemaVersion: 2 } } };

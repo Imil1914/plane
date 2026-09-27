@@ -222,6 +222,31 @@ export function sameCanvasSnapshots(first: TPpmCanvasSnapshot, second: TPpmCanva
   return stableJson(first.document) === stableJson(second.document);
 }
 
+// ── RC-2: целостность склейки — у фигуры есть родитель (страница или фигура), у binding — обе конечные фигуры ──
+export { stableJson as stableCanvasJson };
+
+export type TPpmCanvasMissingReference = { id: string; field: "parentId" | "fromId" | "toId"; missing: string };
+
+export function missingCanvasReferences(store: ReadonlyMap<string, unknown>): TPpmCanvasMissingReference[] {
+  const missing: TPpmCanvasMissingReference[] = [];
+  for (const [id, record] of store) {
+    if (!isRecord(record)) continue;
+    const fields =
+      record.typeName === "shape"
+        ? (["parentId"] as const)
+        : record.typeName === "binding"
+          ? (["fromId", "toId"] as const)
+          : [];
+    for (const field of fields) {
+      const target = record[field];
+      // A record without the field is malformed for tldraw itself (its validator rejects it); only real links count.
+      if (typeof target === "string" && !store.has(target)) missing.push({ id, field, missing: target });
+    }
+  }
+  return missing;
+}
+// ── /RC-2 ──
+
 function sameDocumentMetadata(first: TPpmCanvasSnapshot, second: TPpmCanvasSnapshot): boolean {
   return stableJson({ ...first.document, store: undefined }) === stableJson({ ...second.document, store: undefined });
 }
@@ -270,6 +295,9 @@ export function mergeDisjointCanvasSnapshots(
     }
   }
   if (localChanges === 0) return undefined;
+  // ── RC-2: ручная склейка не угадывает — сирота (новый ребёнок удалённой рамки/группы) или висящий binding = отказ ──
+  if (missingCanvasReferences(mergedStore).length > 0) return undefined;
+  // ── /RC-2 ──
   return {
     snapshot: ppmCanvasSnapshotSchema.parse({
       document: { ...remote.document, store: Object.fromEntries(mergedStore) },

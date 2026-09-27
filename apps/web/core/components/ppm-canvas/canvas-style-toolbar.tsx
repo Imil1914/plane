@@ -1,12 +1,25 @@
 // AF2.1 R3 (line R): the compact style toolbar above the selection (K2 shape, K3 sticker). Colour for everything (PPM
 // palette), text size S/M/L, bold (stickers), shape/fill/font (by type). A leaf child of <Tldraw> under the v2 grammar.
 // What the selection offers and how each change is applied live in canvas-toolkit-actions.ts (tested in node).
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  Fragment,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { ChevronDown, Ellipsis } from "lucide-react";
 import { Box, TldrawUiContextualToolbar, computed, isUninitialized, preventDefault, useEditor, useValue } from "tldraw";
-import { PPM_CANVAS_COLORS, type TPpmCanvasColor } from "@ppm/canvas";
+import { PPM_CANVAS_COLORS, type TPpmCanvasColor, type TPpmCanvasSemanticRelationType } from "@ppm/canvas";
 import type { TPpmTranslationKey } from "@ppm/brand";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+// ── UXR: «Смысл» у обычной стрелки ──
+import { ARROW_MEANING_FREQUENT, ARROW_MEANING_ORDER, arrowMeaningLink } from "./canvas-arrow-meaning";
+import { SEMANTIC_EDGE_STYLE, SEMANTIC_RELATION_LABELS } from "./semantic-edge-style";
+import { PpmSemanticEdgesContext } from "./semantic-edges-layer";
+// ── /UXR ──
 import { fillCanvasTemplate } from "./canvas-grammar";
 import { PpmGeoGlyph } from "./canvas-rail";
 import {
@@ -25,7 +38,7 @@ import { PPM_GEO_SHAPES, PPM_PALETTE_HEX, geoLabelKey, isPpmGeo, styleToolbarLif
 
 export type TPpmCanvasStyleToolbarProps = { canEdit: boolean };
 
-type TPanel = "color" | "geo" | "more";
+type TPanel = "color" | "geo" | "more" | "meaning";
 
 const SIZES = [
   { value: "s", label: "S" },
@@ -59,6 +72,29 @@ function moveFocusWithArrows(event: ReactKeyboardEvent<HTMLElement>) {
 // rich-text toolbar does); the keyboard still reaches every button with Tab and ← →.
 const GROUP_PROPS = { onKeyDown: moveFocusWithArrows, onPointerDown: preventDefault };
 
+// ── UXR: «Смысл» — список сверху вниз: ↑ ↓ (и ← →, как в остальной панели), Home/End; Tab — как везде ──
+function moveFocusInColumn(event: ReactKeyboardEvent<HTMLElement>) {
+  const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+  const index = buttons.findIndex((button) => button === event.target);
+  if (index < 0) return;
+  const next =
+    event.code === "ArrowDown" || event.code === "ArrowRight"
+      ? (index + 1) % buttons.length
+      : event.code === "ArrowUp" || event.code === "ArrowLeft"
+        ? (index - 1 + buttons.length) % buttons.length
+        : event.code === "Home"
+          ? 0
+          : event.code === "End"
+            ? buttons.length - 1
+            : undefined;
+  if (next === undefined) return;
+  event.preventDefault();
+  buttons[next]?.focus();
+}
+
+const LIST_PROPS = { onKeyDown: moveFocusInColumn, onPointerDown: preventDefault };
+// ── /UXR ──
+
 export function PpmCanvasStyleToolbar({ canEdit }: TPpmCanvasStyleToolbarProps) {
   const editor = useEditor();
   const ppmT = usePpmTranslation();
@@ -79,6 +115,9 @@ export function PpmCanvasStyleToolbar({ canEdit }: TPpmCanvasStyleToolbarProps) 
     [canEdit, editor]
   );
   const selection = useValue(selection$);
+  // ── UXR: обработчик «Смысла» даёт редактор (облик v2) через контекст смысловых связей ──
+  const semanticLinks = useContext(PpmSemanticEdgesContext);
+  // ── /UXR ──
   const busy = useValue("ppm style busy", () => editor.isInAny(...PPM_STYLE_BUSY_STATES), [editor]);
   const getSelectionBounds = useCallback(() => {
     const bounds = editor.getSelectionScreenBounds();
@@ -90,6 +129,18 @@ export function PpmCanvasStyleToolbar({ canEdit }: TPpmCanvasStyleToolbarProps) 
 
   if (!selection) return null;
 
+  // ── UXR: «Смысл» — у одной стрелки между двумя карточками, только у редактора (панели нет у читателя). После ⌘Z
+  // стрелка, уже ставшая связью, показывает тип этой связи, а не «Просто стрелка» (рецензия, раунд 1, I2). ──
+  const onSetMeaning = semanticLinks.enabled ? semanticLinks.onSetArrowMeaning : undefined;
+  const meaningTarget = onSetMeaning ? selection.meaning : undefined;
+  const meaningLink =
+    meaningTarget && semanticLinks.arrowLinks
+      ? arrowMeaningLink(meaningTarget, semanticLinks.edges, semanticLinks.arrowLinks)
+      : undefined;
+  const meaningName = ppmT(
+    meaningLink ? SEMANTIC_RELATION_LABELS[meaningLink.relation_type] : "canvas.uxr.meaning_plain"
+  );
+  // ── /UXR ──
   const togglePanel = (next: TPanel) => setPanel((current) => (current === next ? undefined : next));
   const colorName = selection.color ? ppmT(`canvas.palette.${selection.color}` as TPpmTranslationKey) : undefined;
   const geoKey = selection.geo ? geoLabelKey(selection.geo) : undefined;
@@ -187,6 +238,20 @@ export function PpmCanvasStyleToolbar({ canEdit }: TPpmCanvasStyleToolbarProps) 
             <Ellipsis aria-hidden="true" />
           </button>
         )}
+        {/* ── UXR: «Смысл ▾» — «Просто стрелка» или тип связи, которой эта стрелка уже стала ── */}
+        {meaningTarget && (
+          <button
+            type="button"
+            className="ppm-canvas-style-toolbar__meaning"
+            aria-expanded={panel === "meaning"}
+            aria-label={fillCanvasTemplate(ppmT("canvas.uxr.meaning_value"), { name: meaningName })}
+            onClick={() => togglePanel("meaning")}
+          >
+            <span>{ppmT("canvas.uxr.meaning")}</span>
+            <ChevronDown aria-hidden="true" />
+          </button>
+        )}
+        {/* ── /UXR ── */}
       </div>
       {panel === "color" && (
         <div
@@ -281,6 +346,86 @@ export function PpmCanvasStyleToolbar({ canEdit }: TPpmCanvasStyleToolbarProps) 
           </div>
         </div>
       )}
+      {/* ── UXR: панель «Смысл»: выбор типа делает стрелку смысловой связью (редактор, см. canvas-arrow-meaning) ── */}
+      {panel === "meaning" && meaningTarget && onSetMeaning && (
+        <div
+          className="ppm-canvas-style-toolbar__panel ppm-canvas-style-toolbar__panel--meaning"
+          role="group"
+          aria-label={ppmT("canvas.uxr.meaning")}
+          {...LIST_PROPS}
+        >
+          <header>
+            <span>{ppmT("canvas.uxr.meaning")}</span>
+            <strong>{meaningName}</strong>
+            <small>{ppmT("canvas.uxr.meaning_caption")}</small>
+          </header>
+          <PpmArrowMeaningOptions
+            current={meaningLink?.relation_type}
+            onPick={(relation) => {
+              setPanel(undefined);
+              onSetMeaning(meaningTarget, relation);
+            }}
+          />
+        </div>
+      )}
+      {/* ── /UXR ── */}
     </TldrawUiContextualToolbar>
   );
 }
+
+// ── UXR: варианты «Смысла» — «Просто стрелка» (как сейчас), частые типы, остальные; значок — конец линии по типу ──
+/**
+ * The choices of «Смысл»: `undefined` — the plain arrow, a type — a semantic link of that type. `current` is the type
+ * of the link this arrow already became (after ⌘Z), pressed instead of «Просто стрелка».
+ */
+export function PpmArrowMeaningOptions({
+  current,
+  onPick,
+}: {
+  current?: TPpmCanvasSemanticRelationType;
+  onPick: (relation: TPpmCanvasSemanticRelationType | undefined) => void;
+}) {
+  const ppmT = usePpmTranslation();
+  return (
+    <div className="ppm-canvas-style-toolbar__meanings">
+      <button type="button" aria-pressed={current === undefined} onClick={() => onPick(undefined)}>
+        <PpmMeaningGlyph />
+        <span>{ppmT("canvas.uxr.meaning_plain")}</span>
+      </button>
+      {ARROW_MEANING_ORDER.map((relation, index) => (
+        <Fragment key={relation}>
+          {(index === 0 || index === ARROW_MEANING_FREQUENT.length) && (
+            <span className="ppm-canvas-style-toolbar__meanings-divider" aria-hidden="true" />
+          )}
+          <button
+            type="button"
+            aria-pressed={relation === current}
+            data-relation={relation}
+            onClick={() => onPick(relation)}
+          >
+            <PpmMeaningGlyph relation={relation} />
+            <span>{ppmT(SEMANTIC_RELATION_LABELS[relation])}</span>
+          </button>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The line each choice draws, as the semantic layer does (TOKENS §11): a port at the start, the end by type (arrow,
+ * bar, none), dashed for «Противоречит», the danger tone for «Блокирует»/«Противоречит»; the plain arrow has no port.
+ */
+function PpmMeaningGlyph({ relation }: { relation?: TPpmCanvasSemanticRelationType }) {
+  const style = relation ? SEMANTIC_EDGE_STYLE[relation] : undefined;
+  const end = style ? style.end : "arrow";
+  return (
+    <svg className="ppm-canvas-meaning-glyph" viewBox="0 0 28 12" aria-hidden="true" data-tone={style?.tone}>
+      {style && <circle cx={3} cy={6} r={2} />}
+      <path d={style ? "M5 6H25" : "M2 6H25"} strokeDasharray={style?.dashed ? "3 2" : undefined} />
+      {end === "arrow" && <path d="M20 2l5 4-5 4" />}
+      {end === "bar" && <path d="M25 1.5v9" />}
+    </svg>
+  );
+}
+// ── /UXR ──

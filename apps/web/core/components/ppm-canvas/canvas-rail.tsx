@@ -1,23 +1,36 @@
 // AF2.1 R1 (line R): the grouped floating rail of design v2 (K1). Выбор, Рука | Стикер, Текст, Фигуры ▸, Перо, Рамка,
-// Связь | Документы и текст ▸, Из проекта ▸, Смысловые связи | Ещё ▸, Отменить, Повторить. Shortcut hints are the real
-// e.code keys handled in workspace.tsx (railShortcutCommand); menus: title, caption, items with a one-line hint.
-import { useEffect, useRef, useState, type FocusEvent } from "react";
+// Связь | Документы и текст ▸, Из проекта ▸ | Ещё ▸, Отменить, Повторить. Shortcut hints are the real e.code keys
+// handled in workspace.tsx (railShortcutCommand); menus: title, caption, items with a one-line hint.
+// UXR (2026-09-26): «Смысловые связи» left the rail (the list is a section of «Доска», a meaning is set on the arrow);
+// «Из проекта» is drawn with Import; every button shows a tooltip on hover and keyboard focus (name + real keys); a
+// submenu is marked by a chevron right of the icon instead of the corner triangle.
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   Archive,
   BookOpen,
+  ChevronRight,
   Code2,
   Columns3,
   FileText,
   Frame,
   GitPullRequest,
   Hand,
+  Import,
   LayoutGrid,
   Link,
   List,
   ListTodo,
   MapIcon,
   MousePointer2,
-  Network,
   NotebookText,
   PenTool,
   Redo2,
@@ -30,18 +43,21 @@ import {
   Table2,
   Type,
   Undo2,
-  Waypoints,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
+import type { TPpmTranslationKey } from "@ppm/brand";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { fillCanvasTemplate } from "./canvas-grammar";
 import type { TPpmCanvasRailProps } from "./canvas-rail-legacy";
 import {
+  isApplePlatform,
   isRailFocusLeavingRoot,
   PPM_RAIL_MENUS,
+  PPM_RAIL_TOOL_TIPS,
+  railKeysLabel,
+  railKeyShortcuts,
   railShortcutKey,
-  railShortcutLabel,
   visibleRailMenuItems,
   type TPpmGeo,
   type TPpmRailMenuId,
@@ -58,9 +74,21 @@ export type TPpmCanvasToolkitRailProps = TPpmCanvasRailProps & {
 const MENU_ICONS: Record<TPpmRailMenuId, LucideIcon> = {
   shapes: Shapes,
   docs: FileText,
-  project: Waypoints,
+  // UXR: «положить из проекта» — стрелка внутрь лотка (Import). Waypoints (три точки) не говорил, что внутри.
+  project: Import,
   more: SquarePlus,
 };
+
+// ── UXR: подсказка кнопки рейки — текст (название или «Название: что внутри») и настоящие клавиши ──
+type TRailHint = { text: string; keys?: string };
+type TRailTip = TRailHint & { top: number };
+type TRailTipEvent = ReactPointerEvent<HTMLButtonElement> | FocusEvent<HTMLButtonElement>;
+
+/** Escape hides the tooltip without moving the focus (WCAG 1.4.13: dismissible); e.code, as everywhere in AF2.1. */
+function hideTipOnEscape(event: ReactKeyboardEvent<HTMLButtonElement>, onTipEnd: () => void) {
+  if (event.code === "Escape") onTipEnd();
+}
+// ── /UXR ──
 
 const ITEM_ICONS: Partial<Record<TPpmCanvasCommand, LucideIcon>> = {
   "add-note": NotebookText,
@@ -88,6 +116,20 @@ export function PpmCanvasRail({ activeTool, canEdit, editReady, onDrawGeo, onRun
   const rootRef = useRef<HTMLDivElement>(null);
   const railRef = useRef<HTMLElement>(null);
   const triggerRefs = useRef<Partial<Record<TPpmRailMenuId, HTMLButtonElement | null>>>({});
+  // ── UXR: одна видимая подсказка на рейку (наведение, фокус с клавиатуры); описания меню — для чтения с экрана ──
+  const tipId = useId();
+  const [tip, setTip] = useState<TRailTip>();
+  const apple = useMemo(() => isApplePlatform(typeof navigator === "undefined" ? undefined : navigator.userAgent), []);
+  // Next to its button, outside the rail: the rail scrolls (overflow) and would clip a tooltip drawn inside it. A mouse
+  // or a pen shows it on hover; the keyboard — on :focus-visible, so a click (which may focus the button) does not.
+  const onTip = (event: TRailTipEvent, hint: TRailHint) => {
+    if (event.type === "focus" && !event.currentTarget.matches(":focus-visible")) return;
+    if ("pointerType" in event && event.pointerType === "touch") return;
+    const button = event.currentTarget;
+    setTip({ ...hint, top: button.offsetTop - (railRef.current?.scrollTop ?? 0) + button.offsetHeight / 2 });
+  };
+  const onTipEnd = () => setTip(undefined);
+  // ── /UXR ──
 
   useEffect(() => {
     if (!openMenu) return;
@@ -138,30 +180,41 @@ export function PpmCanvasRail({ activeTool, canEdit, editReady, onDrawGeo, onRun
     icon: LucideIcon,
     label: string,
     options: { disabled?: boolean; pressed?: boolean } = {}
-  ) => (
-    <RailTool
-      command={command}
-      disabled={options.disabled}
-      icon={icon}
-      label={label}
-      pressed={options.pressed}
-      onRun={(next) => {
-        setOpenMenu(undefined);
-        onRunCommand(next);
-      }}
-    />
-  );
+  ) => {
+    const tipKey = PPM_RAIL_TOOL_TIPS[command];
+    return (
+      <RailTool
+        command={command}
+        describedBy={tipKey ? `${tipId}-${command}` : undefined}
+        disabled={options.disabled}
+        hint={{ text: tipKey ? ppmT(tipKey) : label, keys: railKeysLabel(command, apple) }}
+        icon={icon}
+        label={label}
+        pressed={options.pressed}
+        onRun={(next) => {
+          setOpenMenu(undefined);
+          onRunCommand(next);
+        }}
+        onTip={onTip}
+        onTipEnd={onTipEnd}
+      />
+    );
+  };
 
   const trigger = (menu: TPpmRailMenuId, disabled = false) => (
     <RailMenuTrigger
       buttonRef={(element) => {
         triggerRefs.current[menu] = element;
       }}
+      describedBy={`${tipId}-${menu}`}
       disabled={disabled}
       expanded={openMenu === menu}
+      hint={{ text: ppmT(PPM_RAIL_MENUS[menu].tipKey) }}
       icon={MENU_ICONS[menu]}
       label={ppmT(PPM_RAIL_MENUS[menu].labelKey)}
       menu={menu}
+      onTip={onTip}
+      onTipEnd={onTipEnd}
       onToggle={() => setOpenMenu((current) => (current === menu ? undefined : menu))}
     />
   );
@@ -170,7 +223,13 @@ export function PpmCanvasRail({ activeTool, canEdit, editReady, onDrawGeo, onRun
 
   return (
     <div ref={rootRef} className="ppm-canvas-toolkit" onBlur={onRootBlur}>
-      <aside ref={railRef} className="ppm-canvas-toolkit-rail" aria-label={ppmT("canvas.rail.label")}>
+      <aside
+        ref={railRef}
+        className="ppm-canvas-toolkit-rail"
+        aria-label={ppmT("canvas.rail.label")}
+        onPointerLeave={onTipEnd}
+        onScroll={onTipEnd}
+      >
         {tool("select", MousePointer2, ppmT("canvas.rail.select"), { pressed: activeTool === "select" })}
         {tool("select-hand", Hand, ppmT("canvas.rail.hand"), { pressed: activeTool === "hand" })}
         {canEdit && (
@@ -196,7 +255,6 @@ export function PpmCanvasRail({ activeTool, canEdit, editReady, onDrawGeo, onRun
             {trigger("project", !editReady)}
           </>
         )}
-        {tool("open-semantic-edges", Network, ppmT("canvas.semantic_edges"))}
         <span className="ppm-canvas-toolkit-rail__divider" aria-hidden="true" />
         {trigger("more")}
         {canEdit && (
@@ -207,39 +265,72 @@ export function PpmCanvasRail({ activeTool, canEdit, editReady, onDrawGeo, onRun
         )}
       </aside>
       {openMenu && <RailMenu editReady={editReady} menu={openMenu} top={menuTop} onRun={runItem} />}
+      {/* ── UXR: подсказка (видна, пока нет открытого меню) и описания кнопок для чтения с экрана ── */}
+      {tip && !openMenu && (
+        <span className="ppm-canvas-toolkit-tip" aria-hidden="true" style={{ top: tip.top }}>
+          <span>{tip.text}</span>
+          {tip.keys && <kbd>{tip.keys}</kbd>}
+        </span>
+      )}
+      {(Object.keys(PPM_RAIL_MENUS) as TPpmRailMenuId[]).map((menu) => (
+        <span key={menu} id={`${tipId}-${menu}`} hidden>
+          {ppmT(PPM_RAIL_MENUS[menu].tipKey)}
+        </span>
+      ))}
+      {(Object.entries(PPM_RAIL_TOOL_TIPS) as [TPpmCanvasCommand, TPpmTranslationKey][]).map(([command, key]) => (
+        <span key={command} id={`${tipId}-${command}`} hidden>
+          {ppmT(key)}
+        </span>
+      ))}
+      {/* ── /UXR ── */}
     </div>
   );
 }
 
 function RailTool({
   command,
+  describedBy,
   disabled = false,
+  hint,
   icon: Icon,
   label,
   onRun,
+  onTip,
+  onTipEnd,
   pressed,
 }: {
   command: TPpmCanvasCommand;
+  describedBy?: string;
   disabled?: boolean;
+  hint: TRailHint;
   icon: LucideIcon;
   label: string;
   onRun: (command: TPpmCanvasCommand) => void;
+  onTip: (event: TRailTipEvent, hint: TRailHint) => void;
+  onTipEnd: () => void;
   pressed?: boolean;
 }) {
-  const ppmT = usePpmTranslation();
-  const shortcut = railShortcutLabel(command);
   const key = railShortcutKey(command);
+  // UXR: the tooltip (name + real keys) replaces the native title — both at once would draw two tooltips.
   return (
     <button
       type="button"
       className="ppm-canvas-toolkit-rail__tool"
-      aria-keyshortcuts={key}
+      aria-describedby={describedBy}
+      aria-keyshortcuts={railKeyShortcuts(command)}
       aria-label={label}
       aria-pressed={pressed}
       data-active={pressed || undefined}
       disabled={disabled}
-      title={shortcut ? fillCanvasTemplate(ppmT("canvas.rail.with_shortcut"), { keys: shortcut, label }) : label}
-      onClick={() => onRun(command)}
+      onBlur={onTipEnd}
+      onClick={() => {
+        onTipEnd();
+        onRun(command);
+      }}
+      onFocus={(event) => onTip(event, hint)}
+      onKeyDown={(event) => hideTipOnEscape(event, onTipEnd)}
+      onPointerEnter={(event) => onTip(event, hint)}
+      onPointerLeave={onTipEnd}
     >
       <Icon aria-hidden="true" />
       {key && <kbd aria-hidden="true">{key}</kbd>}
@@ -249,37 +340,55 @@ function RailTool({
 
 function RailMenuTrigger({
   buttonRef,
+  describedBy,
   disabled,
   expanded,
+  hint,
   icon: Icon,
   label,
   menu,
+  onTip,
+  onTipEnd,
   onToggle,
 }: {
   buttonRef: (element: HTMLButtonElement | null) => void;
+  describedBy: string;
   disabled: boolean;
   expanded: boolean;
+  hint: TRailHint;
   icon: LucideIcon;
   label: string;
   menu: TPpmRailMenuId;
+  onTip: (event: TRailTipEvent, hint: TRailHint) => void;
+  onTipEnd: () => void;
   onToggle: () => void;
 }) {
+  // UXR: a submenu is marked by a small chevron right of the icon, inside the button (the corner triangle read as
+  // belonging to the next button); the tooltip says what the menu holds.
   return (
     <button
       ref={buttonRef}
       type="button"
       className="ppm-canvas-toolkit-rail__tool"
+      aria-describedby={describedBy}
       aria-expanded={expanded}
       aria-haspopup="menu"
       aria-label={label}
       data-active={expanded || undefined}
       data-menu={menu}
       disabled={disabled}
-      title={label}
-      onClick={onToggle}
+      onBlur={onTipEnd}
+      onClick={() => {
+        onTipEnd();
+        onToggle();
+      }}
+      onFocus={(event) => onTip(event, hint)}
+      onKeyDown={(event) => hideTipOnEscape(event, onTipEnd)}
+      onPointerEnter={(event) => onTip(event, hint)}
+      onPointerLeave={onTipEnd}
     >
       <Icon aria-hidden="true" />
-      <span className="ppm-canvas-toolkit-rail__corner" aria-hidden="true" />
+      <ChevronRight className="ppm-canvas-toolkit-rail__chevron" aria-hidden="true" />
     </button>
   );
 }

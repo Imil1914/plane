@@ -1,6 +1,8 @@
 // AF2.1 · Инструменты Холста. Только новые ключи canvas.*; существующие ключи PPM_TRANSLATIONS не переопределяются
 // (дубликат — ошибка TS2783 в PPM_TRANSLATIONS). Блоки по линиям плана: F — палитра, R — рейка/фигуры/стили/«+»,
-// B — заметка/код/документ/список/файлы (ключи добавляет линия B). Линия пишет только в свой блок, en и ru вместе.
+// B — заметка/код/документ/список/файлы (ключи добавляет линия B); UXR (поток 2026-09-26) — подсказки рейки, «Смысл» у
+// стрелки, раздел связей панели «Доска» (canvas.uxr.*); RC-2 (линия B релиза) — авто-слияние совместных правок
+// (canvas.rc2.*). Линия пишет только в свой блок, en и ru вместе.
 export const AF21_CANVAS_TRANSLATIONS = {
   en: {
     // ── F: palette ──
@@ -224,6 +226,50 @@ export const AF21_CANVAS_TRANSLATIONS = {
     "canvas.rail.git_hint": "Opens the project's Code page — you can put an object on the canvas from there",
     "canvas.git_leave_saving": "Saving the board before opening the Code page…",
     "canvas.git_leave_unsaved": "The board is not saved yet — the Code page was not opened. Try again in a moment.",
+    // ── UXR: rail tooltips, «Meaning» of an arrow, the semantic connections section of «Board» ──
+    "canvas.uxr.tip_shapes": "Shapes: rectangle, diamond, oval and more — for flowcharts",
+    "canvas.uxr.tip_docs": "Documents and text: note, document, list, table, code, diagram",
+    "canvas.uxr.tip_project": "From the project: task, task board, file, Git object, document, sprint map",
+    "canvas.uxr.tip_more":
+      "More: find in project, tasks and backlog, link to a board, board panel — objects and semantic connections",
+    "canvas.uxr.tip_connection": "Connection: an arrow between objects — select it to give it a meaning",
+    "canvas.uxr.meaning": "Meaning",
+    "canvas.uxr.meaning_value": "Meaning: {name}",
+    "canvas.uxr.meaning_plain": "Just an arrow",
+    "canvas.uxr.meaning_caption": "A semantic connection replaces the arrow",
+    "canvas.uxr.meaning_saved": "Semantic connection “{relation}” saved",
+    "canvas.uxr.meaning_error": "Could not save the semantic connection — the arrow stays",
+    "canvas.uxr.meaning_undo": "Undo",
+    "canvas.uxr.meaning_undo_error": "Could not undo — the semantic connection stays",
+    "canvas.uxr.meaning_saving": "Saving the board…",
+    "canvas.uxr.meaning_unsaved": "The board could not be saved — the arrow stays. Try again in a moment.",
+    "canvas.uxr.meaning_readonly": "The board became read-only — no meaning was set, the arrow stays",
+    "canvas.uxr.meaning_readonly_saved":
+      "Semantic connection “{relation}” saved, but the board became read-only — the arrow stays",
+    "canvas.uxr.meaning_label_too_long":
+      "The arrow's text is longer than {limit} characters — shorten it to set a meaning. The arrow stays.",
+    "canvas.uxr.meaning_replace_error":
+      "The previous semantic connection was removed, but the new one could not be saved — the arrow stays",
+    "canvas.uxr.meaning_cleared": "Semantic connection removed — it is just an arrow again",
+    "canvas.uxr.links_unsaved": "The board is not saved yet — the connection was not created. Try again in a moment.",
+    "canvas.uxr.link_without_arrow": "Connect without an arrow…",
+    "canvas.uxr.links_hint":
+      "To connect two cards by meaning, select the arrow between them and choose “Meaning” in the toolbar above it.",
+    "canvas.uxr.card_missing": "The card is not on the board",
+    // ── RC-2: auto-merge of concurrent edits (AF1.2) — the copy label is written into the board in the user's language ──
+    "canvas.rc2.copy_label": "Conflict copy",
+    "canvas.rc2.local_copy":
+      "A teammate changed the same object at the same time: their version is kept, yours is next to it marked “{label}”.",
+    "canvas.rc2.remote_copy":
+      "A teammate changed the object you were editing: your version is kept, theirs is next to it marked “{label}”.",
+    "canvas.rc2.remote_wins":
+      "A teammate changed the same connection or card at the same time — their version is kept.",
+    "canvas.rc2.restored_local": "An object was changed by a teammate and restored — delete it again if needed.",
+    "canvas.rc2.restored_remote":
+      "A teammate deleted an object you were working with — it is kept. Delete it again if needed.",
+    "canvas.rc2.objects_count": "Objects: {count}.",
+    "canvas.rc2.postponed":
+      "A teammate changed the object you are editing. The changes will be merged when you finish editing.",
   },
   ru: {
     // ── F: palette ──
@@ -447,5 +493,48 @@ export const AF21_CANVAS_TRANSLATIONS = {
     "canvas.rail.git_hint": "Откроется страница кода проекта — оттуда объект можно положить на холст",
     "canvas.git_leave_saving": "Сохраняем доску перед переходом на страницу кода…",
     "canvas.git_leave_unsaved": "Доска ещё не сохранилась — страница кода не открыта. Повторите чуть позже.",
+    // ── UXR: подсказки рейки, «Смысл» у стрелки, раздел смысловых связей панели «Доска» ──
+    "canvas.uxr.tip_shapes": "Фигуры: прямоугольник, ромб, овал и другие — для блок-схем",
+    "canvas.uxr.tip_docs": "Документы и текст: заметка, документ, список, таблица, код, схема",
+    "canvas.uxr.tip_project": "Из проекта: задача, доска задач, файл, Git-объект, документ, карта спринта",
+    "canvas.uxr.tip_more":
+      "Ещё: найти в проекте, задачи и бэклог, ссылка на доску, панель доски — объекты и смысловые связи",
+    "canvas.uxr.tip_connection": "Связь: стрелка между объектами — выделите её, чтобы задать смысл",
+    "canvas.uxr.meaning": "Смысл",
+    "canvas.uxr.meaning_value": "Смысл: {name}",
+    "canvas.uxr.meaning_plain": "Просто стрелка",
+    "canvas.uxr.meaning_caption": "Смысловая связь заменит стрелку",
+    "canvas.uxr.meaning_saved": "Смысловая связь «{relation}» сохранена",
+    "canvas.uxr.meaning_error": "Не удалось сохранить смысловую связь — стрелка осталась на месте",
+    "canvas.uxr.meaning_undo": "Отменить",
+    "canvas.uxr.meaning_undo_error": "Не удалось отменить — смысловая связь осталась",
+    "canvas.uxr.meaning_saving": "Сохраняем доску…",
+    "canvas.uxr.meaning_unsaved": "Доска не сохранилась — стрелка осталась на месте. Повторите чуть позже.",
+    "canvas.uxr.meaning_readonly": "Доска стала только для чтения — смысл не задан, стрелка осталась на месте",
+    "canvas.uxr.meaning_readonly_saved":
+      "Смысловая связь «{relation}» сохранена, но доска стала только для чтения — стрелка осталась на месте",
+    "canvas.uxr.meaning_label_too_long":
+      "Подпись стрелки длиннее {limit} знаков — сократите её, чтобы задать смысл. Стрелка осталась на месте.",
+    "canvas.uxr.meaning_replace_error":
+      "Прежняя смысловая связь удалена, а новую сохранить не удалось — стрелка осталась на месте",
+    "canvas.uxr.meaning_cleared": "Смысловая связь удалена — это снова просто стрелка",
+    "canvas.uxr.links_unsaved": "Доска ещё не сохранилась — связь не создана. Повторите чуть позже.",
+    "canvas.uxr.link_without_arrow": "Связать без стрелки…",
+    "canvas.uxr.links_hint":
+      "Чтобы связать карточки по смыслу, выделите стрелку между ними и выберите «Смысл» в панели над ней.",
+    "canvas.uxr.card_missing": "Карточки нет на доске",
+    // ── RC-2: авто-слияние совместных правок (AF1.2) — метка копии пишется в доску на языке пользователя ──
+    "canvas.rc2.copy_label": "Конфликтная копия",
+    "canvas.rc2.local_copy":
+      "Коллега одновременно изменил тот же объект: сохранена его версия, ваша — рядом с пометкой «{label}».",
+    "canvas.rc2.remote_copy":
+      "Коллега изменил объект, который вы редактировали: ваша версия сохранена, его — рядом с пометкой «{label}».",
+    "canvas.rc2.remote_wins": "Коллега одновременно изменил ту же связь или карточку — оставлена его версия.",
+    "canvas.rc2.restored_local": "Объект изменён коллегой и восстановлен — удалите повторно при необходимости.",
+    "canvas.rc2.restored_remote":
+      "Коллега удалил объект, с которым вы работали, — он сохранён. Удалите его повторно при необходимости.",
+    "canvas.rc2.objects_count": "Объектов: {count}.",
+    "canvas.rc2.postponed":
+      "Коллега изменил объект, который вы сейчас редактируете. Правки объединятся, когда вы закончите редактирование.",
   },
 } as const;

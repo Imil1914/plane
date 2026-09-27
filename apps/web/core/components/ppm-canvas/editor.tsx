@@ -250,6 +250,32 @@ import { PpmTrafficLightToggle } from "./living-map/traffic-light-toggle";
 import { PpmChangesButton } from "./living-map/changes-button";
 import { PpmChangesPanel } from "./living-map/changes-panel";
 // ── /AF2.2 C ──
+// ── UXR: «Смысл» у обычной стрелки и раздел «Смысловые связи · N» панели «Доска» (облик v2) ──
+import {
+  applyArrowMeaning,
+  arrowMeaningLink,
+  arrowMeaningNotice,
+  undoArrowMeaning,
+  type TPpmArrowMeaningNotice,
+  type TPpmArrowMeaningSaved,
+  type TPpmArrowMeaningTarget,
+} from "./canvas-arrow-meaning";
+import { PpmSemanticLinksSection } from "./canvas-semantic-links";
+import type { TPpmSemanticSectionState } from "./semantic-edges-layer";
+// ── /UXR ──
+// ── RC-2: авто-слияние совместных правок вместо блокировки доски (inventory §3.3, AF1.2) ──
+import { canvasAutosaveDelayMs, isPpmCanvasAutomergeEnabled } from "./board-rebase";
+import {
+  PpmCanvasRebaseDriver,
+  applyOpenCanvasSession,
+  captureOpenCanvasSession,
+  focusedCardShapeId,
+  rememberOpenCanvasSession,
+  takeOpenCanvasSession,
+  type TPpmCanvasRebaseDriverDeps,
+} from "./board-rebase-driver";
+// ── /RC-2 ──
+
 // oxlint-disable-next-line import/no-unassigned-import -- tldraw owns the canvas interaction styles
 import "tldraw/tldraw.css";
 // oxlint-disable-next-line import/no-unassigned-import -- PPM theme is intentionally scoped to this route
@@ -262,6 +288,10 @@ import "./canvas-toolkit.css";
 import "./canvas-content.css";
 // oxlint-disable-next-line import/no-unassigned-import -- AF2.2: «Живая карта» — правая колонка, карта, светофор (v2 only)
 import "./living-map/living-map.css";
+
+// ── RC-2: флаг сборки PPM_CANVAS_AUTOMERGE (R-B2) — по умолчанию вкл.; «0/false/off» возвращает прежний ручной режим ──
+const PPM_CANVAS_AUTOMERGE = isPpmCanvasAutomergeEnabled(process.env.PPM_CANVAS_AUTOMERGE);
+// ── /RC-2 ──
 
 type TPpmCanvasEditorProps = {
   authorId: string;
@@ -456,6 +486,18 @@ export default function PpmCanvasEditor({
   const [initializationTick, setInitializationTick] = useState(0);
   const blockedRef = useRef(true);
   const editableRef = useRef(false);
+  // ── RC-2: состояние авто-слияния ──
+  // Решения склейки — в PpmCanvasRebaseDriver (board-rebase-driver.ts): объявленная версия, устаревшие сохранения
+  // подряд, ожидание конца правки. Его зависимости (чтение, сохранение, очереди, ссылки на версии, «под правкой», UI)
+  // обновляются на каждой отрисовке в основном блоке RC-2 ниже; сохранение обращается к нему через эту ссылку.
+  const rebaseDriverRef = useRef<PpmCanvasRebaseDriver>();
+  const participantsRef = useRef(0);
+  participantsRef.current = presence?.participants.length ?? 0;
+  const [mergeNotice, setMergeNotice] = useState<string>();
+  // D-4: the bindings map at the unmount (the pending ones go with the open session to the next mount in this page).
+  const bindingsByShapeIdRef = useRef(bindingsByShapeId);
+  bindingsByShapeIdRef.current = bindingsByShapeId;
+  // ── /RC-2 ──
   const recoveryScope = useMemo(
     () => ({ authorId, boardId, projectId, workspaceId }),
     [authorId, boardId, projectId, workspaceId]
@@ -538,6 +580,9 @@ export default function PpmCanvasEditor({
   const flushSave = useCallback(async () => {
     const activeEditor = editorRef.current;
     if (!activeEditor || !editableRef.current || blockedRef.current || savingRef.current) return;
+    // ── RC-2: склейка ждёт конца правки фигуры, которую изменил коллега, — сохранение ждёт её (черновик — в хранилище) ──
+    if (PPM_CANVAS_AUTOMERGE && rebaseDriverRef.current?.isPostponed()) return;
+    // ── /RC-2 ──
     if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     retryTimerRef.current = undefined;
 
@@ -554,6 +599,9 @@ export default function PpmCanvasEditor({
         dirtyRef.current = false;
         clearRecoveryDraft();
         setSyncStatus("saved");
+        // ── RC-2: сохранять нечего — но коллега мог сохранить новее, пока шла склейка или сохранение (I1) ──
+        if (PPM_CANVAS_AUTOMERGE) void rebaseDriverRef.current?.onSaveSettled(false);
+        // ── /RC-2 ──
         return;
       }
       pending = {
@@ -613,8 +661,28 @@ export default function PpmCanvasEditor({
       else clearRecoveryDraft();
       setSyncStatus("saved");
       if (completion === "save_again") scheduleSaveRef.current();
+      // ── RC-2: сохранение прошло — счёт устаревших сохранений с нуля; коллега мог сохранить новее, пока шло наше ──
+      if (PPM_CANVAS_AUTOMERGE) void rebaseDriverRef.current?.onSaveSettled(true);
+      // ── /RC-2 ──
     } catch (error) {
       savingRef.current = false;
+      // ── RC-2: устаревшая база (409 CANVAS_VERSION_CONFLICT) — не конфликт: склейка с сохранённой версией и новое
+      // сохранение (решает PpmCanvasRebaseDriver.onVersionConflict: операции привязок — назад в очередь, ≤ 3 раз подряд с
+      // джиттером, затем ручной режим). Прочие 409 — прежний путь ниже. ──
+      const rebaseDriver = rebaseDriverRef.current;
+      if (
+        PPM_CANVAS_AUTOMERGE &&
+        rebaseDriver &&
+        error instanceof PpmCanvasServiceError &&
+        error.status === 409 &&
+        error.code === "CANVAS_VERSION_CONFLICT" &&
+        !remoteConflictRef.current
+      ) {
+        resetSaveRetry();
+        await rebaseDriver.onVersionConflict(pending, error.details.current_version);
+        return;
+      }
+      // ── /RC-2 ──
       if (error instanceof PpmCanvasServiceError && error.status === 409) {
         resetSaveRetry();
         conflictBindingChangesRef.current =
@@ -660,9 +728,227 @@ export default function PpmCanvasEditor({
     setSyncStatus("saving");
     queueRecoveryDraft();
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => void flushSave(), PPM_CANVAS_AUTOSAVE_DELAY_MS);
+    // ── RC-2: с коллегой на доске пауза автосохранения ~2 с — меньше цепочек 409 у двух печатающих (R-B6) ──
+    const delay = PPM_CANVAS_AUTOMERGE
+      ? canvasAutosaveDelayMs(participantsRef.current, PPM_CANVAS_AUTOSAVE_DELAY_MS)
+      : PPM_CANVAS_AUTOSAVE_DELAY_MS;
+    // ── /RC-2 ──
+    saveTimerRef.current = setTimeout(() => void flushSave(), delay);
   }, [flushSave, queueRecoveryDraft]);
   scheduleSaveRef.current = scheduleSave;
+
+  // ── RC-2: склейка открытой доски с сохранённой версией (§3.3, шаги 2–5) и запасной ручной режим ──
+  // Запасной путь — прежний режим конфликта: черновик с операциями привязок, доска только для чтения, ручная склейка.
+  // Сюда ведут нарушение, которое склейка не чинит, и четвёртое устаревшее сохранение подряд (R-B5, R-B6).
+  const enterManualConflict = useCallback(async () => {
+    resetSaveRetry();
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    if (recoveryTimerRef.current) clearTimeout(recoveryTimerRef.current);
+    persistRecoveryDraft();
+    const pending = pendingSaveRef.current;
+    const activations = [
+      ...new Set([...(pending?.binding_changes.activate ?? []), ...queuedBindingActivationsRef.current]),
+    ];
+    conflictBindingChangesRef.current =
+      activations.length > 0 ||
+      Boolean(pending?.binding_changes.remove.length) ||
+      queuedBindingRemovalsRef.current.size > 0;
+    pendingSaveRef.current = undefined;
+    queuedBindingActivationsRef.current.clear();
+    queuedBindingRemovalsRef.current.clear();
+    dirtyRef.current = false;
+    rebaseDriverRef.current?.reset();
+    blockedRef.current = true;
+    remoteConflictRef.current = true;
+    editableRef.current = false;
+    editorRef.current?.updateInstanceState({ isReadonly: true });
+    setEffectiveCanEdit(false);
+    setMergeNotice(undefined);
+    setSyncStatus("conflict");
+    await Promise.all(
+      activations.map((bindingId) =>
+        service.cancelPendingBinding(workspaceId, projectId, boardId, bindingId).catch(() => undefined)
+      )
+    );
+  }, [boardId, persistRecoveryDraft, projectId, resetSaveRetry, service, workspaceId]);
+
+  // Смысловые связи не приходят по realtime-каналу: сохранение коллеги перечитывает их, как прежний reload.
+  const refreshSemanticEdgesAfterMerge = useCallback(() => {
+    const request = ++semanticEdgesRequestRef.current;
+    void service.getSemanticEdges(workspaceId, projectId, boardId).then(
+      (response) =>
+        setSemanticEdges((current) =>
+          request !== semanticEdgesRequestRef.current || sameSemanticEdges(current, response.semantic_edges)
+            ? current
+            : response.semantic_edges
+        ),
+      () => undefined
+    );
+  }, [boardId, projectId, service, workspaceId]);
+
+  // Без своих правок терять нечего: то, что склейка не берёт (снимок более нового клиента, потерянный доступ,
+  // повреждённая версия), загружается прежним чистым reload — с тем же исходом, что до RC-2.
+  const reloadFromRemote = useCallback(
+    (remoteCanvas: Parameters<TPpmCanvasRebaseDriverDeps["reloadFromRemote"]>[0]) => {
+      const activeEditor = editorRef.current;
+      if (!activeEditor) return;
+      if (remoteCanvas.version < versionRef.current) {
+        setSyncStatus("error");
+        return;
+      }
+      versionRef.current = remoteCanvas.version;
+      rebaseDriverRef.current?.noteKnownVersion(remoteCanvas.version);
+      setSavedAt(remoteCanvas.saved_at);
+      baselineSnapshotRef.current = remoteCanvas.snapshot;
+      if (remoteCanvas.snapshot_status === "corrupt") {
+        blockedRef.current = true;
+        editableRef.current = false;
+        activeEditor.updateInstanceState({ isReadonly: true });
+        setEffectiveCanEdit(false);
+        setSyncStatus("corrupt");
+        return;
+      }
+      applyingRemoteRef.current = true;
+      try {
+        if (remoteCanvas.snapshot_status === "ready" && remoteCanvas.snapshot)
+          activeEditor.loadSnapshot(remoteCanvas.snapshot as unknown as Partial<TLEditorSnapshot>);
+        activeEditor.clearHistory();
+      } catch {
+        setSyncStatus("error");
+        return;
+      } finally {
+        applyingRemoteRef.current = false;
+      }
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      dirtyRef.current = false;
+      setBindingsByShapeId(new Map(remoteCanvas.bindings.map((binding) => [binding.shape_id, binding])));
+      setWorkItemOptions(remoteCanvas.work_item_options);
+      setProjectionErrors(new Map());
+      refreshSemanticEdgesAfterMerge();
+      const mayEdit = canEdit && remoteCanvas.access === "edit";
+      blockedRef.current = !mayEdit;
+      editableRef.current = mayEdit;
+      setEffectiveCanEdit(mayEdit);
+      activeEditor.updateInstanceState({ isReadonly: !mayEdit });
+      setSyncStatus("saved");
+    },
+    [canEdit, refreshSemanticEdgesAfterMerge]
+  );
+
+  // «Под правкой» — режим правки tldraw и карточка, в поле которой стоит фокус ввода (облик v1 и часть видов v2 правят
+  // текст без режима правки tldraw): склейка не трогает такую фигуру, пока фокус не уйдёт (I2).
+  const protectedShapeIds = useCallback((): string[] => {
+    const activeEditor = editorRef.current;
+    if (!activeEditor) return [];
+    const ids = [
+      activeEditor.getEditingShapeId(),
+      focusedCardShapeId(document.activeElement, activeEditor.getContainer()),
+    ];
+    return ids.filter((id): id is NonNullable<typeof id> => Boolean(id));
+  }, []);
+
+  // Зависимости драйвера склейки — на каждой отрисовке свежие (ссылки те же, что у сохранения; строки — на языке
+  // пользователя, метка копии пишется в доску на нём же).
+  const rebaseDriverDeps: TPpmCanvasRebaseDriverDeps = {
+    approveRemoval: (shapeId) => approvedProjectionDeletesRef.current.add(shapeId as TLShapeId),
+    authorId,
+    canEdit,
+    cancelPendingBinding: (bindingId) => service.cancelPendingBinding(workspaceId, projectId, boardId, bindingId),
+    clearNotice: (text) => setMergeNotice((current) => (current === text ? undefined : current)),
+    clearSaveTimer: () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    },
+    createShapeId: () => createShapeId(),
+    editor: () => editorRef.current,
+    enabled: PPM_CANVAS_AUTOMERGE,
+    enterManualConflict,
+    isRetryableError: (error) => error instanceof PpmCanvasServiceError && shouldRetryCanvasSave(error.status),
+    maxBytes: MAX_CANVAS_IMPORT_SNAPSHOT_BYTES,
+    now: () => new Date().toISOString(),
+    onApplied: (remote) => {
+      setSavedAt(remote.saved_at);
+      // Bindings still waiting for activation stay in the map: the live queue (after the rebase's drops) says which.
+      const unsavedBindingIds = new Set([
+        ...queuedBindingActivationsRef.current,
+        ...(pendingSaveRef.current?.binding_changes.activate ?? []),
+      ]);
+      setBindingsByShapeId((current) => mergeRefreshedBindings(current, remote.bindings, unsavedBindingIds));
+      setWorkItemOptions(remote.work_item_options);
+      refreshSemanticEdgesAfterMerge();
+    },
+    onNotice: setMergeNotice,
+    onStatus: setSyncStatus,
+    protectedShapeIds,
+    random: Math.random,
+    read: () => service.getBoard(workspaceId, projectId, boardId),
+    refs: {
+      baseline: baselineSnapshotRef,
+      blocked: blockedRef,
+      dirty: dirtyRef,
+      editable: editableRef,
+      generation: mergeGenerationRef,
+      initialized: initializedRef,
+      pendingSave: pendingSaveRef,
+      queuedActivations: queuedBindingActivationsRef,
+      queuedRemovals: queuedBindingRemovalsRef,
+      remoteConflict: remoteConflictRef,
+      saving: savingRef,
+      version: versionRef,
+    },
+    reloadFromRemote,
+    save: () => flushSaveRef.current(),
+    scheduleRetry: (run) => {
+      if (retryTimerRef.current) return;
+      const delay = canvasSaveRetryDelayMs(retryAttemptRef.current);
+      retryAttemptRef.current += 1;
+      retryTimerRef.current = setTimeout(() => {
+        retryTimerRef.current = undefined;
+        run();
+      }, delay);
+    },
+    sleep: (ms) =>
+      new Promise<void>((resolve) => {
+        window.setTimeout(resolve, ms);
+      }),
+    strings: {
+      copyLabel: ppmT("canvas.rc2.copy_label"),
+      localCopy: ppmT("canvas.rc2.local_copy"),
+      objectsCount: ppmT("canvas.rc2.objects_count"),
+      postponed: ppmT("canvas.rc2.postponed"),
+      remoteCopy: ppmT("canvas.rc2.remote_copy"),
+      remoteWins: ppmT("canvas.rc2.remote_wins"),
+      restoredLocal: ppmT("canvas.rc2.restored_local"),
+      restoredRemote: ppmT("canvas.rc2.restored_remote"),
+    },
+    withdrawApproval: (shapeId) => approvedProjectionDeletesRef.current.delete(shapeId as TLShapeId),
+  };
+  rebaseDriverRef.current ??= new PpmCanvasRebaseDriver(rebaseDriverDeps);
+  rebaseDriverRef.current.deps = rebaseDriverDeps;
+
+  // Склейка, отложенная до конца правки: режим правки tldraw — это состояние сессии стора, фокус поля карточки — DOM
+  // (focusout контейнера редактора; активный элемент читается после смены фокуса).
+  useEffect(() => {
+    if (!editor || !PPM_CANVAS_AUTOMERGE) return;
+    const check = () => {
+      if (editorRef.current === editor) void rebaseDriverRef.current?.onEditingMaybeEnded();
+    };
+    const stopListening = editor.store.listen(
+      () => {
+        if (rebaseDriverRef.current?.isPostponed()) check();
+      },
+      { scope: "session" }
+    );
+    const container = editor.getContainer();
+    const onFocusOut = () => {
+      if (rebaseDriverRef.current?.isPostponed()) window.setTimeout(check, 0);
+    };
+    container.addEventListener("focusout", onFocusOut);
+    return () => {
+      stopListening();
+      container.removeEventListener("focusout", onFocusOut);
+    };
+  }, [editor]);
+  // ── /RC-2 ──
 
   const createContentProjectionShape = useCallback(
     async (binding: TPpmCanvasContentBinding, pagePoint?: { x: number; y: number }) => {
@@ -784,6 +1070,10 @@ export default function PpmCanvasEditor({
     mergeBusyRef.current = false;
     initializedRef.current = false;
     versionRef.current = 0;
+    // ── RC-2: новая сессия доски — склейка с чистого листа ──
+    rebaseDriverRef.current?.reset();
+    setMergeNotice(undefined);
+    // ── /RC-2 ──
     setSavedAt(null);
     setCopiedLocal(false);
     setImportError(false);
@@ -803,6 +1093,14 @@ export default function PpmCanvasEditor({
     setSyncStatus("loading");
     editor.updateInstanceState({ isReadonly: true });
 
+    // ── RC-2: D-4 — the key of this board's open session in the page registry ──
+    const openSessionKey = [
+      recoveryScope.workspaceId,
+      recoveryScope.projectId,
+      recoveryScope.boardId,
+      recoveryScope.authorId,
+    ].join(":");
+    // ── /RC-2 ──
     const initialize = async () => {
       try {
         const remoteCanvas = await service.getBoard(workspaceId, projectId, boardId);
@@ -878,8 +1176,29 @@ export default function PpmCanvasEditor({
           // oxlint-disable-next-line unicorn/no-array-sort -- filter already returns a new array.
           .sort((left, right) => right.draft.saved_at.localeCompare(left.draft.saved_at));
         if (!mayEdit && sessionStorage) clearCanvasRecoveryDraft(sessionStorage, recoveryScope);
-        setRecoveryCandidates(availableCandidates);
-        const selectedCandidate = availableCandidates[0];
+        // ── RC-2: D-4 — the canvas mounted again in the same page (Plane's spinner on reconnect, a re-render above), not
+        // after a reload: the open session of this board continues — its own draft is not offered for the manual
+        // recovery; the live document, base, unacknowledged save (its own ID) and queues come back and the save goes on
+        // through the rebase driver. After a reload the registry is empty: drafts stay manual (§3.3 point 7). ──
+        const openSession = PPM_CANVAS_AUTOMERGE
+          ? takeOpenCanvasSession(
+              openSessionKey,
+              availableCandidates.map((candidate) => candidate.key),
+              (draftId) => durableCanvasRecoveryKey(recoveryScope, draftId)
+            )
+          : undefined;
+        const resumedSession = mayEdit && rebaseDriverRef.current ? openSession : undefined;
+        if (resumedSession && rebaseDriverRef.current) {
+          applyOpenCanvasSession(editor, rebaseDriverRef.current.deps.refs, resumedSession);
+          durableRecoveryIdRef.current = resumedSession.draftId;
+          setBindingsByShapeId(
+            (current) => new Map([...current, ...(resumedSession.bindings as [string, TPpmCanvasBinding][])])
+          );
+        }
+        const recoveryChoices = resumedSession ? [] : availableCandidates;
+        setRecoveryCandidates(recoveryChoices);
+        const selectedCandidate = recoveryChoices[0];
+        // ── /RC-2 ──
         setSelectedRecoveryKey(selectedCandidate?.key);
         setRecoveryDraft(selectedCandidate?.draft);
         const recovery = selectedCandidate
@@ -897,6 +1216,13 @@ export default function PpmCanvasEditor({
         }
         initializedRef.current = true;
         setInitializationTick((current) => current + 1);
+        // ── RC-2: D-4 — the continued session saves right away: the unacknowledged save is replayed with its own ID
+        // (a 409 goes to the rebase driver like any stale save) ──
+        if (resumedSession) {
+          setSyncStatus("saving");
+          void flushSaveRef.current();
+        }
+        // ── /RC-2 ──
       } catch (error) {
         if (!active) return;
         if (error instanceof PpmCanvasServiceError && (error.status === 403 || error.status === 404))
@@ -908,6 +1234,29 @@ export default function PpmCanvasEditor({
 
     return () => {
       active = false;
+      // ── RC-2: D-4 — the canvas unmounts in the same page: the open session is remembered for the next mount of this
+      // board in this page (its draft is written as before; after a reload the registry is empty) ──
+      const driverRefs = rebaseDriverRef.current?.deps.refs;
+      const openSession =
+        PPM_CANVAS_AUTOMERGE && driverRefs
+          ? captureOpenCanvasSession(
+              editor,
+              driverRefs,
+              () => {
+                persistRecoveryDraft();
+                return durableRecoveryIdRef.current;
+              },
+              () => {
+                const pending = new Set([
+                  ...queuedBindingActivationsRef.current,
+                  ...(pendingSaveRef.current?.binding_changes.activate ?? []),
+                ]);
+                return [...bindingsByShapeIdRef.current].filter(([, binding]) => pending.has(binding.binding_id));
+              }
+            )
+          : undefined;
+      if (openSession) rememberOpenCanvasSession(openSessionKey, openSession);
+      // ── /RC-2 ──
       initializedRef.current = false;
       stopListening?.();
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -959,6 +1308,10 @@ export default function PpmCanvasEditor({
       change?.version ?? 0,
       presence?.boardVersion?.board_id === boardId ? presence.boardVersion.version : 0
     );
+    // ── RC-2: самая новая известная версия (не уменьшается) — по ней сохранение и склейка, закончившись, решают, нужна
+    // ли ещё одна склейка ──
+    if (PPM_CANVAS_AUTOMERGE && initializedRef.current) rebaseDriverRef.current?.noteKnownVersion(knownVersion);
+    // ── /RC-2 ──
     if (
       !editor ||
       !initializedRef.current ||
@@ -984,6 +1337,15 @@ export default function PpmCanvasEditor({
       pendingOperationId: pendingSaveRef.current?.client_operation_id,
     });
     if (action === "ignore") return;
+    // ── RC-2: чужое сохранение — ни «конфликта», ни read-only: склейка со своими правками, без них — тихое применение
+    // (R-B3: через mergeRemoteChanges, undo не сбрасывается). Идёт сохранение или склейка — они, закончившись, сами
+    // сверятся с известной версией; правка фигуры, которую изменил коллега, — склейка после её конца. Читатель (доска
+    // только для чтения) своих правок не имеет — у него прежний reload ниже. ──
+    if (PPM_CANVAS_AUTOMERGE && editableRef.current && !blockedRef.current) {
+      void rebaseDriverRef.current?.onRemoteSave(knownVersion);
+      return;
+    }
+    // ── /RC-2 ──
 
     if (action === "conflict") {
       resetSaveRetry();
@@ -2687,6 +3049,9 @@ export default function PpmCanvasEditor({
       });
       semanticEdgesRequestRef.current += 1;
       setSemanticEdges((current) => [...current.filter((item) => item.edge_id !== edge.edge_id), edge]);
+      // ── UXR: «Смысл» у стрелки — «Отменить» удаляет именно эту связь ──
+      return edge;
+      // ── /UXR ──
     },
     [boardId, projectId, service, workspaceId]
   );
@@ -2717,14 +3082,175 @@ export default function PpmCanvasEditor({
     setBoardInfoOpen((open) => !open);
   }, []);
 
+  // ── UXR: раздел «Смысловые связи · N» панели «Доска» и «Смысл» у обычной стрелки (облик v2) ──
+  // Состояние раздела живёт здесь, а не в оверлее: CanvasControls пересобирается при автосохранении и открытии «Доски»,
+  // а раздел должен оставаться развёрнутым, форма — раскрытой. До CanvasControls оно доходит через контекст связей.
+  const [semanticSectionOpen, setSemanticSectionOpen] = useState(false);
+  const [semanticFormOpen, setSemanticFormOpen] = useState(false);
+  const [semanticFocusTick, setSemanticFocusTick] = useState(0);
+  const semanticSectionFocusRef = useRef(false);
+  const semanticSectionShownRef = useRef(false);
+  semanticSectionShownRef.current = boardInfoOpen && semanticSectionOpen;
+  // Палитра «Смысловые связи», «Все связи» инспектора и чип связи открывают «Доску» на этом разделе. Фокус уходит в
+  // раздел один раз — когда он появляется; уже показанный раздел (как прежняя панель) фокус с холста не забирает.
+  const openSemanticSection = useCallback(() => {
+    const shown = semanticSectionShownRef.current;
+    setBoardInfoOpen(true);
+    setSemanticSectionOpen(true);
+    if (shown) return;
+    semanticSectionFocusRef.current = true;
+    setSemanticFocusTick((tick) => tick + 1);
+  }, []);
+  // Рецензия, раунд 1 (I1): сервер принимает связь только между карточками сохранённой доски — перед созданием связи
+  // доска сохраняется тем же flushSave, что и автосохранение (как «Git-объект»); onWait — «Сохраняем доску…».
+  const settleBoardSave = useCallback(
+    (onWait?: () => void) =>
+      settleCanvasSave({
+        flush: () => flushSaveRef.current(),
+        hasUnsaved: () => dirtyRef.current || Boolean(pendingSaveRef.current),
+        isSaving: () => savingRef.current,
+        onWait,
+        sleep: (ms) =>
+          new Promise<void>((resolve) => {
+            window.setTimeout(resolve, ms);
+          }),
+      }),
+    []
+  );
+  const semanticSection = useMemo<TPpmSemanticSectionState>(
+    () => ({
+      focusRef: semanticSectionFocusRef,
+      focusTick: semanticFocusTick,
+      formOpen: semanticFormOpen,
+      open: semanticSectionOpen,
+      setFormOpen: setSemanticFormOpen,
+      setOpen: (open: boolean) => {
+        setSemanticSectionOpen(open);
+        if (!open) setFocusedEdgeId(undefined);
+      },
+      settleSave: settleBoardSave,
+    }),
+    [semanticFocusTick, semanticFormOpen, semanticSectionOpen, settleBoardSave]
+  );
+
+  // «Смысл»: стрелка между карточками → смысловая связь существующим путём (createSemanticEdge), стрелка уходит одним
+  // шагом истории; уведомление с «Отменить». Одно уведомление за раз: новое уведомление содержимого (B1) заменяет это,
+  // это — прежнее.
+  type TMeaningNotice = TPpmArrowMeaningNotice & { busy?: boolean };
+  const [meaningNotice, setMeaningNotice] = useState<TMeaningNotice>();
+  const meaningBusyRef = useRef(new Set<string>());
+  // Рецензия, раунд 1 (I2): какой связью стала стрелка в этой сессии (id стрелки → id связи). ⌘Z возвращает стрелку, а
+  // связь остаётся: выбор показывает её тип, другой тип заменяет её (удалить → создать), «Просто стрелка» — удаляет.
+  const [arrowLinks, setArrowLinks] = useState<ReadonlyMap<string, string>>(() => new Map());
+  const arrowLinksRef = useRef(arrowLinks);
+  arrowLinksRef.current = arrowLinks;
+  const semanticEdgesRef = useRef(semanticEdges);
+  semanticEdgesRef.current = semanticEdges;
+  const linkArrow = useCallback((arrowId: string, edgeId: string | undefined) => {
+    setArrowLinks((current) => {
+      if (current.get(arrowId) === edgeId) return current;
+      const next = new Map(current);
+      if (edgeId) next.set(arrowId, edgeId);
+      else next.delete(arrowId);
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    if (contentNotice) setMeaningNotice(undefined);
+  }, [contentNotice]);
+  const showMeaningNotice = useCallback((notice: TMeaningNotice) => {
+    setContentNotice(undefined);
+    setMeaningNotice(notice);
+  }, []);
+  const setArrowMeaning = useCallback(
+    (target: TPpmArrowMeaningTarget, relation: TPpmCanvasSemanticRelationType | undefined) => {
+      const activeEditor = editorRef.current;
+      // Только тот, кто может править доску сейчас; повторный выбор у той же стрелки ждёт ответа сервера.
+      if (!activeEditor || !editableRef.current || meaningBusyRef.current.has(target.arrowId)) return;
+      meaningBusyRef.current.add(target.arrowId);
+      // Выбор с клавиатуры сделан в панели над выделением. Стрелка ушла — фокус на холст; осталась (сбой, отказ, «Просто
+      // стрелка») — панель на месте, фокус возвращается на «Смысл» (рецензия, раунд 1, M4).
+      const fromToolbar =
+        document.activeElement instanceof HTMLElement &&
+        Boolean(document.activeElement.closest(".ppm-canvas-style-toolbar"));
+      const restoreFocus = (arrowGone: boolean) => {
+        if (!fromToolbar) return;
+        const picker = activeEditor.getContainer().querySelector<HTMLElement>(".ppm-canvas-style-toolbar__meaning");
+        if (arrowGone || !picker) activeEditor.getContainer().focus();
+        else picker.focus();
+      };
+      const current = arrowMeaningLink(target, semanticEdgesRef.current, arrowLinksRef.current);
+      void (async () => {
+        try {
+          const outcome = await applyArrowMeaning(activeEditor, target, relation, current, {
+            canEdit: () => editableRef.current,
+            create: createSemanticEdge,
+            remove: deleteSemanticEdge,
+            settleSave: () => settleBoardSave(() => showMeaningNotice({ text: ppmT("canvas.uxr.meaning_saving") })),
+          });
+          // Память сессии идёт за связью: новая — запоминается, удалённая — забывается.
+          const madeEdge = outcome.status === "saved" || outcome.status === "readonly" ? outcome.edge : undefined;
+          if (madeEdge) linkArrow(target.arrowId, madeEdge.edge_id);
+          else if (outcome.status === "cleared" || (outcome.status === "error" && outcome.previousRemoved))
+            linkArrow(target.arrowId, undefined);
+          const notice = arrowMeaningNotice(outcome, relation ? ppmT(SEMANTIC_RELATION_LABELS[relation]) : "", ppmT);
+          if (notice) showMeaningNotice(notice);
+          restoreFocus(outcome.status === "saved" && Boolean(outcome.removed));
+        } catch {
+          // Неожиданное (не отказ сервера — те разобраны выше): честно и без «Отменить».
+          showMeaningNotice({ text: ppmT("canvas.semantic_edges_error") });
+          restoreFocus(false);
+        } finally {
+          meaningBusyRef.current.delete(target.arrowId);
+        }
+      })();
+    },
+    [createSemanticEdge, deleteSemanticEdge, linkArrow, ppmT, settleBoardSave, showMeaningNotice]
+  );
+  const undoMeaning = useCallback(
+    (saved: TPpmArrowMeaningSaved) => {
+      const activeEditor = editorRef.current;
+      if (!activeEditor || !editableRef.current) {
+        showMeaningNotice({ text: ppmT("canvas.uxr.meaning_undo_error") });
+        return;
+      }
+      // «Отменить» нажат с клавиатуры: уведомление уйдёт — фокус на холст, где выделена вернувшаяся стрелка.
+      const fromNotice =
+        document.activeElement instanceof HTMLElement &&
+        Boolean(document.activeElement.closest('[data-ppm-notice="meaning"]'));
+      setMeaningNotice((current) => (current?.saved === saved ? { ...current, busy: true } : current));
+      void (async () => {
+        try {
+          if (!(await undoArrowMeaning(activeEditor, saved, deleteSemanticEdge))) {
+            showMeaningNotice({ text: ppmT("canvas.uxr.meaning_undo_error") });
+            return;
+          }
+          linkArrow(saved.arrowId, undefined);
+          setMeaningNotice((current) => (current?.saved === saved ? undefined : current));
+          if (fromNotice) activeEditor.getContainer().focus();
+        } catch {
+          showMeaningNotice({ text: ppmT("canvas.semantic_edges_error") });
+        }
+      })();
+    },
+    [deleteSemanticEdge, linkArrow, ppmT, showMeaningNotice]
+  );
+  // ── /UXR ──
+
   const openSemanticPanel = useCallback(() => {
+    // ── UXR: под v2 список связей — раздел панели «Доска»; отдельная панель-оверлей больше не открывается ──
+    if (grammarV2) {
+      openSemanticSection();
+      return;
+    }
+    // ── /UXR ──
     // Focus moves into the panel once, when it opens; later overlay remounts must not steal focus from the canvas.
     // Opening an already open panel (a chip click) must not raise the flag for the next remount either.
     if (semanticPanelOpenRef.current) return;
     semanticPanelOpenRef.current = true;
     semanticPanelFocusRef.current = true;
     setSemanticPanelOpen(true);
-  }, []);
+  }, [grammarV2, openSemanticSection]);
   const closeSemanticPanel = useCallback(() => {
     setFocusedEdgeId(undefined);
     const focusInPanel =
@@ -2742,8 +3268,17 @@ export default function PpmCanvasEditor({
     [openSemanticPanel]
   );
   const semanticLayerValue = useMemo(
-    () => ({ edges: semanticEdges, enabled: grammarV2, onOpenEdge: openSemanticEdge }),
-    [grammarV2, openSemanticEdge, semanticEdges]
+    () => ({
+      edges: semanticEdges,
+      enabled: grammarV2,
+      onOpenEdge: openSemanticEdge,
+      // ── UXR: «Смысл» у стрелки (панель над выделением) и раздел «Доски» — только облик v2 ──
+      onSetArrowMeaning: grammarV2 ? setArrowMeaning : undefined,
+      arrowLinks: grammarV2 ? arrowLinks : undefined,
+      section: grammarV2 ? semanticSection : undefined,
+      // ── /UXR ──
+    }),
+    [arrowLinks, grammarV2, openSemanticEdge, semanticEdges, semanticSection, setArrowMeaning]
   );
 
   // ── AF2.1 B: <Tldraw onMount> seam — line B registers paste/drop/⌘U handlers here (v2 grammar only). ──
@@ -2912,7 +3447,9 @@ export default function PpmCanvasEditor({
           onToolChange={onToolChange}
           statusPlacement={statusPlacement}
           syncStatus={syncStatus}
-          semanticEdges={semanticEdges}
+          // ── UXR: список связей CanvasControls берёт из PpmSemanticEdgesContext, не пропсом: новая, удалённая или
+          // подтверждённая связь больше не пересобирает оверлей (фокус и раскрытые разделы «Доски» остаются) ──
+          // ── /UXR ──
           semanticPanelFocusRef={semanticPanelFocusRef}
           semanticPanelOpen={semanticPanelOpen}
           recoveryMode={recoveryDraft ? recoveryMode : undefined}
@@ -2966,7 +3503,8 @@ export default function PpmCanvasEditor({
       selectRecoveryDraft,
       reviewSemanticEdge,
       searchWorkItems,
-      semanticEdges,
+      // ── UXR: semanticEdges — не зависимость оверлея (список приходит контекстом) ──
+      // ── /UXR ──
       semanticPanelOpen,
       statusPlacement,
       syncStatus,
@@ -3333,6 +3871,21 @@ export default function PpmCanvasEditor({
           onUpdate={(shapeId, binding, patch) => void updateWorkItemProjection(shapeId, binding, patch)}
         />
       )}
+      {/* ── RC-2: неблокирующее уведомление авто-слияния (любой облик; внизу по центру — справа внизу живут уведомления
+          содержимого и «Смысла») ── */}
+      {mergeNotice && (
+        <div className="ppm-canvas-merge-notice" data-ppm-notice="merge" role="status">
+          <span>{mergeNotice}</span>
+          <button
+            type="button"
+            aria-label={ppmT("canvas.content_notice_close")}
+            onClick={() => setMergeNotice(undefined)}
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
+      )}
+      {/* ── /RC-2 ── */}
       {fileDropNotice && (
         <div className="ppm-canvas-file-drop-notice" role="status">
           <span>{ppmT("canvas.file_drop_placeholder")}</span>
@@ -3368,6 +3921,33 @@ export default function PpmCanvasEditor({
         </div>
       )}
       {/* ── /AF2.1 B ── */}
+      {/* ── UXR: «Смысловая связь «…» сохранена» с «Отменить» (связь удаляется, стрелка возвращается); сбой — стрелка
+          на месте. Место и вид — уведомления содержимого, одно из двух за раз. ── */}
+      {grammarV2 && meaningNotice && (
+        <div className="ppm-canvas-content-notice" data-ppm-notice="meaning" role="status">
+          <span>{meaningNotice.text}</span>
+          {meaningNotice.saved && (
+            <button
+              type="button"
+              className="ppm-canvas-meaning-notice__undo"
+              disabled={meaningNotice.busy}
+              onClick={() => {
+                if (meaningNotice.saved) undoMeaning(meaningNotice.saved);
+              }}
+            >
+              {ppmT("canvas.uxr.meaning_undo")}
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label={ppmT("canvas.content_notice_close")}
+            onClick={() => setMeaningNotice(undefined)}
+          >
+            <X aria-hidden="true" />
+          </button>
+        </div>
+      )}
+      {/* ── /UXR ── */}
       {/* ── AF2.1 B: (B3) «Документ PPM» — поиск существующих документов ── */}
       {grammarV2 && pagePickerOpen && (
         <PpmCanvasPagePicker
@@ -3574,7 +4154,6 @@ function CanvasControls({
   onToolChange,
   onOpenSemanticPanel,
   onCloseSemanticPanel,
-  semanticEdges,
   semanticPanelFocusRef,
   semanticPanelOpen,
   recoveryMode,
@@ -3604,12 +4183,14 @@ function CanvasControls({
   onCopyLocal: () => void;
   onPreviewMerge: () => void;
   onConfirmMerge: () => void;
+  // ── UXR: createSemanticEdge возвращает созданную связь («Смысл» у стрелки); форме результат не нужен ──
   onCreateSemanticEdge: (
     fromShapeId: string,
     toShapeId: string,
     relationType: TPpmCanvasSemanticRelationType,
     label: string
-  ) => Promise<void>;
+  ) => Promise<unknown>;
+  // ── /UXR ──
   onCreateWorkItem: (name: string) => Promise<void>;
   onDeleteSemanticEdge: (edgeId: string) => Promise<void>;
   onReviewSemanticEdge: (edgeId: string, confirmationStatus: "confirmed" | "rejected") => Promise<void>;
@@ -3634,7 +4215,6 @@ function CanvasControls({
   onToolChange?: (boardId: string, toolId: string) => void;
   onOpenSemanticPanel: () => void;
   onCloseSemanticPanel: () => void;
-  semanticEdges: TPpmCanvasSemanticEdge[];
   semanticPanelFocusRef: { current: boolean };
   semanticPanelOpen: boolean;
   recoveryMode?: "restore" | "export_only";
@@ -3652,6 +4232,10 @@ function CanvasControls({
   const contentActions = useContext(PpmCanvasContentActionsContext);
   // AF2.1 B (final): «Из проекта → Файл/Git-объект» — выбор файла и переход живут в PpmCanvasEditor, как у B3.
   const projectSources = useContext(PpmCanvasProjectSourcesContext);
+  // ── UXR: список связей и раздел «Доски» — из контекста (не пропсы): связь не пересобирает оверлей ──
+  const semanticLinks = useContext(PpmSemanticEdgesContext);
+  const semanticEdges = semanticLinks.edges;
+  // ── /UXR ──
   const [pickerOpen, setPickerOpen] = useState(false);
   const [boardPickerOpen, setBoardPickerOpen] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -4128,6 +4712,21 @@ function CanvasControls({
           {desktopImportResult}
           {importErrorNotice}
           {objectsList}
+          {/* ── UXR: раздел «Смысловые связи · N» (облик v2) — список переехал сюда из панели-оверлея ── */}
+          {grammarV2 && semanticLinks.section && (
+            <PpmSemanticLinksSection
+              bindingsByShapeId={projectionContext.bindingsByShapeId}
+              canEdit={canEdit}
+              edges={semanticEdges}
+              nodes={nodes}
+              section={semanticLinks.section}
+              selectedShapeIds={selectedShapeIds}
+              onCreate={onCreateSemanticEdge}
+              onDelete={onDeleteSemanticEdge}
+              onReview={onReviewSemanticEdge}
+            />
+          )}
+          {/* ── /UXR ── */}
         </section>
       )}
     </div>
@@ -4175,7 +4774,8 @@ function CanvasControls({
           title={ppmT("canvas.tasks_panel")}
         />
       )}
-      {semanticPanelOpen && (
+      {/* ── UXR: панель-оверлей — только облик v1; под v2 список — раздел панели «Доска» ── */}
+      {semanticPanelOpen && !grammarV2 && (
         <SemanticEdgesPanel
           canEdit={canEdit}
           designV2={designV2}
@@ -4189,6 +4789,7 @@ function CanvasControls({
           onReview={onReviewSemanticEdge}
         />
       )}
+      {/* ── /UXR ── */}
 
       {statusPlacement === "card" ? (
         <aside className="ppm-canvas-status" aria-live="polite">
@@ -4613,7 +5214,8 @@ function SemanticEdgesPanel({
 }: {
   canEdit: boolean;
   designV2: boolean;
-  edges: TPpmCanvasSemanticEdge[];
+  // ── UXR: список приходит из PpmSemanticEdgesContext (только чтение); создание возвращает связь (результат не нужен) ──
+  edges: readonly TPpmCanvasSemanticEdge[];
   focusOnMountRef: { current: boolean };
   nodes: { parsed: ReturnType<typeof parseSerializedPpmCanvasNode>; shape: TPpmCanvasShape }[];
   onClose: () => void;
@@ -4622,7 +5224,8 @@ function SemanticEdgesPanel({
     toShapeId: string,
     relationType: TPpmCanvasSemanticRelationType,
     label: string
-  ) => Promise<void>;
+  ) => Promise<unknown>;
+  // ── /UXR ──
   onDelete: (edgeId: string) => Promise<void>;
   onReview: (edgeId: string, confirmationStatus: "confirmed" | "rejected") => Promise<void>;
   selectedShapeIds: TLShapeId[];

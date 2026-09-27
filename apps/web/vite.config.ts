@@ -19,6 +19,8 @@ viteEnv.PPM_ANTYFLOW_SHELL_ENABLED = process.env.PPM_ANTYFLOW_SHELL_ENABLED ?? "
 viteEnv.PPM_SHELL_ENABLED = process.env.PPM_SHELL_ENABLED ?? "1";
 viteEnv.PPM_PROJECT_ASK_ENABLED = process.env.PPM_PROJECT_ASK_ENABLED ?? "0";
 viteEnv.PPM_DESIGN_V2 = process.env.PPM_DESIGN_V2 ?? "1";
+// RC-2 (AF1.2): the Canvas auto-merges concurrent edits per object; "0" restores the manual conflict mode.
+viteEnv.PPM_CANVAS_AUTOMERGE = process.env.PPM_CANVAS_AUTOMERGE ?? "1";
 
 export default defineConfig(() => ({
   define: {

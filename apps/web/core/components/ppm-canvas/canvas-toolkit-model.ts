@@ -34,6 +34,35 @@ export function railShortcutKey(command: TPpmCanvasCommand): string | undefined 
   return PPM_RAIL_SHORTCUTS.find((item) => item.command === command)?.latin;
 }
 
+// ── UXR: подсказки рейки — название и настоящие клавиши (свои буквы рейки; отменить/повторить — клавиши tldraw) ──
+/** tldraw's own undo/redo keys (actions.tsx: 'cmd+z,ctrl+z', 'cmd+shift+z,ctrl+shift+z'), as the platform writes them. */
+const RAIL_COMBOS: Partial<Record<TPpmCanvasCommand, { apple: string; other: string; aria: string }>> = {
+  undo: { apple: "⌘Z", other: "Ctrl+Z", aria: "Control+Z Meta+Z" },
+  redo: { apple: "⇧⌘Z", other: "Ctrl+Shift+Z", aria: "Control+Shift+Z Meta+Shift+Z" },
+};
+
+/** The keys a rail tooltip shows: «V / М» for the rail's letters, ⌘Z / Ctrl+Z for undo and redo; none otherwise. */
+export function railKeysLabel(command: TPpmCanvasCommand, apple: boolean): string | undefined {
+  const combo = RAIL_COMBOS[command];
+  return railShortcutLabel(command) ?? (combo ? (apple ? combo.apple : combo.other) : undefined);
+}
+
+/** `aria-keyshortcuts` of a rail button (WAI-ARIA names; alternatives separated by a space). */
+export function railKeyShortcuts(command: TPpmCanvasCommand): string | undefined {
+  return railShortcutKey(command) ?? RAIL_COMBOS[command]?.aria;
+}
+
+/** ⌘ on Apple keyboards, Ctrl elsewhere (tldraw's `cmd` and `ctrl` both work; the tooltip names the one you have). */
+export function isApplePlatform(platform: string | undefined): boolean {
+  return /Mac|iPhone|iPad|iPod/i.test(platform ?? "");
+}
+
+/** Tools whose tooltip says more than the name: the connection tool tells where its meaning is set (UXR §1). */
+export const PPM_RAIL_TOOL_TIPS: Partial<Record<TPpmCanvasCommand, TPpmTranslationKey>> = {
+  "draw-connection": "canvas.uxr.tip_connection",
+};
+// ── /UXR ──
+
 /** Only a bare key press is a tool shortcut: Shift/Ctrl/Alt/Meta combinations belong to other commands. */
 export function railShortcutCommand(event: {
   altKey: boolean;
@@ -94,6 +123,8 @@ export type TPpmRailMenu = {
   id: TPpmRailMenuId;
   labelKey: TPpmTranslationKey;
   captionKey: TPpmTranslationKey;
+  /** UXR: the trigger's tooltip — «Название: что внутри» (the owner could not find what is where). */
+  tipKey: TPpmTranslationKey;
   layout: "grid" | "list";
   items: readonly TPpmRailMenuItem[];
 };
@@ -103,6 +134,7 @@ export const PPM_RAIL_MENUS: Readonly<Record<TPpmRailMenuId, TPpmRailMenu>> = {
     id: "shapes",
     labelKey: "canvas.rail.shapes",
     captionKey: "canvas.rail.shapes_caption",
+    tipKey: "canvas.uxr.tip_shapes",
     layout: "grid",
     items: PPM_GEO_SHAPES.map(({ geo, labelKey }) => ({ command: "draw-geo" as const, geo, labelKey })),
   },
@@ -110,6 +142,7 @@ export const PPM_RAIL_MENUS: Readonly<Record<TPpmRailMenuId, TPpmRailMenu>> = {
     id: "docs",
     labelKey: "canvas.rail.docs",
     captionKey: "canvas.rail.docs_caption",
+    tipKey: "canvas.uxr.tip_docs",
     layout: "list",
     items: [
       { command: "add-note", labelKey: "canvas.rail.note", hintKey: "canvas.rail.note_hint" },
@@ -124,6 +157,7 @@ export const PPM_RAIL_MENUS: Readonly<Record<TPpmRailMenuId, TPpmRailMenu>> = {
     id: "project",
     labelKey: "canvas.rail.project",
     captionKey: "canvas.rail.project_caption",
+    tipKey: "canvas.uxr.tip_project",
     layout: "list",
     items: [
       { command: "add-work-item", labelKey: "canvas.rail.work_item", sourceKey: "canvas.rail.source_tasks" },
@@ -154,6 +188,7 @@ export const PPM_RAIL_MENUS: Readonly<Record<TPpmRailMenuId, TPpmRailMenu>> = {
     id: "more",
     labelKey: "canvas.rail.more",
     captionKey: "canvas.rail.more_caption",
+    tipKey: "canvas.uxr.tip_more",
     layout: "list",
     items: [
       { command: "open-find", labelKey: "canvas.rail.find", readOnly: true },
