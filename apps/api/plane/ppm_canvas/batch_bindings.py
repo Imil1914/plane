@@ -34,6 +34,7 @@ from .services import (
     serialize_missing_work_item,
     serialize_work_item,
 )
+from .work_item_version import current_assignees_prefetch
 
 
 def batch_client_operation_id(*, board_id, shape_id, entity_type, entity_id):
@@ -121,12 +122,14 @@ def create_bindings_batch(*, board, project, user, access, items):
             )
         # Видимость всех задач пакета — один запрос (та же функция, что у одиночной привязки); роль для правила
         # ограниченного гостя — один запрос, если в пакете есть страницы.
+        # RC-F1: версия источника задачи (`work_item_source_version`) читает текущих исполнителей — одним запросом
+        # на пакет, а не запросом на пункт.
         visible_work_items = (
             {
                 issue.id: issue
-                for issue in get_visible_work_items(project=project, user=user, include_inactive=False).filter(
-                    id__in=work_item_ids
-                )
+                for issue in get_visible_work_items(project=project, user=user, include_inactive=False)
+                .filter(id__in=work_item_ids)
+                .prefetch_related(current_assignees_prefetch())
             }
             if work_item_ids
             else {}
@@ -212,7 +215,7 @@ def serialize_bindings(*, bindings, access, user, project, restricted_guest=None
             get_visible_work_items(project=project, user=user, include_inactive=True)
             .filter(id__in=work_item_ids)
             .select_related("project", "workspace", "state")
-            .prefetch_related("assignees")
+            .prefetch_related(current_assignees_prefetch())
         )
         issues_by_id = {issue.id: issue for issue in issues}
     if restricted_guest is None and any(binding.entity_type == PpmCanvasEntityType.PAGE for binding in bindings):

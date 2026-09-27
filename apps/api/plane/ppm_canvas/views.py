@@ -96,6 +96,7 @@ from .services import (
     update_work_item,
 )
 from .work_item_boards import get_work_item_boards
+from .work_item_version import current_assignees
 
 
 logger = logging.getLogger("plane.api")
@@ -1453,7 +1454,9 @@ def _plane_issue_audit_data(issue):
         "state_id": str(issue.state_id) if issue.state_id else None,
         "priority": issue.priority,
         "target_date": issue.target_date,
-        "assignee_ids": [str(assignee_id) for assignee_id in issue.assignees.values_list("id", flat=True)],
+        # RC-F1: текущие исполнители (без мягко удалённых строк IssueAssignee) — иначе журнал Plane считал бы
+        # снятого ранее исполнителя «удалённым» ещё раз.
+        "assignee_ids": [str(assignee.id) for assignee in current_assignees(issue)],
     }
 
 

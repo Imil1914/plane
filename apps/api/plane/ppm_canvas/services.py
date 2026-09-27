@@ -42,6 +42,12 @@ from .schema import (
     canvas_snapshot_shape_ids,
     validate_canvas_snapshot,
 )
+from .work_item_version import (
+    current_assignees,
+    current_assignees_prefetch,
+    work_item_source_version,
+    work_item_version_matches,
+)
 
 
 @dataclass(frozen=True)
@@ -262,7 +268,7 @@ def search_work_items(*, project, user, query, cursor, limit):
     queryset = (
         get_visible_work_items(project=project, user=user)
         .select_related("project", "workspace", "state")
-        .prefetch_related("assignees")
+        .prefetch_related(current_assignees_prefetch())
     )
     if query:
         filters = Q(name__icontains=query)
@@ -313,7 +319,11 @@ def get_work_items_view_queryset(*, project, user, filters):
     if filters["priorities"]:
         queryset = queryset.filter(priority__in=filters["priorities"])
     if filters["assignee_ids"]:
-        queryset = queryset.filter(assignees__id__in=filters["assignee_ids"]).distinct()
+        # RC-F1: только текущие исполнители — Plane снимает исполнителя мягким удалением строки IssueAssignee.
+        queryset = queryset.filter(
+            issue_assignee__assignee_id__in=filters["assignee_ids"],
+            issue_assignee__deleted_at__isnull=True,
+        ).distinct()
     return queryset
 
 
@@ -355,7 +365,7 @@ def get_work_items_view(*, project, user, filters):
     validate_work_items_view_scope(project=project, filters=filters)
     filtered = get_work_items_view_queryset(project=project, user=user, filters=filters)
     summary = summarize_work_items_view(filtered)
-    queryset = filtered.select_related("project", "workspace", "state").prefetch_related("assignees")
+    queryset = filtered.select_related("project", "workspace", "state").prefetch_related(current_assignees_prefetch())
     ordering = WORK_ITEMS_VIEW_SORTS[filters["sort"]]
     page = list(queryset.order_by(*ordering)[filters["cursor"] : filters["cursor"] + filters["limit"] + 1])
     has_more = len(page) > filters["limit"]
@@ -449,7 +459,7 @@ def export_work_items_csv(*, project, user, filters):
     queryset = (
         get_work_items_view_queryset(project=project, user=user, filters=filters)
         .select_related("project", "workspace", "state")
-        .prefetch_related("assignees")
+        .prefetch_related(current_assignees_prefetch())
         .order_by("sequence_id", "id")
     )
     stream = io.StringIO(newline="")
@@ -461,7 +471,7 @@ def export_work_items_csv(*, project, user, filters):
             or " ".join(part for part in (assignee.first_name, assignee.last_name) if part).strip()
             or assignee.email
             or "Участник"
-            for assignee in issue.assignees.all()
+            for assignee in current_assignees(issue)
         )
         writer.writerow(
             (
@@ -529,14 +539,14 @@ def get_work_item(*, project, user, entity_id, include_inactive=True):
     return (
         get_visible_work_items(project=project, user=user, include_inactive=include_inactive)
         .select_related("project", "workspace", "state")
-        .prefetch_related("assignees")
+        .prefetch_related(current_assignees_prefetch())
         .filter(id=entity_id)
         .first()
     )
 
 
-def work_item_source_version(issue):
-    return issue.updated_at.isoformat()
+# RC-F1 (D-2): версия источника задачи — `work_item_version.work_item_source_version` (отпечаток полей, а не
+# `updated_at`); предусловие правки — `work_item_version_matches`.
 
 
 def serialize_work_item(*, issue, access):
@@ -556,6 +566,7 @@ def serialize_work_item(*, issue, access):
             "group": issue.state.group,
             "color": issue.state.color,
         }
+    assignee_users = current_assignees(issue)
     assignees = [
         {
             "id": str(assignee.id),
@@ -565,7 +576,7 @@ def serialize_work_item(*, issue, access):
             or "Участник",
             "avatar_url": assignee.avatar_url or None,
         }
-        for assignee in issue.assignees.all()
+        for assignee in assignee_users
     ]
     return {
         "identity": {
@@ -590,7 +601,7 @@ def serialize_work_item(*, issue, access):
             "delete_source": False,
             "editable_fields": ["state_id", "priority", "assignee_ids", "due_date"] if can_update else [],
         },
-        "source_version": work_item_source_version(issue),
+        "source_version": work_item_source_version(issue, assignee_ids=[user.id for user in assignee_users]),
     }
 
 
@@ -1095,7 +1106,7 @@ def get_canvas_bindings_payload(*, board, access, user):
             get_visible_work_items(project=project, user=user, include_inactive=True)
             .filter(id__in=work_item_ids)
             .select_related("project", "workspace", "state")
-            .prefetch_related("assignees")
+            .prefetch_related(current_assignees_prefetch())
         )
         issues_by_id = {issue.id: issue for issue in issues}
     payload = []
@@ -1526,7 +1537,11 @@ def update_work_item(*, project, user, entity_id, validated_data):
                 details={"source_version": work_item_source_version(issue)},
             )
         current_version = work_item_source_version(issue)
-        if validated_data["source_version"] != current_version:
+        # RC-F1 (D-2): конфликт — только если поля карточки изменили в другом месте; `updated_at`, который двигает
+        # журнал активности Plane, в версию не входит. Версия-время старого формата — правило R-F1d (модуль версии).
+        if not work_item_version_matches(
+            validated_data["source_version"], issue=issue, current_version=current_version
+        ):
             raise PpmProjectionConflict(
                 code="WORK_ITEM_VERSION_CONFLICT",
                 message="Задача была изменена в другом представлении.",

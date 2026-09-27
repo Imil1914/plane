@@ -5,6 +5,11 @@ from dataclasses import dataclass
 from django.conf import settings
 
 from plane.db.models import Issue
+from plane.ppm_canvas.work_item_version import (
+    current_assignees,
+    current_assignees_prefetch,
+    work_item_source_version,
+)
 from plane.ppm_git.models import (
     PpmGitCodeFile,
     PpmGitCodeSnapshotStatus,
@@ -88,7 +93,7 @@ def vault_path(entry):
 def load_work_item(*, workspace_id, project_id, source_id):
     issue = (
         Issue.objects.select_related("project", "state")
-        .prefetch_related("assignees")
+        .prefetch_related(current_assignees_prefetch())
         .filter(
             id=source_id,
             workspace_id=workspace_id,
@@ -101,9 +106,11 @@ def load_work_item(*, workspace_id, project_id, source_id):
     if issue is None:
         raise PpmBrainSourceDeleted(code="SOURCE_NOT_FOUND", message="Задача не найдена.")
     identifier = f"{issue.project.identifier}-{issue.sequence_id}"
-    assignees = ", ".join(
-        filter(None, ((user.get_full_name() or user.email or user.username) for user in issue.assignees.all()))
-    )
+    # RC-F1 (D-1): у `plane.db.models.User` нет `get_full_name()` (есть свойство `full_name`) — вызов ронял индексацию
+    # и через сигнал `on_commit` сохранение любой задачи с исполнителем (500). Исполнители — текущие (без мягко
+    # удалённых строк IssueAssignee), как на карточке Холста.
+    assignee_users = current_assignees(issue)
+    assignees = ", ".join(filter(None, (user.full_name or user.display_name or user.email for user in assignee_users)))
     body = "\n".join(
         filter(
             None,
@@ -122,7 +129,9 @@ def load_work_item(*, workspace_id, project_id, source_id):
     return SourceDocument(
         source_type=PpmKnowledgeSourceType.WORK_ITEM,
         source_id=str(issue.id),
-        source_version=issue.updated_at.isoformat(),
+        # RC-F1 (D-2): та же версия, что у карточки Холста (отпечаток полей и описания, а не `updated_at`, который
+        # двигает журнал активности Plane) — клиентское «изменился после поиска» сравнивает их строкой.
+        source_version=work_item_source_version(issue, assignee_ids=[user.id for user in assignee_users]),
         title=f"{identifier} · {issue.name}",
         parts=(
             SourcePart(
