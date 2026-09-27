@@ -61,6 +61,11 @@ let ownerContext: BrowserContext;
 let ownerPage: Page;
 let demo: DemoIds;
 
+// RC-1: the browser gate runs system Chrome through the chromium engine, like the AF1.2 specs.
+if (process.env.PPM_E2E_BROWSER_CHANNEL) {
+  test.use({ launchOptions: { channel: process.env.PPM_E2E_BROWSER_CHANNEL } });
+}
+
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required for the PPM demo browser gate.`);
@@ -72,6 +77,12 @@ function roleCredentials(role: DemoRole) {
     email: requiredEnv(`PPM_DEMO_${role}_EMAIL`),
     password: requiredEnv(`PPM_DEMO_${role}_PASSWORD`),
   };
+}
+
+// RC-1: API calls go to the API origin. The browser gate serves web and API on different ports; behind the RC
+// proxy they share one origin, and PPM_E2E_API_BASE_URL may stay unset.
+function apiUrl(path: string) {
+  return new URL(path, process.env.PPM_E2E_API_BASE_URL?.trim() || requiredEnv("PPM_E2E_BASE_URL")).href;
 }
 
 async function jsonResponse<T>(response: APIResponse, label: string): Promise<T> {
@@ -89,10 +100,16 @@ async function login(page: Page, role: DemoRole) {
   await page.locator("#password").fill(credentials.password);
   await page.getByRole("button", { name: /Продолжить|Открыть пространство/ }).click();
   await expect
-    .poll(async () => (await page.request.get("/api/users/me/")).status(), {
+    .poll(async () => (await page.request.get(apiUrl("/api/users/me/"))).status(), {
       timeout: 30_000,
     })
     .toBe(200);
+  // RC-1 (lane G): the password form is a native POST answered by a redirect to "/" once the session cookie is set;
+  // the app then routes on to the workspace. A page.goto racing that redirect or the landing page's own start-up
+  // navigation is aborted (Firefox NS_BINDING_ABORTED / NS_ERROR_FAILURE, WebKit "interrupted by another
+  // navigation"), so wait until the app has left "/" (where the sign-in form also lives) and has settled.
+  await page.waitForURL((url) => url.pathname !== "/" && !url.pathname.startsWith("/sign-in"));
+  await page.waitForLoadState("networkidle");
 }
 
 async function createRoleContext(browser: Browser, role: DemoRole) {
@@ -110,8 +127,9 @@ async function createRoleContext(browser: Browser, role: DemoRole) {
 }
 
 async function discoverDemo(page: Page): Promise<DemoIds> {
-  const workspaceSlug = requiredEnv("PPM_E2E_WORKSPACE_SLUG");
-  const response = await page.request.get(`/api/workspaces/${workspaceSlug}/projects/`);
+  // RC-1: the browser gate seeds its own ROBOT/BIO space (seed_ppm_demo_gate) next to the AF1.2 fixture workspace.
+  const workspaceSlug = process.env.PPM_DEMO_WORKSPACE_SLUG?.trim() || requiredEnv("PPM_E2E_WORKSPACE_SLUG");
+  const response = await page.request.get(apiUrl(`/api/workspaces/${workspaceSlug}/projects/`));
   const payload = await jsonResponse<DemoProject[] | { results: DemoProject[] }>(response, "Project discovery");
   const projects = Array.isArray(payload) ? payload : payload.results;
   const robot = projects.find((project) => project.identifier.toUpperCase() === "ROBOT");
@@ -132,7 +150,7 @@ function projectPath(projectId: string, section: "brain" | "knowledge" | "overvi
 }
 
 function ppmApi(projectId: string, suffix: string) {
-  return `/api/ppm/v1/workspaces/${demo.workspaceId}/projects/${projectId}/${suffix}`;
+  return apiUrl(`/api/ppm/v1/workspaces/${demo.workspaceId}/projects/${projectId}/${suffix}`);
 }
 
 async function getCanvas(page: Page, projectId = demo.robotProjectId) {
@@ -172,7 +190,11 @@ async function drawConnection(page: Page) {
   const workItemBox = await workItemCard.boundingBox();
   if (!noteBox || !workItemBox) throw new Error("Canvas nodes must be visible before drawing a connection.");
 
-  await page.getByRole("button", { name: "Нарисовать визуальную связь", exact: true }).click();
+  // AF2.1: the v2 rail tool «Связь» (canvas-rail.tsx, canvas.rail.connection) arms tldraw's arrow tool.
+  await page
+    .getByRole("complementary", { name: "Инструменты холста" })
+    .getByRole("button", { name: "Связь", exact: true })
+    .click();
   await page.mouse.move(noteBox.x + noteBox.width - 4, noteBox.y + noteBox.height / 2);
   await page.mouse.down();
   await page.mouse.move(workItemBox.x + 4, workItemBox.y + workItemBox.height / 2, { steps: 12 });
@@ -213,14 +235,19 @@ function canvasRecords(canvas: CanvasResponse) {
   return Object.values(canvas.snapshot?.document.store ?? {});
 }
 
+// The Brain titles a Work Item source "ROBOT-12 · <name>"; Vault files keep their own name.
+function isSourceFor(source: { title: string }, title: string) {
+  return source.title === title || source.title.endsWith(` · ${title}`);
+}
+
 async function waitForReadySources(page: Page, expectedTitles: string[]) {
-  const overviewUrl = ppmApi(demo.robotProjectId, "brain/");
+  const overviewUrl = ppmApi(demo.robotProjectId, "knowledge/sources/");
   await expect
     .poll(
       async () => {
         const overview = await jsonResponse<BrainOverview>(await page.request.get(overviewUrl), "Brain overview");
         return expectedTitles.every((title) =>
-          overview.sources.some((source) => source.title === title && source.index_state === "ready")
+          overview.sources.some((source) => isSourceFor(source, title) && source.index_state === "ready")
         );
       },
       {
@@ -231,7 +258,9 @@ async function waitForReadySources(page: Page, expectedTitles: string[]) {
     .toBe(true);
 }
 
-test.describe.serial("PPM demo D0 browser release gate", () => {
+// RC-1: not serial — a failing scenario must not hide the independent ones after it. With one worker the tests still
+// run in file order; after a failure Playwright starts a new worker and beforeAll signs the owner in again.
+test.describe("PPM demo D0 browser release gate", () => {
   test.beforeAll(async ({ browser }) => {
     ownerContext = await browser.newContext({
       baseURL: requiredEnv("PPM_E2E_BASE_URL"),
@@ -269,7 +298,8 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
     ).toBeVisible();
     await expect(ownerPage.locator("html")).toHaveAttribute("lang", "ru");
     await expect(ownerPage.locator('meta[name="application-name"]')).toHaveAttribute("content", "PPM");
-    await expect(ownerPage.locator("main")).not.toContainText(/\bPlane\b/);
+    // The app shell renders its own <main> around the page's <main>; the outer one covers the whole screen.
+    await expect(ownerPage.locator("main").first()).not.toContainText(/\bPlane\b/);
     await screenshot(ownerPage, testInfo, "e1-overview-dark");
 
     await ownerPage.goto("/about/open-source");
@@ -291,8 +321,10 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
   });
 
   test("E2-E7: Work Item, Canvas, Vault, PDF, and grounded Ask Project", async ({ browser: _ }, testInfo) => {
+    // Canvas, Vault and a Brain index round trip (up to 120 s) in one scenario.
+    test.setTimeout(300_000);
     await ownerPage.goto(projectPath(demo.robotProjectId, "brain"));
-    await expect(ownerPage.getByRole("main", { name: "Мозг проекта" })).toBeVisible();
+    await expect(ownerPage.getByRole("main", { name: "Холст проекта" })).toBeVisible();
     const initialCanvas = await getCanvas(ownerPage);
 
     await ownerPage.getByRole("button", { name: "Документы и текст", exact: true }).click();
@@ -320,6 +352,23 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
     const workItemCard = ownerPage.locator(".ppm-work-item-card").filter({ hasText: workItemTitle });
     await expect(workItemCard).toBeVisible();
 
+    // RC-1 regression for the RC-F1 fixes, with the gate's Celery worker running. D-1: a Work Item with an assignee
+    // used to crash its save (500) and its Brain indexing — assign the seeded ROBOT member from the card. D-2: the card
+    // version was the Work Item's updated_at, which the worker's issue_activity moves right after every change, so a
+    // second change from the same card load got 409 and silently reverted — change the status twice, the second time
+    // only after the worker has logged the first change.
+    // The card shows up before its binding is saved with the board.
+    const boundWorkItemId = async () =>
+      (await getCanvas(ownerPage)).bindings.find((item) => item.source.display.title === workItemTitle)?.entity_id;
+    await expect.poll(boundWorkItemId, { message: "The new Work Item is not bound to the Canvas" }).toBeTruthy();
+    const workItemId = await boundWorkItemId();
+    if (!workItemId) throw new Error("The new Work Item is not bound to the Canvas.");
+    const assigneeSelect = workItemCard.getByLabel("Исполнители");
+    const teammateId = await assigneeSelect.locator("option", { hasText: "Участник ROBOT" }).getAttribute("value");
+    if (!teammateId) throw new Error("The seeded ROBOT member is not offered as an assignee.");
+    await assigneeSelect.selectOption([teammateId]);
+    await expect(assigneeSelect).toHaveValues([teammateId]);
+
     const stateSelect = workItemCard.getByLabel("Статус");
     const initialState = await stateSelect.inputValue();
     const states = await stateSelect.locator("option").evaluateAll((options) =>
@@ -328,10 +377,31 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
         value: (option as HTMLOptionElement).value,
       }))
     );
-    const targetState = states.find((state) => state.value && state.value !== initialState);
-    if (!targetState) throw new Error("The demo project must have at least two workflow states for E2.");
+    const [firstState, targetState] = states.filter((state) => state.value && state.value !== initialState);
+    if (!firstState || !targetState) throw new Error("The demo project must have at least three workflow states.");
+    await stateSelect.selectOption(firstState.value);
+    await expect(stateSelect).toHaveValue(firstState.value);
+    const historyUrl = apiUrl(
+      `/api/workspaces/${demo.workspaceSlug}/projects/${demo.robotProjectId}/issues/${workItemId}/history/?activity_type=issue-property`
+    );
+    await expect
+      .poll(
+        async () =>
+          (
+            await jsonResponse<Array<{ field?: string | null }>>(await ownerPage.request.get(historyUrl), "History")
+          ).some((activity) => activity.field === "state"),
+        { message: "The Celery worker did not log the first status change", timeout: 30_000 }
+      )
+      .toBe(true);
     await stateSelect.selectOption(targetState.value);
     await expect(stateSelect).toHaveValue(targetState.value);
+    await expect
+      .poll(
+        async () =>
+          (await getCanvas(ownerPage)).bindings.find((item) => item.entity_id === workItemId)?.source.display.state?.id,
+        { message: "The second status change from the same card was not saved" }
+      )
+      .toBe(targetState.value);
 
     const noteCardBeforeDrag = ownerPage.locator(".ppm-canvas-node--note").filter({ hasText: noteMarker });
     const noteBox = await noteCardBeforeDrag.boundingBox();
@@ -393,12 +463,18 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
       .click();
 
     await ownerPage.getByRole("button", { name: "Новый Markdown", exact: true }).click();
-    await ownerPage.getByLabel("Название заметки с расширением .md").fill(noteTitle);
+    // UX0.2: one create dialog for folders and materials — «Название материала» plus «Папка назначения», which
+    // defaults to the folder selected in the tree.
+    await ownerPage.getByLabel("Название материала").fill(noteTitle);
     await ownerPage.getByRole("button", { name: "Создать", exact: true }).click();
+    // The editor is editable before its content arrives, and the late load replaces what was typed (reported as D-3
+    // by RC-1); type only once the header shows the loaded version 1 ("Версия 1 · 0 Б"; the history card says
+    // "Версия 1 · текущая").
+    await expect(ownerPage.getByText(/^Версия 1 · \d/)).toBeVisible();
     const markdown = `# Проверка ${runId}\n\n${noteMarker}\n\nСвязанный материал: [[${pdfTitle.replace(/\.pdf$/, "")}]].\n`;
     await ownerPage.getByRole("textbox", { name: "Редактор Markdown" }).fill(markdown);
     await ownerPage.getByRole("button", { name: "Сохранить новую версию", exact: true }).click();
-    await expect(ownerPage.getByText(/^Версия 2 ·/)).toBeVisible();
+    await expect(ownerPage.getByText(/^Версия 2 · \d/)).toBeVisible();
 
     await ownerPage.reload();
     await ownerPage
@@ -417,15 +493,9 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
     await screenshot(ownerPage, testInfo, "e5-e6-vault-pdf");
 
     const beforeVaultProjection = await getCanvas(ownerPage);
-    await ownerPage
-      .getByRole("link", {
-        name: "Добавить на холст «Мозг проекта»",
-        exact: true,
-      })
-      .click();
-    const vaultProjection = ownerPage
-      .locator('[data-ppm-canvas-node-kind="vault_file_ref"]')
-      .filter({ hasText: pdfTitle });
+    await ownerPage.getByRole("link", { name: "На холст «Мозг проекта»", exact: true }).click();
+    // AF2.1: a Vault PDF lands on the canvas as a "pdf" media card bound to the Vault file (not a vault_file_ref).
+    const vaultProjection = ownerPage.locator('[data-ppm-canvas-node-kind="pdf"]').filter({ hasText: pdfTitle });
     await expect(vaultProjection).toBeVisible();
     await waitForCanvasVersion(ownerPage, beforeVaultProjection.version);
     const canvasWithVaultProjection = await getCanvas(ownerPage);
@@ -435,39 +505,38 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
     expect(vaultProjectionRecord, "The PDF projection must be stored on Canvas").toBeDefined();
     const vaultProjectionNode = JSON.parse(vaultProjectionRecord?.props?.node ?? "{}") as Record<string, unknown>;
     expect(vaultProjectionNode).toMatchObject({
-      kind: "vault_file_ref",
+      binding: { entity_type: "vault_file" },
+      kind: "pdf",
       title: pdfTitle,
     });
     expect(JSON.stringify(vaultProjectionNode)).not.toContain(pdfMarker);
     expect(vaultProjectionNode).not.toHaveProperty("content");
     expect(vaultProjectionNode).not.toHaveProperty("blob");
 
-    await ownerPage.goto(projectPath(demo.robotProjectId, "knowledge"));
+    // The Brain index moved from the Vault page to the canvas panel «Найти в проекте» → «Источники проекта».
+    await ownerPage.goto(projectPath(demo.robotProjectId, "brain"));
+    await ownerPage.getByRole("button", { name: /^(Найти в проекте|Спросить проект)$/ }).click();
     await ownerPage
-      .getByRole("tree", { name: "Хранилище проекта" })
-      .getByRole("treeitem", { name: pdfTitle, exact: true })
+      .getByRole("dialog", { name: /^(Найти в проекте|Спросить проект)$/ })
+      .getByRole("region", { name: "Источники проекта" })
+      .getByRole("button", { name: "Обновить индекс", exact: true })
       .click();
-
-    const brainPanel = ownerPage.getByRole("region", {
-      name: "Индекс Мозга проекта",
-    });
-    await brainPanel.getByRole("button").first().click();
-    await brainPanel.getByRole("button", { name: "Обновить", exact: true }).click();
     await waitForReadySources(ownerPage, [workItemTitle, noteTitle, pdfTitle]);
     const readyBrain = await jsonResponse<BrainOverview>(
-      await ownerPage.request.get(ppmApi(demo.robotProjectId, "brain/")),
+      await ownerPage.request.get(ppmApi(demo.robotProjectId, "knowledge/sources/")),
       "Ready Brain overview"
     );
     const requiredSource = (title: string, sourceType: string) => {
       const source = readyBrain.sources.find(
-        (candidate) => candidate.title === title && candidate.source_type === sourceType
+        (candidate) => isSourceFor(candidate, title) && candidate.source_type === sourceType
       );
       if (!source) throw new Error(`Ready ${sourceType} source is missing: ${title}`);
       return source;
     };
     const workItemSource = requiredSource(workItemTitle, "work_item");
-    const markdownSource = requiredSource(noteTitle, "vault_markdown");
-    const pdfSource = requiredSource(pdfTitle, "vault_pdf");
+    // Markdown and PDF are both Vault files for the Brain index (source_type "vault_file").
+    const markdownSource = requiredSource(noteTitle, "vault_file");
+    const pdfSource = requiredSource(pdfTitle, "vault_file");
     const expectedCitations = [
       {
         sourceId: workItemSource.source_id,
@@ -494,6 +563,25 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
     // Generated answers ship only with PPM_PROJECT_ASK_ENABLED on (same truthy set as the app); without it only
     // the Ask/agents steps are skipped — projection removal and the E2–E7 evidence below still run.
     const projectAskEnabled = isPpmProjectAskEnabled(process.env.PPM_PROJECT_ASK_ENABLED);
+    if (!projectAskEnabled) {
+      // RC-1, E7 without AI: the non-generative project search finds the new Markdown by its unique marker and links
+      // to that exact Vault entry.
+      await ownerPage.getByRole("button", { name: "Найти в проекте", exact: true }).click();
+      const searchPanel = ownerPage.getByRole("dialog", { name: "Найти в проекте" });
+      await searchPanel.getByRole("textbox", { name: "Найти в проекте" }).fill(noteMarker);
+      await searchPanel.getByRole("button", { name: "Найти источники", exact: true }).click();
+      const foundNote = searchPanel
+        .getByRole("region", { name: "Результаты поиска" })
+        .locator("article")
+        .filter({ hasText: noteTitle });
+      await expect(foundNote).toBeVisible({ timeout: 30_000 });
+      await expect(foundNote.getByRole("link", { name: "Открыть источник" })).toHaveAttribute(
+        "href",
+        `/${demo.workspaceSlug}/projects/${demo.robotProjectId}/knowledge?entry_id=${markdownSource.source_id}`
+      );
+      await screenshot(ownerPage, testInfo, "e7-project-search");
+      await searchPanel.getByRole("button", { name: "Закрыть", exact: true }).click();
+    }
     if (projectAskEnabled) {
       await ownerPage.getByRole("button", { name: "Спросить проект", exact: true }).click();
       const askPanel = ownerPage.getByRole("region", { name: "Спросить проект" });
@@ -543,7 +631,9 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
       .locator(".ppm-work-item-card")
       .filter({ hasText: workItemTitle })
       .getByRole("button", { name: "Убрать с холста", exact: true })
-      .click();
+      // The PDF card added above lands at the viewport centre, on top of this card, and takes the pointer; press the
+      // button itself rather than whatever is drawn over it.
+      .dispatchEvent("click");
     await expect(ownerPage.locator(".ppm-work-item-card").filter({ hasText: workItemTitle })).toHaveCount(0);
     await waitForCanvasVersion(ownerPage, beforeProjectionRemoval.version);
     const search = await jsonResponse<{
@@ -557,7 +647,7 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
     expect(search.results.some((result) => result.display.title === workItemTitle)).toBe(true);
     const finalCanvas = await getCanvas(ownerPage);
     const finalBrain = await jsonResponse<BrainOverview>(
-      await ownerPage.request.get(ppmApi(demo.robotProjectId, "brain/")),
+      await ownerPage.request.get(ppmApi(demo.robotProjectId, "knowledge/sources/")),
       "Final Brain overview"
     );
     await attachJson(testInfo, "e2-e7-api-evidence.json", {
@@ -573,7 +663,7 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
           }))
         : [],
       indexedSources: finalBrain.sources
-        .filter((source) => [workItemTitle, noteTitle, pdfTitle].includes(source.title))
+        .filter((source) => [workItemTitle, noteTitle, pdfTitle].some((title) => isSourceFor(source, title)))
         .map((source) => ({
           state: source.index_state,
           title: source.title,
@@ -588,18 +678,17 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
   });
 
   test("E8: viewer UI and ROBOT/BIO isolation", async ({ browser }, testInfo) => {
+    // Three more roles sign in through the UI.
+    test.setTimeout(120_000);
     const viewer = await createRoleContext(browser, "ROBOT_VIEWER");
     const robotMember = await createRoleContext(browser, "ROBOT_MEMBER");
     const outsider = await createRoleContext(browser, "OUTSIDER");
     try {
       await viewer.page.goto(projectPath(demo.robotProjectId, "brain"));
       await expect(viewer.page.getByText("Холст только для чтения", { exact: true })).toBeVisible();
-      await expect(
-        viewer.page.getByRole("button", {
-          name: "Добавить заметку",
-          exact: true,
-        })
-      ).toHaveCount(0);
+      // The v2 rail offers no creation groups on a read-only board (as in the AF1.2 guest test).
+      await expect(viewer.page.getByRole("button", { name: "Документы и текст", exact: true })).toHaveCount(0);
+      await expect(viewer.page.getByRole("button", { name: "Из проекта", exact: true })).toHaveCount(0);
       await screenshot(viewer.page, testInfo, "e8-viewer-read-only");
 
       await viewer.page.goto(projectPath(demo.robotProjectId, "knowledge"));
@@ -612,18 +701,22 @@ test.describe.serial("PPM demo D0 browser release gate", () => {
       ).toHaveCount(0);
 
       const robotMemberDenials = await Promise.all(
-        ["canvas/", "vault/", "brain/"].map((suffix) => robotMember.page.request.get(ppmApi(demo.bioProjectId, suffix)))
+        ["canvas/", "vault/", "knowledge/sources/"].map((suffix) =>
+          robotMember.page.request.get(ppmApi(demo.bioProjectId, suffix))
+        )
       );
       expect(robotMemberDenials.every((response) => [403, 404].includes(response.status()))).toBe(true);
-      const foreignSearch = await robotMember.page.request.get(
-        `${ppmApi(demo.robotProjectId, "brain/search/")}?q=BIO-ISOLATION-MARKER`
-      );
+      const foreignSearch = await robotMember.page.request.post(ppmApi(demo.robotProjectId, "knowledge/query/"), {
+        data: { query: "BIO-ISOLATION-MARKER" },
+      });
       expect(foreignSearch.status()).toBe(200);
       const foreignSearchBody = await foreignSearch.text();
       expect(foreignSearchBody).not.toContain("BIO-ISOLATION-MARKER");
 
       const outsiderDenials = await Promise.all(
-        ["canvas/", "vault/", "brain/"].map((suffix) => outsider.page.request.get(ppmApi(demo.robotProjectId, suffix)))
+        ["canvas/", "vault/", "knowledge/sources/"].map((suffix) =>
+          outsider.page.request.get(ppmApi(demo.robotProjectId, suffix))
+        )
       );
       expect(outsiderDenials.every((response) => [403, 404].includes(response.status()))).toBe(true);
       await attachJson(testInfo, "e8-isolation-api-evidence.json", {

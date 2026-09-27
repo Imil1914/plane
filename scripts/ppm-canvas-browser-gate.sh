@@ -24,6 +24,31 @@ for binary in docker pnpm node openssl curl; do
   command -v "$binary" >/dev/null || { printf 'Missing required command: %s\n' "$binary" >&2; exit 1; }
 done
 
+select_browser() {
+  case "$1" in
+    chrome)
+      export PPM_E2E_BROWSER_CHANNEL=chrome
+      playwright_browser=chromium
+      ;;
+    chromium|firefox|webkit)
+      unset PPM_E2E_BROWSER_CHANNEL || true
+      playwright_browser="$1"
+      ;;
+    *)
+      printf 'Unsupported browser: %s\n' "$1" >&2
+      exit 1
+      ;;
+  esac
+}
+if [[ "$#" == 0 ]]; then set -- chrome; fi
+for browser in "$@"; do select_browser "$browser"; done
+# build (default): production bundle served statically; dev: Vite dev server for local debugging only.
+web_mode="${PPM_E2E_WEB_MODE:-build}"
+if [[ "$web_mode" != "build" && "$web_mode" != "dev" ]]; then
+  printf 'Unsupported PPM_E2E_WEB_MODE: %s\n' "$web_mode" >&2
+  exit 1
+fi
+
 export PPM_E2E_API_PORT="${PPM_E2E_API_PORT:-8100}"
 export PPM_E2E_WEB_PORT="${PPM_E2E_WEB_PORT:-3100}"
 export PPM_E2E_BASE_URL="http://localhost:${PPM_E2E_WEB_PORT}"
@@ -42,6 +67,10 @@ compose_project="ppm-af12-${run_suffix}"
 fixture_slug="af12-ci-${run_suffix}"
 web_pid=""
 web_log="$(mktemp -t ppm-af12-web.XXXXXXXX)"
+# RC-1: optionally reuse an already built API test image (same apps/api/Dockerfile.dev and requirements) instead of
+# building a fresh one per disposable project; the code itself is always mounted from this checkout.
+api_image="${PPM_E2E_API_IMAGE:-}"
+api_image_tags=("${compose_project}-api-tests" "${compose_project}-api-browser-gate")
 
 cleanup() {
   if [[ -n "$web_pid" ]]; then
@@ -49,9 +78,17 @@ cleanup() {
     wait "$web_pid" 2>/dev/null || true
   fi
   docker compose -p "$compose_project" -f docker-compose-test.yml down -v --remove-orphans >/dev/null
+  if [[ -n "$api_image" ]]; then
+    docker image rm "${api_image_tags[@]}" >/dev/null 2>&1 || true
+  fi
   rm -f -- "$web_log"
 }
 trap cleanup EXIT
+
+if [[ -n "$api_image" ]]; then
+  docker image inspect "$api_image" >/dev/null
+  for tag in "${api_image_tags[@]}"; do docker tag "$api_image" "$tag"; done
+fi
 
 services=(test-db test-redis test-mq)
 if [[ "$browser_only" == "false" ]]; then
@@ -61,26 +98,33 @@ docker compose -p "$compose_project" -f docker-compose-test.yml up -d "${service
 docker compose -p "$compose_project" -f docker-compose-test.yml run --rm --no-deps \
   --entrypoint python api-tests manage.py migrate --noinput --verbosity 0
 
+# Exports the IDs, slugs and e-mails a seed command printed as JSON (never passwords); $1 is the only allowed prefix.
+export_fixture() {
+  local fixture_env
+  fixture_env="$(printf '%s' "$2" | FIXTURE_PREFIX="$1" node -e '
+    let input = "";
+    process.stdin.on("data", (chunk) => { input += chunk; });
+    process.stdin.on("end", () => {
+      const values = JSON.parse(input);
+      const allowed = new RegExp(`^${process.env.FIXTURE_PREFIX}_[A-Z_]+$`);
+      for (const [key, value] of Object.entries(values)) {
+        if (!allowed.test(key) || typeof value !== "string" || /[\r\n=]/.test(value)) {
+          throw new Error("Invalid browser gate fixture output");
+        }
+        process.stdout.write(`${key}=${value}\n`);
+      }
+    });
+  ')"
+  while IFS='=' read -r name value; do
+    export "$name=$value"
+  done <<< "$fixture_env"
+}
+
 fixture_json="$(docker compose -p "$compose_project" -f docker-compose-test.yml run --rm --no-deps \
   --entrypoint python -e PPM_E2E_ALLOW_SEED -e PPM_E2E_OWNER_PASSWORD \
   -e PPM_E2E_MEMBER_PASSWORD -e PPM_E2E_GUEST_PASSWORD -e PPM_E2E_GLOBAL_PASSWORD \
   api-tests manage.py seed_ppm_canvas_browser_gate --slug "$fixture_slug")"
-fixture_env="$(printf '%s' "$fixture_json" | node -e '
-  let input = "";
-  process.stdin.on("data", (chunk) => { input += chunk; });
-  process.stdin.on("end", () => {
-    const values = JSON.parse(input);
-    for (const [key, value] of Object.entries(values)) {
-      if (!/^PPM_E2E_[A-Z_]+$/.test(key) || typeof value !== "string" || /[\r\n=]/.test(value)) {
-        throw new Error("Invalid AF1.2 fixture output");
-      }
-      process.stdout.write(`${key}=${value}\n`);
-    }
-  });
-')"
-while IFS='=' read -r name value; do
-  export "$name=$value"
-done <<< "$fixture_env"
+export_fixture PPM_E2E "$fixture_json"
 
 docker compose -p "$compose_project" -f docker-compose-test.yml up -d api-browser-gate
 for attempt in {1..40}; do
@@ -89,8 +133,37 @@ for attempt in {1..40}; do
   sleep 1
 done
 
-VITE_API_BASE_URL="$PPM_E2E_API_BASE_URL" VITE_WEB_BASE_URL="$PPM_E2E_BASE_URL" \
-  pnpm --dir apps/web exec react-router dev --port "$PPM_E2E_WEB_PORT" >"$web_log" 2>&1 &
+# RC-1: synthetic ROBOT/BIO demo space (doc 16, five roles) for e2e/ppm-demo.spec.ts. The seed runs inside the API
+# container so its Vault files land in the same disposable storage that the API and the Brain worker below read.
+demo_roles=(OWNER ROBOT_MEMBER BIO_MEMBER ROBOT_VIEWER OUTSIDER)
+demo_password_args=()
+for role in "${demo_roles[@]}"; do
+  export "PPM_DEMO_${role}_PASSWORD=$(openssl rand -hex 20)"
+  demo_password_args+=(-e "PPM_DEMO_${role}_PASSWORD")
+done
+demo_json="$(docker compose -p "$compose_project" -f docker-compose-test.yml exec -T -e PPM_E2E_ALLOW_SEED \
+  "${demo_password_args[@]}" api-browser-gate python manage.py seed_ppm_demo_gate --slug "ppm-demo-${run_suffix}")"
+export_fixture PPM_DEMO "$demo_json"
+# Brain indexing runs in Celery: the demo waits for the sources it creates in the browser to become ready.
+docker compose -p "$compose_project" -f docker-compose-test.yml exec -d api-browser-gate \
+  sh -c 'exec celery -A plane worker --loglevel=WARNING --concurrency=1 >/tmp/ppm-e2e-worker.log 2>&1'
+
+if [[ "$web_mode" == "build" ]]; then
+  # RC-1: the gate tests the production bundle. In a clean checkout the dev server re-optimizes dependencies while
+  # the first pages load and can keep serving mismatched modules (the app stays on «Открываем PPM»), which failed
+  # the gate for reasons unrelated to PPM. The build takes seconds and goes to the gitignored apps/web/build.
+  if ! VITE_API_BASE_URL="$PPM_E2E_API_BASE_URL" VITE_WEB_BASE_URL="$PPM_E2E_BASE_URL" \
+    pnpm --dir apps/web exec react-router build >"$web_log" 2>&1; then
+    printf 'AF1.2 web build failed. Last 4000 log bytes:\n' >&2
+    tail -c 4000 "$web_log" >&2
+    exit 1
+  fi
+  NO_UPDATE_CHECK=1 pnpm --dir apps/web exec serve --single --no-clipboard --no-request-logging \
+    --listen "tcp://127.0.0.1:${PPM_E2E_WEB_PORT}" build/client >>"$web_log" 2>&1 &
+else
+  VITE_API_BASE_URL="$PPM_E2E_API_BASE_URL" VITE_WEB_BASE_URL="$PPM_E2E_BASE_URL" \
+    pnpm --dir apps/web exec react-router dev --port "$PPM_E2E_WEB_PORT" >"$web_log" 2>&1 &
+fi
 web_pid="$!"
 for attempt in {1..80}; do
   if curl -fsS "$PPM_E2E_BASE_URL/sign-in" >/dev/null; then break; fi
@@ -102,27 +175,14 @@ for attempt in {1..80}; do
   sleep 1
 done
 
-if [[ "$#" == 0 ]]; then set -- chrome; fi
 for browser in "$@"; do
-  case "$browser" in
-    chrome)
-      export PPM_E2E_BROWSER_CHANNEL=chrome
-      playwright_browser=chromium
-      ;;
-    chromium|firefox|webkit)
-      unset PPM_E2E_BROWSER_CHANNEL || true
-      playwright_browser="$browser"
-      ;;
-    *)
-      printf 'Unsupported browser: %s\n' "$browser" >&2
-      exit 1
-      ;;
-  esac
+  select_browser "$browser"
   printf 'Running isolated AF1.2 browser gate in %s (fixture %s)\n' "$browser" "$fixture_slug"
   playwright_args=(
     e2e/ppm-canvas-collaboration.spec.ts
     e2e/ppm-canvas-performance.spec.ts
     e2e/ppm-auth-csrf.spec.ts
+    e2e/ppm-demo.spec.ts
     --browser "$playwright_browser" --workers=1 --reporter=line
   )
   if [[ -n "${PPM_E2E_TEST_GREP:-}" ]]; then

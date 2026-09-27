@@ -204,6 +204,13 @@ services:
       WEB_URL: http://localhost:${PPM_E2E_API_PORT:-8100}
       CORS_ALLOWED_ORIGINS: http://localhost:${PPM_E2E_WEB_PORT:-3100}
       IS_TEST: "1"
+      # RC-1: the demo release gate uploads Vault files; they stay inside this disposable container, where the
+      # demo seed and the Brain worker of the gate (both started with `exec`) read the same directory.
+      PPM_LOCAL_ASSET_UPLOADS: "1"
+      PPM_VAULT_STORAGE_ROOT: /tmp/ppm-e2e-vault
+      # Every browser of the gate reaches this API from the same Docker bridge address, so the per-IP sign-in
+      # throttle (10/minute by default) would count all synthetic roles of all specs as one client.
+      AUTHENTICATION_RATE_LIMIT: 120/minute
     volumes:
       - ./apps/api:/code
     working_dir: /code

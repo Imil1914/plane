@@ -44,6 +44,22 @@ async function reopenCanvasNote(page: Page, currentTitle: string) {
   await noteHeading(page, currentTitle).dblclick();
 }
 
+// RC-2: the label of a conflict copy in the ru UI of these tests (@ppm/brand `canvas.rc2.copy_label`, ru).
+const CONFLICT_COPY_LABEL = "Конфликтная копия";
+
+// RC-2: a note still under edit is never touched by the auto-merge (its rebase waits for the end of editing), so the
+// flows that expect a merge first make sure editing really ended — the note's own title field is gone.
+async function leaveEditing(page: Page) {
+  await finishEditingCanvasNote(page);
+  await expect(noteTitleField(page)).toHaveCount(0);
+}
+
+// RC-2: keyboard shortcuts go to the canvas only while it has the focus — after Escape, a merge and a notice it is set
+// explicitly (the tldraw container), without a click that could land on a card, a panel or the notice.
+async function focusCanvas(page: Page) {
+  await page.locator(".tl-container").first().focus();
+}
+
 const baseURL = process.env.PPM_E2E_BASE_URL ?? "http://localhost:3000";
 const apiBaseURL = process.env.PPM_E2E_API_BASE_URL ?? baseURL;
 const currentUserURL = new URL("/api/users/me/", apiBaseURL).href;
@@ -89,6 +105,12 @@ async function signIn(browser: Browser, role: "OWNER" | "MEMBER" | "GUEST" | "GL
   await page.locator("#password").fill(password);
   await page.getByRole("button", { name: /Продолжить|Открыть пространство/ }).click();
   await expect.poll(() => hasApiSession(page)).toBe(true);
+  // RC-1 (lane G): the password form is a native POST answered by a redirect to "/" once the session cookie is set;
+  // the app then routes on to the workspace. A page.goto racing that redirect or the landing page's own start-up
+  // navigation is aborted (Firefox NS_BINDING_ABORTED / NS_ERROR_FAILURE, WebKit "interrupted by another
+  // navigation"), so wait until the app has left "/" (where the sign-in form also lives) and has settled.
+  await page.waitForURL((url) => url.pathname !== "/" && !url.pathname.startsWith("/sign-in"));
+  await page.waitForLoadState("networkidle");
   authenticatedStates.set(role, await context.storageState());
   return { context, page };
 }
@@ -154,6 +176,9 @@ test("project lead and member share one board without reload", async ({ browser 
     const baseVersion = (await getCanvas(owner.page)).version;
     const memberTitle = `AF1.2 stale member ${runId}`;
     const ownerTitle = `AF1.2 canonical owner ${runId}`;
+    // RC-2 (AF1.2 auto-merge): the same field of one note on both sides — the saved version stays canonical, the other
+    // one survives as a labelled sibling copy (board-rebase.ts CANVAS_CONFLICT_COPY_LABEL).
+    const memberCopyTitle = `${CONFLICT_COPY_LABEL} · ${memberTitle}`;
     let releaseMemberSave: (() => void) | undefined;
     let memberSaveSeen = false;
     const memberSaveGate = new Promise<void>((resolve) => {
@@ -170,17 +195,128 @@ test("project lead and member share one board without reload", async ({ browser 
       await reopenCanvasNote(member.page, memberSavedTitle);
       await noteTitleField(member.page).fill(memberTitle);
       await expect.poll(() => memberSaveSeen).toBe(true);
+      // Both leave the note: a note still under edit is never touched — its rebase would wait for the end of editing.
+      await leaveEditing(member.page);
       await reopenCanvasNote(owner.page, memberSavedTitle);
       await noteTitleField(owner.page).fill(ownerTitle);
+      await leaveEditing(owner.page);
       await expect.poll(async () => (await getCanvas(owner.page)).version).toBeGreaterThan(baseVersion);
     } finally {
       releaseMemberSave?.();
     }
 
-    await expect(member.page.locator('.ppm-canvas-status__notice[data-status="conflict"]')).toBeVisible();
-    const canonical = await getCanvas(owner.page);
-    expect(JSON.stringify(canonical.snapshot?.document.store)).toContain(ownerTitle);
-    expect(JSON.stringify(canonical.snapshot?.document.store)).not.toContain(memberTitle);
+    // The stale member save gets 409 and is rebased onto the owner's version instead of locking the board: the owner's
+    // title stays canonical, the member's text is kept as a copy, a non-blocking notice says so, nothing is read-only.
+    await expect
+      .poll(async () => JSON.stringify((await getCanvas(owner.page)).snapshot?.document.store), { timeout: 25_000 })
+      .toContain(memberCopyTitle);
+    expect(JSON.stringify((await getCanvas(owner.page)).snapshot?.document.store)).toContain(ownerTitle);
+    await expect(member.page.locator('[data-ppm-notice="merge"]')).toContainText(CONFLICT_COPY_LABEL);
+    await expect(member.page.locator('.ppm-canvas-status__notice[data-status="conflict"]')).toHaveCount(0);
+    await expect(member.page.locator(".ppm-canvas-shell")).toHaveAttribute("data-ppm-canvas-mode", "edit");
+    await expect(noteHeading(member.page, ownerTitle)).toBeVisible();
+    await expect(noteHeading(owner.page, memberCopyTitle)).toBeVisible();
+    await expect(owner.page.locator('.ppm-canvas-status__notice[data-status="conflict"]')).toHaveCount(0);
+  } finally {
+    await closeContext(memberContext);
+    await closeContext(ownerContext);
+  }
+});
+
+// RC-2 (AF1.2 auto-merge, inventory §3.3 «Проверки RC-2»): concurrent edits of different notes both survive — the
+// stale save is rebased instead of locking the board — and the user's undo afterwards reverts only their own step,
+// never the teammate's (tldraw keeps the merged remote records out of the undo stack).
+test("concurrent edits of different notes merge and undo keeps the teammate's note", async ({ browser }) => {
+  test.setTimeout(60_000);
+  let ownerContext: BrowserContext | undefined;
+  let memberContext: BrowserContext | undefined;
+  try {
+    const owner = await signIn(browser, "OWNER");
+    ownerContext = owner.context;
+    const member = await signIn(browser, "MEMBER");
+    memberContext = member.context;
+    await openCanvas(owner.page);
+    await openCanvas(member.page);
+    await expect(owner.page.locator('.ppm-canvas-presence[data-status="online"]')).toContainText("2");
+    await expect(member.page.locator('.ppm-canvas-presence[data-status="online"]')).toContainText("2");
+    const ownerTitle = `RC-2 owner note ${runId}`;
+    const memberTitle = `RC-2 member note ${runId}`;
+    const baseVersion = (await getCanvas(owner.page)).version;
+
+    // The member's save is held until the owner's lands, so the two edits really overlap (the member's gets 409).
+    let releaseMemberSave: (() => void) | undefined;
+    let memberSaveSeen = false;
+    const memberSaveGate = new Promise<void>((resolve) => {
+      releaseMemberSave = resolve;
+    });
+    await member.page.route("**/api/ppm/v1/**", async (route) => {
+      if (route.request().method() === "PUT" && route.request().url().includes("/canvas/")) {
+        memberSaveSeen = true;
+        await memberSaveGate;
+      }
+      await route.continue();
+    });
+    try {
+      await addCanvasNote(member.page);
+      await noteTitleField(member.page).fill(memberTitle);
+      await leaveEditing(member.page);
+      await expect.poll(() => memberSaveSeen).toBe(true);
+      await addCanvasNote(owner.page);
+      await noteTitleField(owner.page).fill(ownerTitle);
+      await leaveEditing(owner.page);
+      // RC-1 (lane G): each editor puts a new note on the first free spot of its own board, so both notes can land on
+      // the same spot and, once merged, the owner's note covers the member's heading that is double-clicked below
+      // (seen in Chrome). The owner drags the new note one card width aside, towards the middle of the view so that it
+      // stays on screen for both, before it is saved — as a user would.
+      const ownerNote = await noteHeading(owner.page, ownerTitle).boundingBox();
+      const ownerView = await owner.page.getByRole("application", { name: "tldraw" }).boundingBox();
+      if (!ownerNote || !ownerView) throw new Error("The owner's new note or Canvas has no visible bounds.");
+      const noteX = ownerNote.x + ownerNote.width / 2;
+      const noteY = ownerNote.y + ownerNote.height / 2;
+      const aside = noteX > ownerView.x + ownerView.width / 2 ? -340 : 340;
+      await owner.page.mouse.move(noteX, noteY);
+      await owner.page.mouse.down();
+      await owner.page.mouse.move(noteX + aside, noteY, { steps: 10 });
+      await owner.page.mouse.up();
+      await expect.poll(async () => (await getCanvas(owner.page)).version).toBeGreaterThan(baseVersion);
+    } finally {
+      releaseMemberSave?.();
+    }
+    // RC-1 (lane G): a plain unroute falls back the request the released handler is still holding, and the handler's own
+    // route.continue() then throws "Route is already handled!" in every engine — wait for running handlers instead.
+    await member.page.unrouteAll({ behavior: "wait" });
+
+    await expect
+      .poll(async () => JSON.stringify((await getCanvas(owner.page)).snapshot?.document.store), { timeout: 25_000 })
+      .toContain(memberTitle);
+    expect(JSON.stringify((await getCanvas(owner.page)).snapshot?.document.store)).toContain(ownerTitle);
+    await expect(owner.page.locator('.ppm-canvas-status__notice[data-status="conflict"]')).toHaveCount(0);
+    await expect(member.page.locator('.ppm-canvas-status__notice[data-status="conflict"]')).toHaveCount(0);
+    await expect(owner.page.locator(".ppm-canvas-shell")).toHaveAttribute("data-ppm-canvas-mode", "edit");
+    await expect(member.page.locator(".ppm-canvas-shell")).toHaveAttribute("data-ppm-canvas-mode", "edit");
+    await expect(noteHeading(member.page, ownerTitle)).toBeVisible();
+    await expect(noteHeading(owner.page, memberTitle)).toBeVisible();
+
+    // A distinct last step of the member — its own title — and then undo on the member's board: exactly that step is
+    // reverted (the edited title is gone from the saved board), the owner's note merged in earlier stays everywhere.
+    const memberEditedTitle = `RC-2 member edited ${runId}`;
+    await reopenCanvasNote(member.page, memberTitle);
+    await noteTitleField(member.page).fill(memberEditedTitle);
+    await leaveEditing(member.page);
+    await expect
+      .poll(async () => JSON.stringify((await getCanvas(owner.page)).snapshot?.document.store), { timeout: 15_000 })
+      .toContain(memberEditedTitle);
+    const notice = member.page.locator('[data-ppm-notice="merge"]');
+    if (await notice.count()) await notice.getByRole("button").click();
+    await focusCanvas(member.page);
+    await member.page.keyboard.press("ControlOrMeta+z");
+    await expect
+      .poll(async () => JSON.stringify((await getCanvas(owner.page)).snapshot?.document.store), { timeout: 15_000 })
+      .not.toContain(memberEditedTitle);
+    expect(JSON.stringify((await getCanvas(owner.page)).snapshot?.document.store)).toContain(ownerTitle);
+    await expect(noteHeading(member.page, memberEditedTitle)).toHaveCount(0);
+    await expect(noteHeading(member.page, ownerTitle)).toBeVisible();
+    await expect(noteHeading(owner.page, ownerTitle)).toBeVisible();
   } finally {
     await closeContext(memberContext);
     await closeContext(ownerContext);
@@ -430,6 +566,9 @@ test("offline draft survives a full browser process restart with a persistent pr
     await page.locator("#password").fill(password);
     await page.getByRole("button", { name: /Продолжить|Открыть пространство/ }).click();
     await expect.poll(() => hasApiSession(page)).toBe(true);
+    // RC-1 (lane G): see signIn — the sign-in redirect must land and settle before the next page.goto.
+    await page.waitForURL((url) => url.pathname !== "/" && !url.pathname.startsWith("/sign-in"));
+    await page.waitForLoadState("networkidle");
     await openCanvas(page);
     const initialVersion = (await getCanvas(page)).version;
     const noteTitle = `AF1.2 persistent browser ${runId}`;
@@ -619,7 +758,11 @@ test("two offline tabs keep separate drafts and recovering one preserves the oth
   }
 });
 
-test("offline draft conflicts with a newer team save without overwriting it", async ({ browser }) => {
+// RC-2 (AF1.2 auto-merge): the offline note and the teammate's note are different objects. The reconnect replays the
+// unacknowledged save (409 — the team saved first), rebases it onto the team version and saves both — no conflict mode,
+// nothing of the teammate's is overwritten, the local draft is cleared once saved. (A draft restored after a reload stays
+// manual — «offline draft after context recreation cannot replace a newer team version».)
+test("offline note merges into a newer team save after reconnect without overwriting it", async ({ browser }) => {
   let ownerContext: BrowserContext | undefined;
   let memberContext: BrowserContext | undefined;
   try {
@@ -639,25 +782,32 @@ test("offline draft conflicts with a newer team save without overwriting it", as
     await addCanvasNote(owner.page);
     await noteTitleField(owner.page).fill(offlineTitle);
     await expect(owner.page.locator('.ppm-canvas-status__notice[data-status="error"]')).toBeVisible();
+    // The offline note is finished before the reconnect, so the merge and the draft cleanup do not depend on editing.
+    await leaveEditing(owner.page);
 
     await addCanvasNote(member.page);
     await noteTitleField(member.page).fill(teamTitle);
     await expect.poll(async () => (await getCanvas(member.page)).version).toBeGreaterThan(initialVersion);
 
     await owner.context.setOffline(false);
-    await expect(owner.page.locator('.ppm-canvas-status__notice[data-status="conflict"]')).toBeVisible();
-    const canonical = await getCanvas(member.page);
-    expect(JSON.stringify(canonical.snapshot?.document.store)).toContain(teamTitle);
-    expect(JSON.stringify(canonical.snapshot?.document.store)).not.toContain(offlineTitle);
-    expect(
-      await owner.page.evaluate(
-        (title) =>
-          Object.keys(localStorage).some(
-            (key) => key.startsWith("ppm:canvas:durable-recovery:v1:") && localStorage.getItem(key)?.includes(title)
-          ),
-        offlineTitle
+    await expect
+      .poll(async () => JSON.stringify((await getCanvas(member.page)).snapshot?.document.store), { timeout: 25_000 })
+      .toContain(offlineTitle);
+    expect(JSON.stringify((await getCanvas(member.page)).snapshot?.document.store)).toContain(teamTitle);
+    await expect(owner.page.locator('.ppm-canvas-status__notice[data-status="conflict"]')).toHaveCount(0);
+    await expect(owner.page.locator(".ppm-canvas-shell")).toHaveAttribute("data-ppm-canvas-mode", "edit");
+    await expect(noteHeading(member.page, offlineTitle)).toBeVisible();
+    await expect
+      .poll(() =>
+        owner.page.evaluate(
+          (title) =>
+            Object.keys(localStorage).some(
+              (key) => key.startsWith("ppm:canvas:durable-recovery:v1:") && localStorage.getItem(key)?.includes(title)
+            ),
+          offlineTitle
+        )
       )
-    ).toBe(true);
+      .toBe(false);
   } finally {
     if (ownerContext) await ownerContext.setOffline(false);
     await closeContext(memberContext);

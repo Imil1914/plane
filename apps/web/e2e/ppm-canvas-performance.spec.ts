@@ -46,6 +46,12 @@ async function signIn(browser: Browser): Promise<{ context: BrowserContext; page
   await page.locator("#password").fill(password);
   await page.getByRole("button", { name: /Продолжить|Открыть пространство/ }).click();
   await expect.poll(() => hasApiSession(page)).toBe(true);
+  // RC-1 (lane G): the password form is a native POST answered by a redirect to "/" once the session cookie is set;
+  // the app then routes on to the workspace. A page.goto racing that redirect or the landing page's own start-up
+  // navigation is aborted (Firefox NS_BINDING_ABORTED / NS_ERROR_FAILURE, WebKit "interrupted by another
+  // navigation"), so wait until the app has left "/" (where the sign-in form also lives) and has settled.
+  await page.waitForURL((url) => url.pathname !== "/" && !url.pathname.startsWith("/sign-in"));
+  await page.waitForLoadState("networkidle");
   return { context, page };
 }
 
