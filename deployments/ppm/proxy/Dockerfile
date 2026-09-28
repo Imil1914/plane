@@ -4,6 +4,8 @@ ARG CADDY_IMAGE=caddy:2.11.3-alpine
 FROM ${CADDY_IMAGE}
 
 COPY Caddyfile /etc/caddy/Caddyfile
+# Git server site: git-server-1.caddy is imported only with PPM_GIT_SERVER_ENABLED=1, else git-server-0.caddy (empty).
+COPY git-server-0.caddy git-server-1.caddy /etc/caddy/
 
 # The admin API only listens inside the container (localhost:2019); it doubles as a liveness probe.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

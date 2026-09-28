@@ -4,39 +4,60 @@
 #   ppm-env.sh init  --domain <host> --output <file> [--tls internal|<acme-e-mail>] [--bind 127.0.0.1|0.0.0.0]
 #                    [--https-port 443] [--http-port 80] [--project NAME] [--release rc.1] [--image-repo ppm]
 #                    [--minio-image <image>] [--mirror docker.io] [--hsts 31536000]
+#                    [--git-domain <host>] [--git-ssh-port 2222] [--forgejo-image <image@sha256:…>]
 #                    [--reuse-secret-key-from <env file>] [--force]
 #   ppm-env.sh check <file>
 #   ppm-env.sh get   <file> <KEY>          (non-secret keys only)
 #   ppm-env.sh set   <file> <KEY> <VALUE>  (non-secret keys only)
+#   ppm-env.sh add-git <file> [--git-domain <host>] [--git-ssh-port 2222] [--forgejo-image <image@sha256:…>]
+#                    add the Git server keys (Forgejo) that an existing env (e.g. of RC.1) lacks; every existing line
+#                    stays byte-identical, keys already present (also PPM_GIT_SERVER_ENABLED=0) are never changed
+#   ppm-env.sh set-secret <file> PPM_FORGEJO_TOKEN     value on stdin (used by ppm-deploy.sh git-bootstrap)
 #
 # Secure by default: `init` without --tls/--bind creates the PRIVATE setup phase (Caddy's internal CA, ports bound
 # to 127.0.0.1) — the instance administrator is claimed before anything is reachable (RUNBOOK §5–7); the public
 # phase is switched on with `set PPM_TLS <e-mail>` + `set PPM_BIND_ADDRESS 0.0.0.0`.
 # Secret values are never printed. The env file and the backup passphrase file are created with mode 600.
-# `--reuse-secret-key-from` keeps SECRET_KEY of an existing deployment (restore/disaster recovery: Plane encrypts
-# instance settings with it). Project: `ppm` (production) by default; for a *.localhost domain (drills, tests)
-# `ppm-drill` — a *.localhost env may never use the production project name.
+# `--reuse-secret-key-from` keeps SECRET_KEY (and FORGEJO_SECRET_KEY) of an existing deployment (restore/disaster
+# recovery: Plane encrypts instance settings, Forgejo 2FA secrets with them). Project: `ppm` (production) by default;
+# for a *.localhost domain (drills, tests) `ppm-drill` — a *.localhost env may never use the production project name.
+# Git server (Forgejo, RUNBOOK §17): on by default in new files (git.<domain>, SSH 2222 — a drill copy on the
+# production server needs another --git-ssh-port); an env without the keys (RC.1) keeps it off until `add-git`.
 set -euo pipefail
 
 SECRET_KEYS=(SECRET_KEY LIVE_SERVER_SECRET_KEY POSTGRES_PASSWORD RABBITMQ_PASSWORD MINIO_ACCESS_KEY MINIO_SECRET_KEY
-  PPM_GITHUB_APP_CLIENT_SECRET PPM_GITHUB_APP_PRIVATE_KEY PPM_GITHUB_WEBHOOK_SECRET)
+  PPM_GITHUB_APP_CLIENT_SECRET PPM_GITHUB_APP_PRIVATE_KEY PPM_GITHUB_WEBHOOK_SECRET
+  FORGEJO_DB_PASSWORD FORGEJO_SECRET_KEY FORGEJO_INTERNAL_TOKEN FORGEJO_JWT_SECRET FORGEJO_LFS_JWT_SECRET
+  PPM_FORGEJO_WEBHOOK_SECRET PPM_FORGEJO_TOKEN)
 REQUIRED_KEYS=(PPM_PROJECT PPM_IMAGE_REPO PPM_RELEASE PPM_MINIO_IMAGE PPM_DOMAIN PPM_HTTP_PORT PPM_HTTPS_PORT
   PPM_PUBLIC_URL PPM_BIND_ADDRESS PPM_TLS PPM_BACKUP_PASSPHRASE_FILE SECRET_KEY LIVE_SERVER_SECRET_KEY
   POSTGRES_PASSWORD RABBITMQ_PASSWORD MINIO_ACCESS_KEY MINIO_SECRET_KEY)
 GENERATED_SECRETS=(SECRET_KEY LIVE_SERVER_SECRET_KEY POSTGRES_PASSWORD RABBITMQ_PASSWORD MINIO_ACCESS_KEY MINIO_SECRET_KEY)
+# Git server (Forgejo): settings, generated secrets (hex, except the two JWT secrets: base64url of exactly 32 bytes
+# without '=', the only form Forgejo accepts — any other value it silently regenerates at every start) and the
+# read-only API token written later by `ppm-deploy.sh git-bootstrap`.
+GIT_SETTINGS=(PPM_GIT_SERVER_ENABLED PPM_GIT_DOMAIN PPM_GIT_PUBLIC_URL PPM_GIT_SSH_ENABLED PPM_GIT_SSH_PORT
+  PPM_GIT_MAX_BODY_SIZE PPM_FORGEJO_IMAGE)
+GIT_HEX_SECRETS=(FORGEJO_DB_PASSWORD FORGEJO_SECRET_KEY FORGEJO_INTERNAL_TOKEN PPM_FORGEJO_WEBHOOK_SECRET)
+GIT_JWT_SECRETS=(FORGEJO_JWT_SECRET FORGEJO_LFS_JWT_SECRET)
+GIT_KEYS=("${GIT_SETTINGS[@]}" "${GIT_HEX_SECRETS[@]}" "${GIT_JWT_SECRETS[@]}" PPM_FORGEJO_TOKEN)
 
 PPM_SCRIPT_NAME=ppm-env
 bundle_dir="$(cd "$(dirname "$0")" && pwd)"
-# Shared rules (production project name, project-name format). Sourced first: the helpers below override the
-# library's same-named ones (env_get here takes the file as its first argument).
+# Shared rules (production project name, project-name format, Forgejo image). Sourced first: the helpers below
+# override the library's same-named ones (env_get here takes the file as its first argument).
 # shellcheck source=ppm-lib.sh
 source "$bundle_dir/ppm-lib.sh"
 
 die() { echo "ppm-env: $*" >&2; exit 1; }
 is_secret() { local k; for k in "${SECRET_KEYS[@]}"; do [[ "$k" == "$1" ]] && return 0; done; return 1; }
 rand_hex() { openssl rand -hex "$1" 2>/dev/null || head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
+# base64url of 32 random bytes, no '=' (43 characters): Forgejo's JWT_SECRET / LFS_JWT_SECRET format.
+rand_b64url32() { { openssl rand 32 2>/dev/null || head -c 32 /dev/urandom; } | base64 | tr -d '\n=' | tr '+/' '-_'; }
 env_get() { awk -v k="$2" 'index($0, k "=") == 1 { v = substr($0, length(k) + 2) } END { print v }' "$1"; }
+env_has() { grep -q "^$2=" "$1"; }
 file_mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
+valid_host() { [[ "$1" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$ ]]; }
 
 public_url() { # domain https_port
   if [[ "$2" == "443" ]]; then echo "https://$1"; else echo "https://$1:$2"; fi
@@ -49,9 +70,28 @@ passphrase_path() { # env_file
   echo "$(cd "$(dirname "$1")" && pwd)/$value"
 }
 
+# The Git server keys, one KEY=value line each (secrets freshly generated; the token empty).
+git_lines() { # git_domain https_port ssh_port forgejo_image [forgejo_secret_key]
+  echo "PPM_GIT_SERVER_ENABLED=1"
+  echo "PPM_GIT_DOMAIN=$1"
+  echo "PPM_GIT_PUBLIC_URL=$(public_url "$1" "$2")"
+  echo "PPM_GIT_SSH_ENABLED=1"
+  echo "PPM_GIT_SSH_PORT=$3"
+  echo "PPM_GIT_MAX_BODY_SIZE=1GB"
+  echo "PPM_FORGEJO_IMAGE=$4"
+  echo "FORGEJO_DB_PASSWORD=$(rand_hex 32)"
+  echo "FORGEJO_SECRET_KEY=${5:-$(rand_hex 32)}"
+  echo "FORGEJO_INTERNAL_TOKEN=$(rand_hex 32)"
+  echo "FORGEJO_JWT_SECRET=$(rand_b64url32)"
+  echo "FORGEJO_LFS_JWT_SECRET=$(rand_b64url32)"
+  echo "PPM_FORGEJO_WEBHOOK_SECRET=$(rand_hex 32)"
+  echo "PPM_FORGEJO_TOKEN="
+}
+
 cmd_init() {
   local domain="" tls=internal output="" https_port=443 http_port=80 bind=127.0.0.1 project="" release=rc.1
-  local image_repo=ppm minio_image="" mirror=docker.io hsts=31536000 reuse_from="" force=0
+  local image_repo=ppm minio_image="" mirror=docker.io hsts=31536000 reuse_from="" force=0 git_domain=""
+  local forgejo_image="$PPM_FORGEJO_IMAGE_DEFAULT" git_ssh_port=2222
   while (($#)); do
     case "$1" in
       --domain) domain="${2:?}"; shift 2 ;;
@@ -66,6 +106,9 @@ cmd_init() {
       --minio-image) minio_image="${2:?}"; shift 2 ;;
       --mirror) mirror="${2:?}"; shift 2 ;;
       --hsts) hsts="${2:?}"; shift 2 ;;
+      --git-domain) git_domain="${2:?}"; shift 2 ;;
+      --git-ssh-port) git_ssh_port="${2:?}"; shift 2 ;;
+      --forgejo-image) forgejo_image="${2:?}"; shift 2 ;;
       --reuse-secret-key-from) reuse_from="${2:?}"; shift 2 ;;
       --force) force=1; shift ;;
       *) die "unknown argument for init: $1" ;;
@@ -79,10 +122,13 @@ cmd_init() {
   fi
   [[ -e "$output" && "$force" != 1 ]] && die "$output already exists; use check, or --force to replace it explicitly"
   minio_image="${minio_image:-$image_repo/minio:$release}"
-  local secret_key; secret_key="$(rand_hex 48)"
+  git_domain="${git_domain:-git.$domain}"
+  local secret_key forgejo_secret_key=""; secret_key="$(rand_hex 48)"
   if [[ -n "$reuse_from" ]]; then
     secret_key="$(env_get "$reuse_from" SECRET_KEY)"
     [[ -n "$secret_key" ]] || die "SECRET_KEY not found in $reuse_from"
+    # Forgejo encrypts 2FA secrets with it: a recovered Git server needs the old value too (when the old env had one).
+    forgejo_secret_key="$(env_get "$reuse_from" FORGEJO_SECRET_KEY)"
   fi
   mkdir -p "$(dirname "$output")"
   local base passphrase_name passphrase_file
@@ -132,6 +178,8 @@ cmd_init() {
     echo "PPM_GITHUB_APP_CLIENT_SECRET="
     echo "PPM_GITHUB_APP_PRIVATE_KEY="
     echo "PPM_GITHUB_WEBHOOK_SECRET="
+    echo "# ---- Git server (Forgejo), RUNBOOK §17. PPM_FORGEJO_TOKEN is written by ppm-deploy.sh git-bootstrap."
+    git_lines "$git_domain" "$https_port" "$git_ssh_port" "$forgejo_image" "$forgejo_secret_key"
   } >"$tmp"
   if [[ ! -e "$passphrase_file" ]]; then
     (umask 077 && rand_hex 48 >"$passphrase_file.tmp") && chmod 600 "$passphrase_file.tmp" && mv -f "$passphrase_file.tmp" "$passphrase_file"
@@ -141,19 +189,93 @@ cmd_init() {
   fi
   mv -f "$tmp" "$output"
   chmod 600 "$output"
-  if ! (cmd_check "$output" >/dev/null); then
+  if ! (cmd_check "$output" >/dev/null 2>&1); then
     cmd_check "$output" || true
     rm -f "$output"
     ((created_passphrase)) && rm -f "$passphrase_file"
     die "no files were kept (fix the arguments and run init again)"
   fi
-  echo "Created $output and $passphrase_file (mode 600); generated secrets: ${GENERATED_SECRETS[*]}$([[ -n "$reuse_from" ]] && echo " (SECRET_KEY reused)"). Values were not printed."
+  echo "Created $output and $passphrase_file (mode 600); generated secrets: ${GENERATED_SECRETS[*]} ${GIT_HEX_SECRETS[*]} ${GIT_JWT_SECRETS[*]}$([[ -n "$reuse_from" ]] && echo " (SECRET_KEY$([[ -n "$forgejo_secret_key" ]] && echo ", FORGEJO_SECRET_KEY") reused)"). Values were not printed."
   echo "Store BOTH files in a password manager: without the passphrase file no backup can be restored."
   cmd_check "$output"
 }
 
+# Git server keys (Forgejo). Sets git_state (for the summary) and appends to the caller's `errors`/`notes`.
+check_git() { # file
+  local file="$1" enabled domain git_domain tls bind https_port http_port ssh ssh_port size image key value token
+  if ! env_has "$file" PPM_GIT_SERVER_ENABLED; then
+    git_state="off"
+    notes+=("Git server keys are missing (env of RC.1): the Git server stays off. Add them (nothing else changes): ppm-env.sh add-git $file")
+    return 0
+  fi
+  enabled="$(env_get "$file" PPM_GIT_SERVER_ENABLED)"
+  case "$enabled" in
+    0) git_state="off"; return 0 ;;
+    1) ;;
+    *) errors+=("PPM_GIT_SERVER_ENABLED must be 1 (Git server on) or 0 (off)"); return 0 ;;
+  esac
+  for key in "${GIT_KEYS[@]}"; do
+    [[ "$key" == PPM_FORGEJO_TOKEN || "$key" == PPM_GIT_MAX_BODY_SIZE ]] && continue
+    env_has "$file" "$key" || errors+=("$key is missing (Git server on): ppm-env.sh add-git $file adds it")
+  done
+  domain="$(env_get "$file" PPM_DOMAIN)"; git_domain="$(env_get "$file" PPM_GIT_DOMAIN)"
+  tls="$(env_get "$file" PPM_TLS)"; bind="$(env_get "$file" PPM_BIND_ADDRESS)"
+  https_port="$(env_get "$file" PPM_HTTPS_PORT)"; http_port="$(env_get "$file" PPM_HTTP_PORT)"
+  if ! valid_host "$git_domain"; then
+    errors+=("PPM_GIT_DOMAIN must be a bare host name (e.g. git.$domain)")
+  elif [[ "$git_domain" == "$domain" ]]; then
+    errors+=("PPM_GIT_DOMAIN must differ from PPM_DOMAIN: the Git server needs its own origin (git.$domain)")
+  elif [[ "$domain" == *.localhost && "$git_domain" != *.localhost ]]; then
+    errors+=("PPM_GIT_DOMAIN must be *.localhost like PPM_DOMAIN (drill/test deployment)")
+  elif [[ "$domain" != *.localhost && "$git_domain" == *.localhost ]]; then
+    errors+=("PPM_GIT_DOMAIN is *.localhost next to a real PPM_DOMAIN: use git.$domain (with its DNS record)")
+  fi
+  [[ "$(env_get "$file" PPM_GIT_PUBLIC_URL)" == "$(public_url "$git_domain" "$https_port")" ]] \
+    || errors+=("PPM_GIT_PUBLIC_URL must be exactly $(public_url "$git_domain" "$https_port")")
+  ssh="$(env_get "$file" PPM_GIT_SSH_ENABLED)"; ssh_port="$(env_get "$file" PPM_GIT_SSH_PORT)"
+  [[ "$ssh" =~ ^[01]$ ]] || errors+=("PPM_GIT_SSH_ENABLED must be 1 (git over SSH) or 0 (HTTPS only)")
+  if [[ "$ssh" == 1 ]]; then
+    if [[ ! "$ssh_port" =~ ^[0-9]{2,5}$ ]] || ((10#$ssh_port > 65535)); then
+      errors+=("PPM_GIT_SSH_PORT must be a port number")
+    elif [[ "$ssh_port" == "$https_port" || "$ssh_port" == "$http_port" ]]; then
+      errors+=("PPM_GIT_SSH_PORT must differ from PPM_HTTP_PORT/PPM_HTTPS_PORT (the proxy listens there)")
+    fi
+  fi
+  value="$(env_get "$file" PPM_GIT_DISABLE_MIGRATIONS)"
+  [[ -z "$value" || "$value" =~ ^(true|false)$ ]] \
+    || errors+=("PPM_GIT_DISABLE_MIGRATIONS must be true (no repository migrations) or false")
+  size="$(env_get "$file" PPM_GIT_MAX_BODY_SIZE)"
+  [[ -z "$size" || "$size" =~ ^[1-9][0-9]*([KMGT]i?B|B)?$ ]] \
+    || errors+=("PPM_GIT_MAX_BODY_SIZE must be a size such as 1GB or 500MB")
+  image="$(env_get "$file" PPM_FORGEJO_IMAGE)"
+  [[ "$image" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]] \
+    || errors+=("PPM_FORGEJO_IMAGE must be pinned by digest (<image>@sha256:<64 hex>, e.g. $PPM_FORGEJO_IMAGE_DEFAULT)")
+  for key in "${GIT_HEX_SECRETS[@]}"; do
+    value="$(env_get "$file" "$key")"
+    [[ -z "$value" ]] && { env_has "$file" "$key" && errors+=("$key is empty"); continue; }
+    if ((${#value} < 20)); then errors+=("$key is shorter than 20 characters")
+    elif [[ ! "$value" =~ ^[A-Za-z0-9]+$ ]]; then errors+=("$key must be alphanumeric (ppm-env.sh generates hex)"); fi
+  done
+  for key in "${GIT_JWT_SECRETS[@]}"; do
+    value="$(env_get "$file" "$key")"
+    [[ "$value" =~ ^[A-Za-z0-9_-]{43}$ ]] \
+      || errors+=("$key must be base64url of 32 bytes without '=' (43 characters); Forgejo replaces any other value at every start")
+  done
+  token="$(env_get "$file" PPM_FORGEJO_TOKEN)"
+  if [[ -z "$token" ]]; then
+    notes+=("PPM_FORGEJO_TOKEN is empty: after \`up\`, run ppm-deploy.sh git-bootstrap (service account, read-only token, webhook)")
+  elif [[ ! "$token" =~ ^[0-9a-f]{40}$ ]]; then
+    errors+=("PPM_FORGEJO_TOKEN is not a Forgejo token (40 hex characters): run ppm-deploy.sh git-bootstrap --rotate-token")
+  fi
+  if [[ "$tls" == "internal" && "$git_domain" != *.localhost && "$bind" != "127.0.0.1" ]]; then
+    errors+=("PPM_TLS=internal is only allowed for a *.localhost PPM_GIT_DOMAIN or with PPM_BIND_ADDRESS=127.0.0.1")
+  fi
+  git_state="$git_domain on ($([[ "$ssh" == 1 ]] && echo "SSH port $ssh_port" || echo "HTTPS only"))"
+}
+
 cmd_check() {
-  local file="${1:?check needs a file}" errors=() key value domain tls https_port bind expected passfile project
+  local file="${1:?check needs a file}" errors=() notes=() key value domain tls https_port bind expected passfile project
+  local git_state="off"
   [[ -f "$file" ]] || die "$file does not exist"
   for key in "${REQUIRED_KEYS[@]}"; do
     [[ -n "$(env_get "$file" "$key")" ]] || errors+=("$key is missing or empty")
@@ -177,8 +299,7 @@ cmd_check() {
     errors+=("PPM_PROJECT names the production project ($PPM_PRODUCTION_PROJECT); a *.localhost (drill/test) deployment needs its own (e.g. ppm-drill)")
   fi
   bind="$(env_get "$file" PPM_BIND_ADDRESS)"
-  [[ "$domain" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$ ]] \
-    || errors+=("PPM_DOMAIN must be a bare host name (no scheme, port or path)")
+  valid_host "$domain" || errors+=("PPM_DOMAIN must be a bare host name (no scheme, port or path)")
   for key in PPM_HTTP_PORT PPM_HTTPS_PORT; do
     [[ "$(env_get "$file" "$key")" =~ ^[0-9]{2,5}$ ]] || errors+=("$key must be a port number")
   done
@@ -214,12 +335,62 @@ cmd_check() {
       (( $(tr -d '\n' <"$passfile" | wc -c) >= 32 )) || errors+=("$passfile holds fewer than 32 characters")
     fi
   fi
+  check_git "$file"
   if ((${#errors[@]})); then
     printf 'ppm-env: %s is invalid:\n' "$file" >&2
     printf '  - %s\n' "${errors[@]}" >&2
     return 1
   fi
-  echo "ppm-env: $file is valid (domain $domain, $([[ "$bind" == 127.0.0.1 ]] && echo private || echo public) phase, release $(env_get "$file" PPM_RELEASE)); secret values were not printed."
+  # Notes go to stderr: visible even where the summary is discarded (ppm-deploy.sh up).
+  ((${#notes[@]} == 0)) || printf 'ppm-env: note: %s\n' "${notes[@]}" >&2
+  echo "ppm-env: $file is valid (domain $domain, $([[ "$bind" == 127.0.0.1 ]] && echo private || echo public) phase, release $(env_get "$file" PPM_RELEASE); Git server $git_state); secret values were not printed."
+}
+
+# Append the Git server keys an existing env lacks; never touches an existing line (the old content stays a
+# byte-identical prefix of the new file) and never changes a key that is present, even an empty or 0 one.
+cmd_add_git() {
+  local file="" git_domain="" forgejo_image="$PPM_FORGEJO_IMAGE_DEFAULT" git_ssh_port=2222 domain https_port line key
+  local added=() kept=()
+  local generated=() tmp
+  while (($#)); do
+    case "$1" in
+      --git-domain) git_domain="${2:?--git-domain needs a host name}"; shift 2 ;;
+      --git-ssh-port) git_ssh_port="${2:?--git-ssh-port needs a port}"; shift 2 ;;
+      --forgejo-image) forgejo_image="${2:?--forgejo-image needs an image}"; shift 2 ;;
+      -*) die "unknown argument for add-git: $1" ;;
+      *) [[ -z "$file" ]] || die "add-git takes one env file"; file="$1"; shift ;;
+    esac
+  done
+  [[ -n "$file" ]] || die "add-git needs the env file"
+  [[ -f "$file" ]] || die "$file does not exist (create a new one with init)"
+  domain="$(env_get "$file" PPM_DOMAIN)"; https_port="$(env_get "$file" PPM_HTTPS_PORT)"
+  [[ -n "$domain" && -n "$https_port" ]] || die "$file has no PPM_DOMAIN/PPM_HTTPS_PORT: not a PPM env file"
+  git_domain="${git_domain:-git.$domain}"
+  tmp="$(mktemp "$(dirname "$file")/.ppm-env.XXXXXX")"
+  chmod 600 "$tmp"
+  cat "$file" >"$tmp"
+  [[ -z "$(tail -c 1 "$file")" ]] || echo >>"$tmp"  # the old last line gets its newline; its bytes stay the same
+  echo "# ---- Git server (Forgejo), added $(date -u +%Y-%m-%dT%H:%M:%SZ) by ppm-env.sh add-git (RUNBOOK §17)" >>"$tmp"
+  while IFS= read -r line; do
+    key="${line%%=*}"
+    if env_has "$file" "$key"; then kept+=("$key"); continue; fi
+    echo "$line" >>"$tmp"; added+=("$key")
+    is_secret "$key" && [[ "$key" != PPM_FORGEJO_TOKEN ]] && generated+=("$key")
+  done < <(git_lines "$git_domain" "$https_port" "$git_ssh_port" "$forgejo_image")
+  if ((${#added[@]} == 0)); then
+    rm -f "$tmp"
+    echo "ppm-env: $file already has every Git server key; nothing to add (the file was not changed)."
+  else
+    mv -f "$tmp" "$file"
+    chmod 600 "$file"
+    echo "ppm-env: added ${#added[@]} Git server keys to $file: ${added[*]}; generated secrets: ${generated[*]:-none} (values were not printed)."
+    ((${#kept[@]} == 0)) || echo "ppm-env: kept as they were: ${kept[*]}"
+    echo "ppm-env: save the new copy of $file in the password manager."
+  fi
+  if [[ "$(env_get "$file" PPM_GIT_SERVER_ENABLED)" == 0 ]]; then
+    echo "ppm-env: PPM_GIT_SERVER_ENABLED=0 was kept: the Git server stays off (switch on: ppm-env.sh set $file PPM_GIT_SERVER_ENABLED 1)."
+  fi
+  cmd_check "$file"
 }
 
 cmd_get() {
@@ -242,10 +413,30 @@ cmd_set() {
   echo "ppm-env: $key updated in $file"
 }
 
+# The one secret a script writes: the read-only Forgejo token of git-bootstrap. The value comes on stdin and reaches
+# awk through its environment (never a command line); it is never printed.
+cmd_set_secret() {
+  local file="${1:?set-secret needs the env file}" key="${2:?set-secret needs the key}" value="" tmp
+  [[ "$key" == PPM_FORGEJO_TOKEN ]] || die "set-secret only writes PPM_FORGEJO_TOKEN (the other secrets: edit the file, RUNBOOK §13)"
+  [[ -f "$file" ]] || die "$file does not exist"
+  IFS= read -r value || true
+  [[ "$value" =~ ^[0-9a-f]{40}$ ]] || die "set-secret: stdin holds no Forgejo token (40 hex characters); $file was not changed"
+  tmp="$(mktemp "$(dirname "$file")/.ppm-env.XXXXXX")"
+  chmod 600 "$tmp"
+  PPM_ENV_SECRET_VALUE="$value" awk -v k="$key" 'BEGIN { v = ENVIRON["PPM_ENV_SECRET_VALUE"]; done = 0 }
+    index($0, k "=") == 1 { print k "=" v; done = 1; next } { print }
+    END { if (!done) print k "=" v }' "$file" >"$tmp"
+  mv -f "$tmp" "$file"
+  chmod 600 "$file"
+  echo "ppm-env: $key updated in $file (value not printed)"
+}
+
 case "${1:-}" in
   init) shift; cmd_init "$@" ;;
   check) shift; cmd_check "$@" || exit 1 ;;
   get) shift; cmd_get "$@" ;;
   set) shift; cmd_set "$@" ;;
-  *) sed -n '2,18p' "$0"; exit 2 ;;
+  add-git) shift; cmd_add_git "$@" || exit 1 ;;
+  set-secret) shift; cmd_set_secret "$@" ;;
+  *) sed -n '2,25p' "$0"; exit 2 ;;
 esac

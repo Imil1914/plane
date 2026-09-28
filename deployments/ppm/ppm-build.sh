@@ -109,7 +109,11 @@ for service in $services; do
              --build-arg "CADDY_IMAGE=$caddy_image"
            docker run --rm -e PPM_DOMAIN=ppm.example.test -e PPM_TLS=internal --entrypoint caddy \
              "$image_repo/proxy:$release" validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
-           echo "Caddyfile validated." ;;
+           # With the Git server site (git-server-1.caddy) as docker-compose.git.yml runs it.
+           docker run --rm -e PPM_DOMAIN=ppm.example.test -e PPM_TLS=internal -e PPM_GIT_SERVER_ENABLED=1 \
+             -e PPM_GIT_DOMAIN=git.ppm.example.test --entrypoint caddy \
+             "$image_repo/proxy:$release" validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
+           echo "Caddyfile validated (with and without the Git server site)." ;;
     api) build api "$export_dir/apps/api" "$export_dir/apps/api/Dockerfile.api" \
            --build-arg "PYTHON_IMAGE=$python_image" ;;
     web) build web "$export_dir" "$export_dir/apps/web/Dockerfile.web" \
@@ -125,9 +129,13 @@ for service in $services; do
            --build-arg "PPM_ANTYFLOW_SHELL_ENABLED=${PPM_ANTYFLOW_SHELL_ENABLED:-1}" \
            --build-arg "PPM_SHELL_ENABLED=${PPM_SHELL_ENABLED:-1}" ;;
     admin) build admin "$export_dir" "$export_dir/apps/admin/Dockerfile.admin" \
-             --build-arg "NODE_IMAGE=$node_image" --build-arg "NGINX_IMAGE=$nginx_image" ;;
+             --build-arg "NODE_IMAGE=$node_image" --build-arg "NGINX_IMAGE=$nginx_image" \
+             --build-arg "PPM_BRAND_ENABLED=${PPM_BRAND_ENABLED:-1}" \
+             --build-arg "PPM_SHELL_ENABLED=${PPM_SHELL_ENABLED:-1}" ;;
     space) build space "$export_dir" "$export_dir/apps/space/Dockerfile.space" \
-             --build-arg "NODE_IMAGE=$node_image" ;;
+             --build-arg "NODE_IMAGE=$node_image" \
+             --build-arg "PPM_BRAND_ENABLED=${PPM_BRAND_ENABLED:-1}" \
+             --build-arg "PPM_SHELL_ENABLED=${PPM_SHELL_ENABLED:-1}" ;;
     live) build live "$export_dir" "$export_dir/apps/live/Dockerfile.live" \
             --build-arg "NODE_IMAGE=$node_image" ;;
     *) echo "Unknown service: $service" >&2; exit 2 ;;

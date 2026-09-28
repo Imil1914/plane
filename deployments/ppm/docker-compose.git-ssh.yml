@@ -1,0 +1,11 @@
+# git over SSH for the Git server (Forgejo's built-in SSH server, container port 2222). Added by ppm-lib.sh when
+# PPM_GIT_SERVER_ENABLED=1 and PPM_GIT_SSH_ENABLED=1. The port is published on PPM_BIND_ADDRESS like the proxy's:
+# 127.0.0.1 in the private phase, 0.0.0.0 once public (open PPM_GIT_SSH_PORT in the firewall, RUNBOOK §17.1).
+# PPM_GIT_SSH_ENABLED=0 drops this file: Forgejo then has no SSH server and shows only HTTPS clone URLs.
+services:
+  forgejo:
+    environment:
+      FORGEJO__server__DISABLE_SSH: "false"
+      FORGEJO__server__START_SSH_SERVER: "true"
+    ports:
+      - "${PPM_BIND_ADDRESS:-127.0.0.1}:${PPM_GIT_SSH_PORT:-2222}:2222"

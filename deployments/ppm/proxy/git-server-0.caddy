@@ -1,0 +1,2 @@
+# Git server off: the proxy runs without PPM_GIT_SERVER_ENABLED=1 (docker-compose.git.yml is not in use), so no
+# site is added for PPM_GIT_DOMAIN. The Git site itself is git-server-1.caddy.

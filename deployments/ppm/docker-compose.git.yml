@@ -1,0 +1,194 @@
+# Git server of PPM: Forgejo 15 LTS (rootless) on its own origin PPM_GIT_DOMAIN (git.<PPM domain>), RUNBOOK §17.
+#
+# Added by ppm-lib.sh only when the env has PPM_GIT_SERVER_ENABLED=1 (git SSH on top of it: docker-compose.git-ssh.yml
+# when PPM_GIT_SSH_ENABLED=1). Without this file nothing of the Git server exists: no service, no Caddy site, no
+# PPM_FORGEJO_* in the API — an RC.1 env keeps working as before.
+#
+# - Forgejo is reached only through the proxy (HTTPS, git.<domain>) and, if enabled, its own SSH port; port 3000
+#   is published nowhere. Its database `forgejo` (role `forgejo`) lives in the same PostgreSQL as PPM, created and
+#   kept in line with FORGEJO_DB_PASSWORD by the one-shot forgejo-db-init before every start. Data (repositories,
+#   LFS, attachments, SSH host keys) is the volume forgejo_data; ppm-backup.sh copies both into the same archive.
+# - Configuration comes only from the FORGEJO__section__KEY variables below: app.ini is regenerated from the image
+#   template at every start in a tmpfs (no web installer, no secret written to the data volume).
+# - No egress: no update checks, mail, mirrors, federation, Actions, packages, avatars from the Internet
+#   (OFFLINE_MODE); webhooks may call only the PPM API (`api`). The only outgoing requests are migrations an
+#   user starts by hand (off with PPM_GIT_DISABLE_MIGRATIONS=true), and only from GitHub (RUNBOOK §17.7).
+#   Restore-drill copies additionally route all Forgejo HTTP egress to a closed local port and disable migrations
+#   (PPM_GIT_DRILL_COPY / PPM_GIT_DISABLE_MIGRATIONS, exported by the scripts).
+# - The PPM API gets PPM_FORGEJO_URL (in-network), PPM_FORGEJO_PUBLIC_URL, PPM_FORGEJO_WEBHOOK_SECRET and
+#   PPM_FORGEJO_TOKEN (read-only token written by `ppm-deploy.sh git-bootstrap`).
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-forgejo-app-env: &forgejo-app-env
+  PPM_FORGEJO_URL: http://forgejo:3000
+  PPM_FORGEJO_PUBLIC_URL: ${PPM_GIT_PUBLIC_URL:?PPM_GIT_PUBLIC_URL is required (ppm-env.sh add-git)}
+  PPM_FORGEJO_WEBHOOK_SECRET: ${PPM_FORGEJO_WEBHOOK_SECRET:?PPM_FORGEJO_WEBHOOK_SECRET is required (ppm-env.sh add-git)}
+  # Empty until the first `ppm-deploy.sh git-bootstrap`: the Forgejo provider stays unconfigured in PPM until then.
+  PPM_FORGEJO_TOKEN: ${PPM_FORGEJO_TOKEN:-}
+  # 0 = git over SSH is off: the API leaves out the SSH clone command (Forgejo's API still reports an ssh_url).
+  PPM_FORGEJO_SSH_ENABLED: ${PPM_GIT_SSH_ENABLED:-1}
+
+services:
+  # Role and database `forgejo` in plane-db (idempotent): created when missing, the password aligned with
+  # FORGEJO_DB_PASSWORD on every run (rotation), PUBLIC access to both databases revoked. Prints nothing.
+  forgejo-db-init:
+    image: ${PPM_DOCKERHUB_MIRROR:-docker.io}/library/postgres:15.7-alpine@sha256:468d34fefd6338031787c7b8e94078975b3aaf4d66c7ead25c39cd3ba46a15c6
+    restart: "no"
+    entrypoint: ["psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "-f", "/forgejo/db-init.sql"]
+    environment:
+      PGHOST: plane-db
+      PGUSER: plane
+      PGDATABASE: plane
+      PGPASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      # Read by the script with \getenv: the value never appears on a command line or in the server log.
+      FORGEJO_DB_PASSWORD: ${FORGEJO_DB_PASSWORD:?FORGEJO_DB_PASSWORD is required (ppm-env.sh add-git)}
+    volumes:
+      - ./forgejo/db-init.sql:/forgejo/db-init.sql:ro
+    depends_on:
+      plane-db:
+        condition: service_healthy
+    logging: *logging
+
+  forgejo:
+    image: ${PPM_FORGEJO_IMAGE:?PPM_FORGEJO_IMAGE is required (ppm-env.sh add-git)}
+    restart: unless-stopped
+    environment:
+      GITEA_APP_INI: /etc/forgejo/app.ini
+      APP_NAME: Git-сервер PPM
+      FORGEJO__database__DB_TYPE: postgres
+      FORGEJO__database__HOST: plane-db:5432
+      FORGEJO__database__NAME: forgejo
+      FORGEJO__database__USER: forgejo
+      FORGEJO__database__PASSWD: ${FORGEJO_DB_PASSWORD}
+      FORGEJO__database__SSL_MODE: disable
+      FORGEJO__server__DOMAIN: ${PPM_GIT_DOMAIN:?PPM_GIT_DOMAIN is required (ppm-env.sh add-git)}
+      FORGEJO__server__ROOT_URL: ${PPM_GIT_PUBLIC_URL}/
+      FORGEJO__server__HTTP_PORT: "3000"
+      FORGEJO__server__SSH_DOMAIN: ${PPM_GIT_DOMAIN}
+      FORGEJO__server__SSH_PORT: ${PPM_GIT_SSH_PORT:-2222}
+      FORGEJO__server__SSH_LISTEN_PORT: "2222"
+      # SSH off unless docker-compose.git-ssh.yml (PPM_GIT_SSH_ENABLED=1) switches it on and publishes the port.
+      FORGEJO__server__DISABLE_SSH: "true"
+      FORGEJO__server__START_SSH_SERVER: "false"
+      FORGEJO__server__LFS_START_SERVER: "true"
+      FORGEJO__server__LFS_JWT_SECRET: ${FORGEJO_LFS_JWT_SECRET:?FORGEJO_LFS_JWT_SECRET is required (ppm-env.sh add-git)}
+      FORGEJO__server__OFFLINE_MODE: "true"
+      FORGEJO__security__INSTALL_LOCK: "true"
+      FORGEJO__security__SECRET_KEY: ${FORGEJO_SECRET_KEY:?FORGEJO_SECRET_KEY is required (ppm-env.sh add-git)}
+      FORGEJO__security__INTERNAL_TOKEN: ${FORGEJO_INTERNAL_TOKEN:?FORGEJO_INTERNAL_TOKEN is required (ppm-env.sh add-git)}
+      # API tokens only in the Authorization header: a ?token= in a URL is refused (URLs end up in logs and history).
+      FORGEJO__security__DISABLE_QUERY_AUTH_TOKEN: "true"
+      FORGEJO__security__MIN_PASSWORD_LENGTH: "12"
+      FORGEJO__security__PASSWORD_CHECK_PWN: "false"
+      # Sign-in through PPM comes with G2.2; the secret also signs Forgejo's own tokens (CSRF, links), so it is set.
+      FORGEJO__oauth2__ENABLED: "false"
+      FORGEJO__oauth2__JWT_SECRET: ${FORGEJO_JWT_SECRET:?FORGEJO_JWT_SECRET is required (ppm-env.sh add-git)}
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+      FORGEJO__service__REQUIRE_SIGNIN_VIEW: "true"
+      FORGEJO__service__DEFAULT_ALLOW_CREATE_ORGANIZATION: "false"
+      FORGEJO__service__DEFAULT_ORG_VISIBILITY: private
+      FORGEJO__service__DEFAULT_KEEP_EMAIL_PRIVATE: "true"
+      FORGEJO__service__ENABLE_NOTIFY_MAIL: "false"
+      FORGEJO__repository__DEFAULT_PRIVATE: private
+      FORGEJO__repository__ENABLE_PUSH_CREATE_USER: "true"
+      FORGEJO__repository__ENABLE_PUSH_CREATE_ORG: "true"
+      FORGEJO__repository__DEFAULT_PUSH_CREATE_PRIVATE: "true"
+      # Any user who may create repositories can start a migration: after the move from GitHub the owner switches
+      # them off with PPM_GIT_DISABLE_MIGRATIONS=true in ppm.env (RUNBOOK §17.7); drill copies always have them off.
+      FORGEJO__repository__DISABLE_MIGRATIONS: ${PPM_GIT_DISABLE_MIGRATIONS:-false}
+      # Migration from GitHub only, never from internal addresses (plane-db, api, …).
+      FORGEJO__migrations__ALLOWED_DOMAINS: github.com,*.github.com,*.githubusercontent.com
+      FORGEJO__migrations__ALLOW_LOCALNETWORKS: "false"
+      # Webhooks (the system webhook of git-bootstrap included) may call only the PPM API inside the network.
+      FORGEJO__webhook__ALLOWED_HOST_LIST: api
+      FORGEJO__mirror__ENABLED: "false"
+      FORGEJO__mailer__ENABLED: "false"
+      FORGEJO__cron_0X2E_update_checker__ENABLED: "false"
+      FORGEJO__cron_0X2E_update_mirrors__ENABLED: "false"
+      FORGEJO__cron_0X2E_sync_external_users__ENABLED: ${PPM_GIT_EXTERNAL_USER_SYNC:-true}
+      FORGEJO__actions__ENABLED: "false"
+      FORGEJO__packages__ENABLED: "false"
+      FORGEJO__federation__ENABLED: "false"
+      FORGEJO__session__COOKIE_SECURE: "true"
+      # The router log prints every request URI with its query string; the proxy's access log (redacted) replaces it.
+      FORGEJO__log__LOGGER_ROUTER_MODE: ""
+      # Restore-drill copies (PPM_GIT_DRILL_COPY=true): every outgoing HTTP request of Forgejo (webhooks included)
+      # goes to a closed local port.
+      FORGEJO__proxy__PROXY_ENABLED: ${PPM_GIT_DRILL_COPY:-false}
+      FORGEJO__proxy__PROXY_URL: http://127.0.0.1:9/
+      FORGEJO__proxy__PROXY_HOSTS: "**"
+    tmpfs:
+      - /etc/forgejo:uid=1000,gid=1000,mode=0700
+    volumes:
+      - forgejo_data:/var/lib/gitea
+    depends_on:
+      forgejo-db-init:
+        condition: service_completed_successfully
+      plane-db:
+        condition: service_healthy
+    # /api/healthz checks the database too; Forgejo logs every call at info level, hence not more often than api/live.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3000/api/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+    # Forgejo finishes running pushes on SIGTERM (up to its 60 s hammer time) before it exits.
+    stop_grace_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging: *logging
+
+  proxy:
+    environment:
+      PPM_GIT_SERVER_ENABLED: "1"
+      PPM_GIT_DOMAIN: ${PPM_GIT_DOMAIN}
+      PPM_GIT_MAX_BODY_SIZE: ${PPM_GIT_MAX_BODY_SIZE:-1GB}
+    networks:
+      default:
+        aliases:
+          # In-network requests to the public Git URL (the git preflight) reach the proxy, as for PPM_DOMAIN.
+          - ${PPM_GIT_DOMAIN}
+
+  api:
+    environment: *forgejo-app-env
+  worker:
+    environment: *forgejo-app-env
+  beat-worker:
+    environment: *forgejo-app-env
+
+  # ---- one-off operator tools (profile "tools")
+
+  # tar/git fsck on the Forgejo data volume for ppm-backup.sh / ppm-restore.sh: the Forgejo image itself (uid 1000,
+  # the owner of the files), without network.
+  forgejo-tools:
+    profiles: ["tools"]
+    image: ${PPM_FORGEJO_IMAGE}
+    network_mode: none
+    entrypoint: ["sh"]
+    volumes:
+      - forgejo_data:/var/lib/gitea
+    logging: *logging
+
+  # Forgejo API part of `ppm-deploy.sh git-bootstrap` (token, system webhook) — secrets arrive on stdin only.
+  forgejo-bootstrap:
+    profiles: ["tools"]
+    image: ${PPM_IMAGE_REPO:-ppm}/api:${PPM_RELEASE}
+    user: "${PPM_HOST_UID:-0}:${PPM_HOST_GID:-0}"
+    entrypoint: ["python", "/forgejo/git_bootstrap.py"]
+    environment:
+      HOME: /tmp
+      PPM_FORGEJO_URL: http://forgejo:3000
+    volumes:
+      - ./forgejo:/forgejo:ro
+    logging: *logging
+
+volumes:
+  forgejo_data:

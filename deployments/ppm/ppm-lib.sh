@@ -1,6 +1,7 @@
 # shellcheck shell=bash disable=SC2154  # bundle_dir and env_file are set by the sourcing script
 # Shared helpers for ppm-deploy.sh, ppm-backup.sh and ppm-restore.sh (sourced, not executed).
-# Expects: bundle_dir, env_file. Defines: project, runtime_dir, state_dir, compose_files, dc(), env_get(), die().
+# Expects: bundle_dir, env_file. Defines: project, runtime_dir, state_dir, compose_files, git_enabled, dc(), env_get(),
+# die().
 
 die() { echo "${PPM_SCRIPT_NAME:-ppm}: $*" >&2; exit 1; }
 note() { echo "${PPM_SCRIPT_NAME:-ppm}: $*" >&2; }
@@ -24,6 +25,20 @@ PPM_PRODUCTION_PROJECT=ppm
 # Compose project names (the only form Docker Compose accepts): lowercase letters, digits, "_" and "-", starting with
 # a letter or digit — no capitals, spaces or tabs. The one rule for ppm-env.sh check and every script passing -p.
 ppm_valid_project_name() { [[ "$1" =~ ^[a-z0-9][a-z0-9_-]{0,62}$ ]]; }
+
+# Git server image (Forgejo 15 LTS, rootless), pinned by its multi-arch index digest (linux/amd64, arm64, arm/v6);
+# ppm-env.sh writes it into new env files as PPM_FORGEJO_IMAGE. The mirror data.forgejo.org/forgejo/forgejo serves
+# the same digest. Updating = a newer 15.x digest in PPM_FORGEJO_IMAGE (RUNBOOK §17.9), not a PPM release.
+# shellcheck disable=SC2034  # used by the sourcing scripts
+PPM_FORGEJO_IMAGE_DEFAULT="codeberg.org/forgejo/forgejo:15-rootless@sha256:caf1bca332f95cdcf124227a4bfa3b49bbbfbbc8a5e4a97406921cb581165413"
+
+# Restore-drill copies (marker <state>/no-workers, written by `ppm-deploy.sh up --no-workers`) must not reach out:
+# Compose reads these shell variables before the env file, so a drill copy's Forgejo sends every outgoing HTTP
+# request (webhooks, migrations) to a closed local port, has migrations and external-user sync off
+# (docker-compose.git.yml). Production never sets them.
+ppm_git_drill_exports() {
+  export PPM_GIT_DRILL_COPY=true PPM_GIT_DISABLE_MIGRATIONS=true PPM_GIT_EXTERNAL_USER_SYNC=false
+}
 
 # Defence in depth: the production name in any letter case, with any whitespace around or inside it.
 ppm_is_production_project() {
@@ -50,7 +65,15 @@ ppm_init_context() {
   if [[ "$(env_get PPM_TLS)" == "internal" ]]; then
     compose_files+=(-f "$bundle_dir/docker-compose.internal-tls.yml")
   fi
-  note "project $project, env $env_file (${env_file_source:-given})"
+  # Git server (Forgejo): only with PPM_GIT_SERVER_ENABLED=1 (absent in an RC.1 env = off, see ppm-env.sh check).
+  git_enabled=0
+  if [[ "$(env_get PPM_GIT_SERVER_ENABLED)" == 1 ]]; then
+    git_enabled=1
+    compose_files+=(-f "$bundle_dir/docker-compose.git.yml")
+    [[ "$(env_get PPM_GIT_SSH_ENABLED)" == 1 ]] && compose_files+=(-f "$bundle_dir/docker-compose.git-ssh.yml")
+  fi
+  [[ -f "$state_dir/no-workers" ]] && ppm_git_drill_exports
+  note "project $project, env $env_file (${env_file_source:-given})$( ((git_enabled)) && echo "; Git server $(env_get PPM_GIT_PUBLIC_URL)")"
 }
 
 dc() { docker compose -p "$project" --env-file "$env_file" "${compose_files[@]}" "$@"; }

@@ -1,0 +1,39 @@
+# Git server (Forgejo) on its own origin PPM_GIT_DOMAIN (git.<PPM domain>): Forgejo pages and scripts never run in the
+# PPM origin. Imported by the Caddyfile only when the proxy runs with PPM_GIT_SERVER_ENABLED=1 (docker-compose.git.yml).
+# Same TLS mode (ACME or internal CA), the same log redaction (Authorization of git over HTTPS, Cookie/Set-Cookie,
+# CSRF, the whole query string incl. ?token=) and the same HSTS as the PPM site.
+{$PPM_GIT_DOMAIN}:{$PPM_HTTPS_PORT:443} {
+	tls {$PPM_TLS}
+
+	# No X-Frame-Options from the proxy: Forgejo sends its own ([cors] X_FRAME_OPTIONS, SAMEORIGIN by default) and
+	# needs same-origin frames (file previews); a proxy DENY would break them.
+	header {
+		defer
+		Strict-Transport-Security "max-age={$PPM_HSTS_MAX_AGE:31536000}"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		-Server
+		-X-Powered-By
+	}
+
+	# Access log (JSON to stdout) with the same redaction as the PPM site.
+	log {
+		output stdout
+		import ppm_log_redaction
+	}
+
+	# A git push sends one pack (and git-lfs one object) per request: the limit only stops abusive bodies.
+	request_body {
+		max_size {$PPM_GIT_MAX_BODY_SIZE:1GB}
+	}
+
+	encode zstd gzip
+
+	# Long clone/push: Caddy sets no timeout on reading a request body or writing a response by default (only on
+	# headers and idle connections), and neither does this upstream; flush_interval -1 streams packs and git's
+	# progress messages without buffering. Forgejo's port 3000 is published nowhere else.
+	reverse_proxy forgejo:3000 {
+		flush_interval -1
+	}
+}

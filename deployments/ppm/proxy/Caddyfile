@@ -1,4 +1,6 @@
-# PPM reverse proxy (release candidate). One HTTPS site on PPM_DOMAIN in front of the PPM services.
+# PPM reverse proxy (release candidate). One HTTPS site on PPM_DOMAIN in front of the PPM services, plus the Git server
+# (Forgejo) on its own origin PPM_GIT_DOMAIN when the proxy runs with PPM_GIT_SERVER_ENABLED=1 (git-server-1.caddy,
+# imported at the end; set by docker-compose.git.yml — without it git-server-0.caddy adds nothing).
 #
 # TLS: PPM_TLS=<e-mail>  → automatic ACME certificate (Let's Encrypt by default, PPM_ACME_CA to override);
 #      PPM_TLS=internal  → Caddy's local CA (local rehearsal with a *.localhost domain only).
@@ -7,7 +9,8 @@
 # (the proxy carries PPM_DOMAIN as a network alias) and in the browser. The HTTPS port is part of the site
 # address (not the global https_port), so the automatic HTTP→HTTPS redirect keeps a non-standard port.
 # Logs: access and error entries go through the same redaction (presigned-URL signatures, OAuth/reset/API
-# tokens in the query or the reset-password path, Cookie/Set-Cookie, Authorization, X-Api-Key, CSRF, Referer).
+# tokens in the query or the reset-password path, Cookie/Set-Cookie, Authorization, X-Api-Key, CSRF, Referer) — on
+# the Git site too (git over HTTPS sends the token as Authorization; `?token=` sits in the query).
 # `ppm-deploy.sh scan-logs` checks that nothing usable reaches the logs (`--self-test` proves the scanner).
 {
 	http_port {$PPM_HTTP_PORT:80}
@@ -33,6 +36,8 @@
 				request>headers>Proxy-Authorization delete
 				request>headers>X-Api-Key delete
 				request>headers>X-Csrftoken delete
+				# Forgejo (Git site) sends its CSRF token in this header.
+				request>headers>X-Csrf-Token delete
 				request>headers>Referer delete
 				resp_headers>Set-Cookie delete
 				# 302 to a presigned download: the Location header carries X-Amz-Credential/Signature.
@@ -52,6 +57,8 @@
 			request>headers>Proxy-Authorization delete
 			request>headers>X-Api-Key delete
 			request>headers>X-Csrftoken delete
+			# Forgejo (Git site) sends its CSRF token in this header.
+			request>headers>X-Csrf-Token delete
 			request>headers>Referer delete
 			resp_headers>Set-Cookie delete
 			# 302 to a presigned download: the Location header carries X-Amz-Credential/Signature.
@@ -131,3 +138,7 @@
 		reverse_proxy web:3000
 	}
 }
+
+# Git server (Forgejo): git-server-1.caddy only when PPM_GIT_SERVER_ENABLED=1; any other value fails the start
+# (a missing file), so a typo never silently exposes or hides the site. Snippets above are visible inside.
+import /etc/caddy/git-server-{$PPM_GIT_SERVER_ENABLED:0}.caddy
