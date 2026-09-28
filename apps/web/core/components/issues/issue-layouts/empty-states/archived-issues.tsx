@@ -15,6 +15,7 @@ import { EIssuesStoreType, EUserProjectRoles } from "@plane/types";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkItemFilterInstance } from "@/hooks/store/work-item-filters/use-work-item-filter-instance";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export const ProjectArchivedEmptyState = observer(function ProjectArchivedEmptyState() {
   // router
@@ -24,6 +25,7 @@ export const ProjectArchivedEmptyState = observer(function ProjectArchivedEmptyS
   const projectId = routerProjectId ? routerProjectId.toString() : undefined;
   // plane hooks
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // store hooks
   const { allowPermissions } = useUserPermissions();
   // derived values
@@ -42,7 +44,7 @@ export const ProjectArchivedEmptyState = observer(function ProjectArchivedEmptyS
           description={t("common_empty_state.search.description")}
           actions={[
             {
-              label: "Clear filters",
+              label: ppmText("ui.common.clear_filters", "Clear filters"),
               onClick: archivedWorkItemFilter?.clearFilters,
               disabled: !canPerformEmptyStateActions || !archivedWorkItemFilter,
               variant: "secondary",

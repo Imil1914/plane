@@ -16,6 +16,9 @@ import { Input, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type FormData = {
   projectName: string;
@@ -34,12 +37,17 @@ export interface ILeaveProjectModal {
 }
 
 export const LeaveProjectModal = observer(function LeaveProjectModal(props: ILeaveProjectModal) {
+  const isPpmRu = usePpmRu();
   const { project, isOpen, onClose } = props;
   // router
   const router = useAppRouter();
   const { workspaceSlug } = useParams();
   // store hooks
   const { leaveProject } = useUserPermissions();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
+  // The typed confirmation follows the interface language («покинуть проект» in the Russian PPM UI).
+  const leavePhrase = ppmText("ui.confirm.leave_project_phrase", "Leave Project");
 
   const {
     control,
@@ -58,7 +66,7 @@ export const LeaveProjectModal = observer(function LeaveProjectModal(props: ILea
 
     if (data) {
       if (data.projectName === project?.name) {
-        if (data.confirmLeave === "Leave Project") {
+        if (data.confirmLeave === leavePhrase) {
           router.push(`/${workspaceSlug}/projects`);
           return leaveProject(workspaceSlug.toString(), project.id)
             .then(() => {
@@ -67,29 +75,35 @@ export const LeaveProjectModal = observer(function LeaveProjectModal(props: ILea
             .catch((_err) => {
               setToast({
                 type: TOAST_TYPE.ERROR,
-                title: "Error!",
-                message: "Something went wrong please try again later.",
+                title: ppmText("ui.toast.error", "Error!"),
+                message: ppmText("ui.toast.try_again_later", "Something went wrong please try again later."),
               });
             });
         } else {
           setToast({
             type: TOAST_TYPE.ERROR,
-            title: "Error!",
-            message: "Please confirm leaving the project by typing the 'Leave Project'.",
+            title: ppmText("ui.toast.error", "Error!"),
+            message: ppmText(
+              "ui.confirm.leave_project_phrase_mismatch",
+              "Please confirm leaving the project by typing the 'Leave Project'."
+            ),
           });
         }
       } else {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "Please enter the project name as shown in the description.",
+          title: ppmText("ui.toast.error", "Error!"),
+          message: ppmText(
+            "ui.confirm.leave_project_name_mismatch",
+            "Please enter the project name as shown in the description."
+          ),
         });
       }
     } else {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Please fill all fields.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: ppmText("ui.confirm.fill_all_fields", "Please fill all fields."),
       });
     }
   };
@@ -102,21 +116,41 @@ export const LeaveProjectModal = observer(function LeaveProjectModal(props: ILea
             <AlertTriangleIcon className="h-6 w-6 text-danger-primary" aria-hidden="true" />
           </span>
           <span className="flex items-center justify-start">
-            <h3 className="text-18 font-medium 2xl:text-20">Leave Project</h3>
+            <h3 className="text-18 font-medium 2xl:text-20">
+              {ppmText("ui.confirm.leave_project_heading", "Leave Project")}
+            </h3>
           </span>
         </div>
 
         <span>
           <p className="text-13 leading-7 text-secondary">
-            Are you sure you want to leave the project -
-            <span className="font-medium text-primary">{` "${project?.name}" `}</span>? All of the work items associated
-            with you will become inaccessible.
+            {isPpmRu ? (
+              <PpmTemplateText
+                template={ppmT("ui.confirm.leave_project_typed_content")}
+                values={{ name: <span className="font-medium text-primary">{project?.name}</span> }}
+              />
+            ) : (
+              <>
+                Are you sure you want to leave the project -
+                <span className="font-medium text-primary">{` "${project?.name}" `}</span>? All of the work items
+                associated with you will become inaccessible.
+              </>
+            )}
           </p>
         </span>
 
         <div className="text-secondary">
           <p className="text-13 break-words">
-            Enter the project name <span className="font-medium text-primary">{project?.name}</span> to continue:
+            {isPpmRu ? (
+              <PpmTemplateText
+                template={ppmT("ui.confirm.delete_project_name_prompt")}
+                values={{ name: <span className="font-medium text-primary">{project?.name}</span> }}
+              />
+            ) : (
+              <>
+                Enter the project name <span className="font-medium text-primary">{project?.name}</span> to continue:
+              </>
+            )}
           </p>
           <Controller
             control={control}
@@ -133,7 +167,7 @@ export const LeaveProjectModal = observer(function LeaveProjectModal(props: ILea
                 onChange={onChange}
                 ref={ref}
                 hasError={Boolean(errors.projectName)}
-                placeholder="Enter project name"
+                placeholder={ppmText("ui.confirm.leave_project_name_placeholder", "Enter project name")}
                 className="mt-2 w-full"
               />
             )}
@@ -142,7 +176,16 @@ export const LeaveProjectModal = observer(function LeaveProjectModal(props: ILea
 
         <div className="text-secondary">
           <p className="text-13">
-            To confirm, type <span className="font-medium text-primary">Leave Project</span> below:
+            {isPpmRu ? (
+              <PpmTemplateText
+                template={ppmT("ui.confirm.delete_project_phrase_prompt")}
+                values={{ phrase: <span className="font-medium text-primary">{leavePhrase}</span> }}
+              />
+            ) : (
+              <>
+                To confirm, type <span className="font-medium text-primary">Leave Project</span> below:
+              </>
+            )}
           </p>
           <Controller
             control={control}
@@ -156,7 +199,7 @@ export const LeaveProjectModal = observer(function LeaveProjectModal(props: ILea
                 onChange={onChange}
                 ref={ref}
                 hasError={Boolean(errors.confirmLeave)}
-                placeholder="Enter 'leave project'"
+                placeholder={ppmText("ui.confirm.leave_project_phrase_placeholder", "Enter 'leave project'")}
                 className="mt-2 w-full"
               />
             )}
@@ -164,10 +207,12 @@ export const LeaveProjectModal = observer(function LeaveProjectModal(props: ILea
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" size="lg" onClick={handleClose}>
-            Cancel
+            {ppmText("ui.common.cancel", "Cancel")}
           </Button>
           <Button variant="error-fill" size="lg" type="submit" loading={isSubmitting}>
-            {isSubmitting ? "Leaving..." : "Leave Project"}
+            {isSubmitting
+              ? ppmText("ui.common.leaving", "Leaving...")
+              : ppmText("ui.confirm.leave_project_heading", "Leave Project")}
           </Button>
         </div>
       </form>

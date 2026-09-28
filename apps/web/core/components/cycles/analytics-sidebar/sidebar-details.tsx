@@ -17,9 +17,11 @@ import type { ICycle } from "@plane/types";
 import { Avatar, AvatarGroup, TextArea } from "@plane/ui";
 // helpers
 import { getFileURL } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useMember } from "@/hooks/store/use-member";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web constants
 
 type Props = {
@@ -33,6 +35,10 @@ export const CycleSidebarDetails = observer(function CycleSidebarDetails(props: 
   const { getUserDetails } = useMember();
   const { areEstimateEnabledByProjectId, currentActiveEstimateId, estimateById } = useProjectEstimates();
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  // PPM line S4: «0 задач» (upstream "0 Work item", which reads «0 Задача» in Russian)
+  const noWorkItems = isPpmShell ? ppmT("stats.no_work_items") : `0 ${t("common.work_item")}`;
 
   const areEstimateEnabled = projectId && areEstimateEnabledByProjectId(projectId.toString());
   const cycleStatus = cycleDetails?.status?.toLocaleLowerCase();
@@ -41,10 +47,10 @@ export const CycleSidebarDetails = observer(function CycleSidebarDetails(props: 
   const issueCount =
     isCompleted && !isEmpty(cycleDetails?.progress_snapshot)
       ? cycleDetails?.progress_snapshot?.total_issues === 0
-        ? `0 ${t("common.work_item")}`
+        ? noWorkItems
         : `${cycleDetails?.progress_snapshot?.completed_issues}/${cycleDetails?.progress_snapshot?.total_issues}`
       : cycleDetails?.total_issues === 0
-        ? `0 ${t("common.work_item")}`
+        ? noWorkItems
         : `${cycleDetails?.completed_issues}/${cycleDetails?.total_issues}`;
   const estimateType = areEstimateEnabled && currentActiveEstimateId && estimateById(currentActiveEstimateId);
   const cycleOwnerDetails = cycleDetails ? getUserDetails(cycleDetails.owned_by_id) : undefined;
@@ -60,10 +66,10 @@ export const CycleSidebarDetails = observer(function CycleSidebarDetails(props: 
   const issueEstimatePointCount =
     isCompleted && !isEmpty(cycleDetails?.progress_snapshot)
       ? cycleDetails?.progress_snapshot.total_issues === 0
-        ? `0 ${t("common.work_item")}`
+        ? noWorkItems
         : `${cycleDetails?.progress_snapshot.completed_estimate_points}/${cycleDetails?.progress_snapshot.total_estimate_points}`
       : cycleDetails?.total_issues === 0
-        ? `0 ${t("common.work_item")}`
+        ? noWorkItems
         : `${cycleDetails?.completed_estimate_points}/${cycleDetails?.total_estimate_points}`;
   return (
     <div className="flex w-full flex-col gap-5">

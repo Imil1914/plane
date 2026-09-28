@@ -17,6 +17,7 @@ import { CustomSearchSelect } from "@plane/ui";
 // local imports
 import { SelectedOptionsDisplay } from "./selected-options-display";
 import { getCommonCustomSearchSelectProps, getFormattedOptions, loadOptions } from "./shared";
+import { usePpmRichFilterText } from "../../ppm-labels";
 
 type TSingleSelectFilterValueInputProps<P extends TFilterProperty> = {
   config: TSingleSelectFilterFieldConfig<string>;
@@ -30,14 +31,15 @@ export const SingleSelectFilterValueInput = observer(function SingleSelectFilter
 ) {
   const { config, condition, onChange, isDisabled } = props;
   // states
+  const { localizeOptions } = usePpmRichFilterText();
   const [options, setOptions] = useState<IFilterOption<string>[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   // derived values
   const formattedOptions = useMemo(() => getFormattedOptions<string>(options), [options]);
 
   useEffect(() => {
-    loadOptions({ config, setOptions, setLoading });
-  }, [config]);
+    loadOptions({ config, setOptions: (loaded) => setOptions(localizeOptions(loaded)), setLoading });
+  }, [config, localizeOptions]);
 
   const handleSelectChange = (value: string) => {
     if (value === condition.value) {

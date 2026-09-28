@@ -14,6 +14,7 @@ import type { IUser } from "@plane/types";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export type TIssueCommentReaction = {
   workspaceSlug: string;
@@ -34,6 +35,7 @@ export const IssueCommentReaction = observer(function IssueCommentReaction(props
     removeCommentReaction,
   } = useIssueDetail();
   const { getUserDetails } = useMember();
+  const ppmText = usePpmText();
 
   const reactionIds = getCommentReactionsByCommentId(commentId);
   const userReactions = commentReactionsByUser(commentId, currentUser.id).map((r) => r.reaction);
@@ -45,15 +47,15 @@ export const IssueCommentReaction = observer(function IssueCommentReaction(props
           if (!workspaceSlug || !projectId || !commentId) throw new Error("Missing fields");
           await createCommentReaction(workspaceSlug, projectId, commentId, reaction);
           setToast({
-            title: "Success!",
+            title: ppmText("ui.toast.success", "Success!"),
             type: TOAST_TYPE.SUCCESS,
-            message: "Reaction created successfully",
+            message: ppmText("ui.toast.reaction_added", "Reaction created successfully"),
           });
         } catch (_error) {
           setToast({
-            title: "Error!",
+            title: ppmText("ui.toast.error", "Error!"),
             type: TOAST_TYPE.ERROR,
-            message: "Reaction creation failed",
+            message: ppmText("ui.toast.reaction_add_failed", "Reaction creation failed"),
           });
         }
       },
@@ -62,15 +64,15 @@ export const IssueCommentReaction = observer(function IssueCommentReaction(props
           if (!workspaceSlug || !projectId || !commentId || !currentUser?.id) throw new Error("Missing fields");
           removeCommentReaction(workspaceSlug, projectId, commentId, reaction, currentUser.id);
           setToast({
-            title: "Success!",
+            title: ppmText("ui.toast.success", "Success!"),
             type: TOAST_TYPE.SUCCESS,
-            message: "Reaction removed successfully",
+            message: ppmText("ui.toast.reaction_removed", "Reaction removed successfully"),
           });
         } catch (_error) {
           setToast({
-            title: "Error!",
+            title: ppmText("ui.toast.error", "Error!"),
             type: TOAST_TYPE.ERROR,
-            message: "Reaction remove failed",
+            message: ppmText("ui.toast.reaction_remove_failed", "Reaction remove failed"),
           });
         }
       },
@@ -79,7 +81,16 @@ export const IssueCommentReaction = observer(function IssueCommentReaction(props
         else await issueCommentReactionOperations.create(reaction);
       },
     }),
-    [workspaceSlug, projectId, commentId, currentUser, createCommentReaction, removeCommentReaction, userReactions]
+    [
+      workspaceSlug,
+      projectId,
+      commentId,
+      currentUser,
+      createCommentReaction,
+      removeCommentReaction,
+      userReactions,
+      ppmText,
+    ]
   );
 
   const getReactionUsers = (reaction: string): string[] => {

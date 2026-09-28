@@ -21,6 +21,7 @@ import { EIssuesStoreType } from "@plane/types";
 // ui
 import { Loader, Avatar } from "@plane/ui";
 import { cn, renderFormattedDate, renderFormattedDateWithoutYear, getFileURL } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // assets
 import darkAssigneeAsset from "@/app/assets/empty-state/active-cycle/assignee-dark.webp?url";
 import lightAssigneeAsset from "@/app/assets/empty-state/active-cycle/assignee-light.webp?url";
@@ -34,11 +35,13 @@ import { SingleProgressStats } from "@/components/core/sidebar/single-progress-s
 import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 import { SimpleEmptyState } from "@/components/empty-state/simple-empty-state-root";
 import { IssueIdentifier } from "@/components/issues/issue-detail/issue-identifier";
+import { ACTIVE_CYCLE_DEFAULT_TAB, ACTIVE_CYCLE_TAB_STORAGE_KEY } from "@/components/ppm-live-stats/live-subjects";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
 import useLocalStorage from "@/hooks/use-local-storage";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // store
 import type { ActiveCycleIssueDetails } from "@/store/issue/cycle";
 
@@ -54,7 +57,11 @@ export type ActiveCycleStatsProps = {
 export const ActiveCycleStats = observer(function ActiveCycleStats(props: ActiveCycleStatsProps) {
   const { workspaceSlug, projectId, cycle, cycleId, handleFiltersUpdate, cycleIssueDetails } = props;
   // local storage
-  const { storedValue: tab, setValue: setTab } = useLocalStorage("activeCycleTab", "Assignees");
+  // PPM line S: the same stored tab as the live refresh of «Приоритетные задачи» (use-cycle-live-stats)
+  const { storedValue: tab, setValue: setTab } = useLocalStorage(
+    ACTIVE_CYCLE_TAB_STORAGE_KEY,
+    ACTIVE_CYCLE_DEFAULT_TAB
+  );
   // refs
   const issuesContainerRef = useRef<HTMLDivElement | null>(null);
   // states
@@ -63,6 +70,8 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
   const { resolvedTheme } = useTheme();
   // plane hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // derived values
   const priorityResolvedPath = resolvedTheme === "light" ? lightPriorityAsset : darkPriorityAsset;
   const assigneesResolvedPath = resolvedTheme === "light" ? lightAssigneeAsset : darkAssigneeAsset;
@@ -207,7 +216,11 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
                         >
                           <div className="flex w-full min-w-24 flex-grow items-center gap-1.5 truncate">
                             <IssueIdentifier issueId={issue.id} projectId={projectId} size="xs" variant="secondary" />
-                            <Tooltip position="top-start" tooltipHeading="Title" tooltipContent={issue.name}>
+                            <Tooltip
+                              position="top-start"
+                              tooltipHeading={isPpmShell ? ppmT("stats.tooltip_title") : "Title"}
+                              tooltipContent={issue.name}
+                            >
                               <span className="truncate text-13 text-primary">{issue.name}</span>
                             </Tooltip>
                           </div>
@@ -224,7 +237,7 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
                             />
                             {issue.target_date && (
                               <Tooltip
-                                tooltipHeading="Target Date"
+                                tooltipHeading={isPpmShell ? ppmT("stats.tooltip_due_date") : "Target Date"}
                                 tooltipContent={renderFormattedDate(issue.target_date)}
                               >
                                 <div className="flex h-full cursor-pointer items-center gap-1.5 truncate rounded-sm bg-layer-1 px-2 py-0.5 text-11 group-hover:bg-surface-1">
@@ -341,7 +354,9 @@ export const ActiveCycleStats = observer(function ActiveCycleStats(props: Active
                             backgroundColor: label.color ?? "#000000",
                           }}
                         />
-                        <span className="truncate text-11 text-ellipsis">{label.label_name ?? "No labels"}</span>
+                        <span className="truncate text-11 text-ellipsis">
+                          {label.label_name ?? (isPpmShell ? ppmT("stats.no_label") : "No labels")}
+                        </span>
                       </div>
                     }
                     completed={label.completed_issues}

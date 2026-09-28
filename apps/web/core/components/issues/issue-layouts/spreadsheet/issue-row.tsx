@@ -306,7 +306,7 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
               })}
             >
               {/* select checkbox */}
-              {projectId && canSelectIssues && (
+              {canSelectIssues && nestingLevel === 0 && (
                 <Tooltip
                   tooltipContent={
                     <>
@@ -315,20 +315,20 @@ const IssueRowDetails = observer(function IssueRowDetails(props: IssueRowDetails
                       project can be selected.
                     </>
                   }
-                  disabled={issueDetail.project_id === projectId}
+                  disabled={!projectId || issueDetail.project_id === projectId}
                 >
                   <div className="absolute left-1 mr-1 grid w-3.5 flex-shrink-0 place-items-center">
                     <MultipleSelectEntityAction
                       className={cn(
-                        "pointer-events-none opacity-0 transition-opacity group-hover/list-block:pointer-events-auto group-hover/list-block:opacity-100",
+                        "pointer-events-none opacity-0 transition-opacity group-hover/list-block:pointer-events-auto group-hover/list-block:opacity-100 focus-visible:opacity-100",
                         {
-                          "pointer-events-auto opacity-100": isIssueSelected,
+                          "pointer-events-auto opacity-100": isIssueSelected || selectionHelpers.isSelectionActive,
                         }
                       )}
                       groupId={SPREADSHEET_SELECT_GROUP}
                       id={issueDetail.id}
                       selectionHelpers={selectionHelpers}
-                      disabled={issueDetail.project_id !== projectId}
+                      disabled={!!projectId && issueDetail.project_id !== projectId}
                     />
                   </div>
                 </Tooltip>

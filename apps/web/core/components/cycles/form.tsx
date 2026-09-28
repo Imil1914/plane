@@ -20,6 +20,9 @@ import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { ProjectDropdown } from "@/components/dropdowns/project/dropdown";
 // hooks
 import { useUser } from "@/hooks/store/user/user-user";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+// local imports
+import { usePpmCycleOverlapMessage } from "./use-ppm-cycle-overlap";
 
 type Props = {
   handleFormSubmit: (values: Partial<ICycle>) => Promise<void>;
@@ -39,17 +42,20 @@ const defaultValues: Partial<ICycle> = {
 };
 
 export function CycleForm(props: Props) {
+  const isPpmRu = usePpmRu();
   const { handleFormSubmit, handleClose, status, projectId, setActiveProject, data, isMobile = false } = props;
   // plane hooks
   const { t } = useTranslation();
   // store hooks
   const { projectsWithCreatePermissions } = useUser();
+  const getOverlapMessage = usePpmCycleOverlapMessage();
   // form data
   const {
     formState: { errors, isSubmitting },
     handleSubmit,
     control,
     reset,
+    watch,
   } = useForm<ICycle>({
     defaultValues: {
       project_id: projectId,
@@ -61,6 +67,15 @@ export function CycleForm(props: Props) {
   });
 
   const { getIndex } = getTabIndex(ETabIndices.PROJECT_CYCLE, isMobile);
+
+  // PPM: warn about overlapping sprint dates right away (the server still decides on submit).
+  const overlapMessage = isPpmRu
+    ? getOverlapMessage(watch("project_id") ?? projectId, {
+        start: renderFormattedPayloadDate(watch("start_date")),
+        end: renderFormattedPayloadDate(watch("end_date")),
+        cycleId: data?.id,
+      })
+    : null;
 
   useEffect(() => {
     reset({
@@ -168,8 +183,8 @@ export function CycleForm(props: Props) {
                         onChangeEndDate(val?.to ? renderFormattedPayloadDate(val.to) : null);
                       }}
                       placeholder={{
-                        from: "Start date",
-                        to: "End date",
+                        from: t("start_date"),
+                        to: t("end_date"),
                       }}
                       hideIcon={{
                         to: true,
@@ -181,6 +196,11 @@ export function CycleForm(props: Props) {
               )}
             />
           </div>
+          {overlapMessage && (
+            <p className="text-11 text-danger-primary" role="alert">
+              {overlapMessage}
+            </p>
+          )}
         </div>
       </div>
       <div className="flex items-center justify-end gap-2 border-t-[0.5px] border-subtle px-5 py-4">

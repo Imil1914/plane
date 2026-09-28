@@ -18,10 +18,13 @@ import { useProject } from "@/hooks/store/use-project";
 import useKeypress from "@/hooks/use-keypress";
 import useLocalStorage from "@/hooks/use-local-storage";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmServerError } from "@/hooks/use-ppm-server-error";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
 // services
 import { CycleService } from "@/services/cycle.service";
 // local imports
 import { CycleForm } from "./form";
+import { usePpmCycleOverlapMessage } from "./use-ppm-cycle-overlap";
 
 type CycleModalProps = {
   isOpen: boolean;
@@ -35,6 +38,7 @@ type CycleModalProps = {
 const cycleService = new CycleService();
 
 export function CycleCreateUpdateModal(props: CycleModalProps) {
+  const isPpmRu = usePpmRu();
   const { isOpen, handleClose, data, workspaceSlug, projectId } = props;
   // states
   const [activeProject, setActiveProject] = useState<string | null>(null);
@@ -42,6 +46,9 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
   const { workspaceProjectIds } = useProject();
   const { createCycle, updateCycleDetails } = useCycle();
   const { isMobile } = usePlatformOS();
+  const ppmText = usePpmText();
+  const ppmServerError = usePpmServerError();
+  const getOverlapMessage = usePpmCycleOverlapMessage();
 
   const { setValue: setCycleTab } = useLocalStorage<TCycleTabOptions>("cycle_tab", "active");
 
@@ -63,15 +70,18 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
 
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Success!",
-          message: "Cycle created successfully.",
+          title: ppmText("ui.toast.success", "Success!"),
+          message: ppmText("ui.cycle.created", "Cycle created successfully."),
         });
       })
       .catch((err) => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.detail ?? "Error in creating cycle. Please try again.",
+          ...ppmServerError(
+            err,
+            { title: "ui.cycle.create_failed_title", message: "ui.cycle.create_failed" },
+            { title: "Error!", message: err?.detail ?? "Error in creating cycle. Please try again." }
+          ),
         });
       });
   };
@@ -84,15 +94,18 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
       .then((_res) => {
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Success!",
-          message: "Cycle updated successfully.",
+          title: ppmText("ui.toast.success", "Success!"),
+          message: ppmText("ui.cycle.updated", "Cycle updated successfully."),
         });
       })
       .catch((err) => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.detail ?? "Error in updating cycle. Please try again.",
+          ...ppmServerError(
+            err,
+            { title: "ui.cycle.update_failed_title", message: "ui.cycle.update_failed" },
+            { title: "Error!", message: err?.detail ?? "Error in updating cycle. Please try again." }
+          ),
         });
       });
   };
@@ -149,12 +162,26 @@ export function CycleCreateUpdateModal(props: CycleModalProps) {
         });
       }
       handleClose();
-    } else
+    } else {
+      // PPM: name the conflicting sprint and the way out; the general text when the store does not know it.
+      const overlapMessage = getOverlapMessage(payload.project_id ?? projectId, {
+        start: payload.start_date,
+        end: payload.end_date,
+        cycleId: data?.id,
+      });
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "You already have a cycle on the given dates, if you want to create a draft cycle, remove the dates.",
+        title: data?.id
+          ? ppmText("ui.cycle.update_failed_title", "Error!")
+          : ppmText("ui.cycle.create_failed_title", "Error!"),
+        message:
+          (isPpmRu && overlapMessage) ||
+          ppmText(
+            "ui.error.cycle_dates_overlap",
+            "You already have a cycle on the given dates, if you want to create a draft cycle, remove the dates."
+          ),
       });
+    }
   };
 
   useEffect(() => {

@@ -11,9 +11,13 @@ import { useSearchParams } from "next/navigation";
 import { SitesAuthService } from "@plane/services";
 import type { IEmailCheckData } from "@plane/types";
 import { OAuthOptions } from "@plane/ui";
+import { getOAuthButtonText } from "@plane/utils";
+import { getPpmTranslation, resolvePpmLocale } from "@ppm/brand";
+import type { TPpmTranslationKey } from "@ppm/brand";
 // helpers
 import type { TAuthErrorInfo } from "@/helpers/authentication.helper";
 import { EErrorAlertType, authErrorHandler, EAuthenticationErrorCodes } from "@/helpers/authentication.helper";
+import { IS_PPM_SHELL_ENABLED, useAuthLanguage } from "@/helpers/ppm-auth-language";
 // hooks
 import { useOAuthConfig } from "@/hooks/oauth";
 import { useInstance } from "@/hooks/store/use-instance";
@@ -43,10 +47,12 @@ export const AuthRoot = observer(function AuthRoot() {
   const [isPasswordAutoset, setIsPasswordAutoset] = useState(true);
   // hooks
   const { config } = useInstance();
+  // PPM line L: the interface language of the sign-in screens
+  const { language, t } = useAuthLanguage();
 
   useEffect(() => {
     if (error_code) {
-      const errorhandler = authErrorHandler(error_code?.toString() as EAuthenticationErrorCodes);
+      const errorhandler = authErrorHandler(error_code?.toString() as EAuthenticationErrorCodes, undefined, language);
       if (errorhandler) {
         if (errorhandler.code === EAuthenticationErrorCodes.AUTHENTICATION_FAILED_SIGN_IN) {
           setAuthMode(EAuthModes.SIGN_IN);
@@ -79,13 +85,23 @@ export const AuthRoot = observer(function AuthRoot() {
         setErrorInfo(errorhandler);
       }
     }
-  }, [error_code]);
+  }, [error_code, language]);
 
   const isSMTPConfigured = config?.is_smtp_configured || false;
   const isMagicLoginEnabled = config?.is_magic_login_enabled || false;
   const isEmailPasswordEnabled = config?.is_email_password_enabled || false;
   const oAuthActionText = authMode === EAuthModes.SIGN_UP ? "Sign up" : "Sign in";
-  const { isOAuthEnabled, oAuthOptions } = useOAuthConfig(oAuthActionText);
+  const { isOAuthEnabled, oAuthOptions: upstreamOAuthOptions } = useOAuthConfig(oAuthActionText);
+  // PPM line L: «Войти через Google» instead of the upstream "<action> with Google".
+  const oAuthOptions = IS_PPM_SHELL_ENABLED
+    ? upstreamOAuthOptions.map((option) => ({
+        ...option,
+        text:
+          getOAuthButtonText(option.id, authMode === EAuthModes.SIGN_UP ? "sign_up" : "sign_in", (key) =>
+            getPpmTranslation(language, key as TPpmTranslationKey)
+          ) ?? option.text,
+      }))
+    : upstreamOAuthOptions;
 
   // submit handler- email verification
   const handleEmailVerification = async (data: IEmailCheckData) => {
@@ -111,7 +127,7 @@ export const AuthRoot = observer(function AuthRoot() {
             setIsPasswordAutoset(false);
             setAuthStep(EAuthSteps.PASSWORD);
           } else {
-            const errorhandler = authErrorHandler("5005" as EAuthenticationErrorCodes);
+            const errorhandler = authErrorHandler("5005" as EAuthenticationErrorCodes, undefined, language);
             setErrorInfo(errorhandler);
           }
         } else {
@@ -121,14 +137,14 @@ export const AuthRoot = observer(function AuthRoot() {
           } else if (isEmailPasswordEnabled) {
             setAuthStep(EAuthSteps.PASSWORD);
           } else {
-            const errorhandler = authErrorHandler("5006" as EAuthenticationErrorCodes);
+            const errorhandler = authErrorHandler("5006" as EAuthenticationErrorCodes, undefined, language);
             setErrorInfo(errorhandler);
           }
         }
         return;
       })
       .catch((error) => {
-        const errorhandler = authErrorHandler(error?.error_code?.toString(), data?.email || undefined);
+        const errorhandler = authErrorHandler(error?.error_code?.toString(), data?.email || undefined, language);
         if (errorhandler?.type) setErrorInfo(errorhandler);
       });
   };
@@ -140,20 +156,29 @@ export const AuthRoot = observer(function AuthRoot() {
       .generateUniqueCode(payload)
       .then(() => ({ code: "" }))
       .catch((error) => {
-        const errorhandler = authErrorHandler(error?.error_code.toString());
+        const errorhandler = authErrorHandler(error?.error_code.toString(), undefined, language);
         if (errorhandler?.type) setErrorInfo(errorhandler);
         throw error;
       });
   };
 
   return (
-    <div className="mt-10 flex w-full flex-grow flex-col items-center justify-center py-6">
+    <div
+      className="mt-10 flex w-full flex-grow flex-col items-center justify-center py-6"
+      lang={IS_PPM_SHELL_ENABLED ? resolvePpmLocale(language) : undefined}
+    >
       <div className="relative flex w-full max-w-[22.5rem] flex-col gap-6">
         {errorInfo && errorInfo?.type === EErrorAlertType.BANNER_ALERT && (
           <AuthBanner bannerData={errorInfo} handleBannerData={(value) => setErrorInfo(value)} />
         )}
         <AuthHeader authMode={authMode} />
-        {isOAuthEnabled && <OAuthOptions options={oAuthOptions} compact={authStep === EAuthSteps.PASSWORD} />}
+        {isOAuthEnabled && (
+          <OAuthOptions
+            options={oAuthOptions}
+            compact={authStep === EAuthSteps.PASSWORD}
+            dividerText={IS_PPM_SHELL_ENABLED ? t("auth.or") : undefined}
+          />
+        )}
 
         {authStep === EAuthSteps.EMAIL && <AuthEmailForm defaultEmail={email} onSubmit={handleEmailVerification} />}
         {authStep === EAuthSteps.UNIQUE_CODE && (

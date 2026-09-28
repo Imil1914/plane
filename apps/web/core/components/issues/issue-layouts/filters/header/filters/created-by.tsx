@@ -16,6 +16,7 @@ import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/fi
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   appliedFilters: string[] | null;
@@ -26,6 +27,7 @@ type Props = {
 
 export const FilterCreatedBy = observer(function FilterCreatedBy(props: Props) {
   const { appliedFilters, handleUpdate, memberIds, searchQuery } = props;
+  const ppmText = usePpmText();
   // states
   const [itemsToRender, setItemsToRender] = useState(5);
   const [previewEnabled, setPreviewEnabled] = useState(true);
@@ -58,7 +60,7 @@ export const FilterCreatedBy = observer(function FilterCreatedBy(props: Props) {
   return (
     <>
       <FilterHeader
-        title={`Created by${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
+        title={`${ppmText("ui.filter.created_by", "Created by")}${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
         isPreviewEnabled={previewEnabled}
         handleIsPreviewEnabled={() => setPreviewEnabled(!previewEnabled)}
       />
@@ -77,7 +79,7 @@ export const FilterCreatedBy = observer(function FilterCreatedBy(props: Props) {
                       isChecked={appliedFilters?.includes(member.id) ? true : false}
                       onClick={() => handleUpdate(member.id)}
                       icon={<Avatar name={member.display_name} src={getFileURL(member.avatar_url)} size="md" />}
-                      title={currentUser?.id === member.id ? "You" : member?.display_name}
+                      title={currentUser?.id === member.id ? ppmText("ui.common.you", "You") : member?.display_name}
                     />
                   );
                 })}
@@ -87,12 +89,14 @@ export const FilterCreatedBy = observer(function FilterCreatedBy(props: Props) {
                     className="ml-8 text-11 font-medium text-accent-primary"
                     onClick={handleViewToggle}
                   >
-                    {itemsToRender === sortedOptions.length ? "View less" : "View all"}
+                    {itemsToRender === sortedOptions.length
+                      ? ppmText("ui.common.view_less", "View less")
+                      : ppmText("ui.common.view_all", "View all")}
                   </button>
                 )}
               </>
             ) : (
-              <p className="text-11 text-placeholder italic">No matches found</p>
+              <p className="text-11 text-placeholder italic">{ppmText("ui.common.no_matches", "No matches found")}</p>
             )
           ) : (
             <Loader className="space-y-2">

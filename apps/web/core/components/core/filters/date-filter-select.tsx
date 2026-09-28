@@ -9,6 +9,8 @@ import { CalendarDays } from "lucide-react";
 // ui
 import { CalendarAfterIcon, CalendarBeforeIcon } from "@plane/propel/icons";
 import { CustomSelect } from "@plane/ui";
+import type { TPpmTranslationKey } from "@ppm/brand";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   title: string;
@@ -40,7 +42,18 @@ const dueDateRange: DueDate[] = [
   },
 ];
 
+// «Срок до / после / в диапазоне» in the Russian PPM interface; the upstream words otherwise.
+const DATE_RANGE_KEYS: Record<string, TPpmTranslationKey> = {
+  before: "ui.date_filter.type_before",
+  after: "ui.date_filter.type_after",
+  range: "ui.date_filter.type_range",
+};
+
 export function DateFilterSelect({ title, value, onChange }: Props) {
+  const ppmText = usePpmText();
+  const optionName = (option: DueDate | undefined) =>
+    option ? ppmText(DATE_RANGE_KEYS[option.value], option.name) : undefined;
+
   return (
     <CustomSelect
       value={value}
@@ -48,7 +61,7 @@ export function DateFilterSelect({ title, value, onChange }: Props) {
         <div className="flex items-center gap-2 text-11">
           {dueDateRange.find((item) => item.value === value)?.icon}
           <span>
-            {title} {dueDateRange.find((item) => item.value === value)?.name}
+            {title} {optionName(dueDateRange.find((item) => item.value === value))}
           </span>
         </div>
       }
@@ -58,7 +71,7 @@ export function DateFilterSelect({ title, value, onChange }: Props) {
         <CustomSelect.Option key={index} value={option.value}>
           <div className="flex items-center gap-2">
             <span>{option.icon}</span>
-            {title} {option.name}
+            {title} {optionName(option)}
           </div>
         </CustomSelect.Option>
       ))}

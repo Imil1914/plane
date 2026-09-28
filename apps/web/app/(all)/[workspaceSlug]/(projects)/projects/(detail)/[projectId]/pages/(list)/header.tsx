@@ -25,8 +25,10 @@ import { useProject } from "@/hooks/store/use-project";
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
 import { EPageStoreType, usePageStore } from "@/hooks/store";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export const PagesListHeader = observer(function PagesListHeader() {
+  const ppmText = usePpmText();
   // states
   const [isCreatingPage, setIsCreatingPage] = useState(false);
   // router
@@ -58,8 +60,8 @@ export const PagesListHeader = observer(function PagesListHeader() {
       .catch((err) => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.data?.error || "Page could not be created. Please try again.",
+          title: ppmText("ui.toast.error", "Error!"),
+          message: err?.data?.error || ppmText("ui.page.create_failed", "Page could not be created. Please try again."),
         });
       })
       .finally(() => setIsCreatingPage(false));
@@ -86,7 +88,7 @@ export const PagesListHeader = observer(function PagesListHeader() {
       {canCurrentUserCreatePage && (
         <Header.RightItem>
           <Button variant="primary" size="lg" onClick={handleCreatePage} loading={isCreatingPage}>
-            {isCreatingPage ? "Adding" : "Add page"}
+            {isCreatingPage ? ppmText("ui.page.adding", "Adding") : ppmText("ui.page.add", "Add page")}
           </Button>
         </Header.RightItem>
       )}

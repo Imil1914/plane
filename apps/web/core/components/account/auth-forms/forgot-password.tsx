@@ -16,7 +16,11 @@ import { Button, getButtonStyling } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Input } from "@plane/ui";
 import { cn, checkEmailValidity } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
+// helpers
+import { getResetLinkErrorText } from "@/helpers/authentication.helper";
 // hooks
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import useTimer from "@/hooks/use-timer";
 // services
 import { AuthService } from "@/services/auth.service";
@@ -35,12 +39,15 @@ const defaultValues: TForgotPasswordFormValues = {
 // services
 const authService = new AuthService();
 
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+
 export const ForgotPasswordForm = observer(function ForgotPasswordForm() {
   // search params
   const searchParams = useSearchParams();
   const email = searchParams.get("email");
   // plane hooks
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
+  const ppmT = usePpmTranslation();
   // timer
   const { timer: resendTimerCode, setTimer: setResendCodeTimer } = useTimer(0);
 
@@ -64,27 +71,41 @@ export const ForgotPasswordForm = observer(function ForgotPasswordForm() {
       .then(() => {
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: t("auth.forgot_password.toast.success.title"),
-          message: t("auth.forgot_password.toast.success.message"),
+          title: IS_PPM_SHELL_ENABLED
+            ? ppmT("auth.reset_email_sent_title")
+            : t("auth.forgot_password.toast.success.title"),
+          message: IS_PPM_SHELL_ENABLED
+            ? ppmT("auth.reset_email_sent_message")
+            : t("auth.forgot_password.toast.success.message"),
         });
         setResendCodeTimer(30);
       })
       .catch((err) => {
+        // PPM line L: the reason from the error code, in the interface language (never a raw server string).
+        const errorText = IS_PPM_SHELL_ENABLED
+          ? getResetLinkErrorText(err?.data?.error_code?.toString(), currentLocale)
+          : undefined;
         setToast({
           type: TOAST_TYPE.ERROR,
           title: t("auth.forgot_password.toast.error.title"),
-          message: err?.error ?? t("auth.forgot_password.toast.error.message"),
+          message:
+            errorText ??
+            (IS_PPM_SHELL_ENABLED ? undefined : err?.error) ??
+            t("auth.forgot_password.toast.error.message"),
         });
       });
   };
 
   return (
     <FormContainer>
-      <AuthFormHeader title="Reset password" description="Regain access to your account." />
+      <AuthFormHeader
+        title={IS_PPM_SHELL_ENABLED ? ppmT("auth.reset_password_title") : "Reset password"}
+        description={IS_PPM_SHELL_ENABLED ? ppmT("auth.forgot_password_description") : "Regain access to your account."}
+      />
       <form onSubmit={handleSubmit(handleForgotPassword)} className="space-y-4">
         <div className="space-y-1">
           <label className="text-13 font-medium text-tertiary" htmlFor="email">
-            {t("auth.common.email.label")}
+            {IS_PPM_SHELL_ENABLED ? ppmT("auth.email") : t("auth.common.email.label")}
           </label>
           <Controller
             control={control}
@@ -102,7 +123,7 @@ export const ForgotPasswordForm = observer(function ForgotPasswordForm() {
                 onChange={onChange}
                 ref={ref}
                 hasError={Boolean(errors.email)}
-                placeholder={t("auth.common.email.placeholder")}
+                placeholder={IS_PPM_SHELL_ENABLED ? ppmT("auth.email_placeholder") : t("auth.common.email.placeholder")}
                 className="h-10 w-full border border-strong !bg-surface-1 pr-12 placeholder:text-placeholder"
                 autoComplete="off"
                 disabled={resendTimerCode > 0}
@@ -112,7 +133,7 @@ export const ForgotPasswordForm = observer(function ForgotPasswordForm() {
           {resendTimerCode > 0 && (
             <p className="flex w-full items-start gap-1 px-1 text-11 font-medium text-success-primary">
               <CircleCheck height={12} width={12} className="mt-0.5" />
-              {t("auth.forgot_password.email_sent")}
+              {IS_PPM_SHELL_ENABLED ? ppmT("auth.reset_link_sent") : t("auth.forgot_password.email_sent")}
             </p>
           )}
         </div>

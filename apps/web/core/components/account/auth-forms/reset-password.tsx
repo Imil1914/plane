@@ -16,15 +16,20 @@ import { Button } from "@plane/propel/button";
 import { Input, PasswordStrengthIndicator } from "@plane/ui";
 // components
 import { getPasswordStrength } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // helpers
 import type { EAuthenticationErrorCodes, TAuthErrorInfo } from "@/helpers/authentication.helper";
 import { EErrorAlertType, authErrorHandler } from "@/helpers/authentication.helper";
+// hooks
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // services
 import { AuthService } from "@/services/auth.service";
 // local imports
 import { AuthBanner } from "./auth-banner";
 import { FormContainer } from "./common/container";
 import { AuthFormHeader } from "./common/header";
+import { PasswordFieldHints, usePasswordFieldHints } from "./password-field-hints";
+import { PpmPasswordStrengthIndicator } from "./password-strength";
 
 type TResetPasswordFormValues = {
   email: string;
@@ -39,6 +44,8 @@ const defaultValues: TResetPasswordFormValues = {
 
 // services
 const authService = new AuthService();
+
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 export const ResetPasswordForm = observer(function ResetPasswordForm() {
   // search params
@@ -61,7 +68,10 @@ export const ResetPasswordForm = observer(function ResetPasswordForm() {
   const [isRetryPasswordInputFocused, setIsRetryPasswordInputFocused] = useState(false);
   const [errorInfo, setErrorInfo] = useState<TAuthErrorInfo | undefined>(undefined);
   // plane hooks
-  const { t } = useTranslation();
+  const { t, currentLocale } = useTranslation();
+  const ppmT = usePpmTranslation();
+  // PPM line L: Caps Lock / Russian layout / edge-space hints under the password field
+  const passwordHints = usePasswordFieldHints("reset-password-hints", IS_PPM_SHELL_ENABLED);
 
   const handleShowPassword = (key: keyof typeof showPassword) =>
     setShowPassword((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -86,12 +96,16 @@ export const ResetPasswordForm = observer(function ResetPasswordForm() {
 
   useEffect(() => {
     if (error_code) {
-      const errorhandler = authErrorHandler(error_code?.toString() as EAuthenticationErrorCodes);
+      const errorhandler = authErrorHandler(
+        error_code?.toString() as EAuthenticationErrorCodes,
+        undefined,
+        currentLocale
+      );
       if (errorhandler) {
         setErrorInfo(errorhandler);
       }
     }
-  }, [error_code]);
+  }, [error_code, currentLocale]);
 
   const password = resetFormData?.password ?? "";
   const confirmPassword = resetFormData?.confirm_password ?? "";
@@ -99,7 +113,10 @@ export const ResetPasswordForm = observer(function ResetPasswordForm() {
 
   return (
     <FormContainer>
-      <AuthFormHeader title="Reset password" description="Create a new password." />
+      <AuthFormHeader
+        title={IS_PPM_SHELL_ENABLED ? ppmT("auth.reset_password_title") : "Reset password"}
+        description={IS_PPM_SHELL_ENABLED ? ppmT("auth.new_password_description") : "Create a new password."}
+      />
 
       {errorInfo && errorInfo?.type === EErrorAlertType.BANNER_ALERT && (
         <AuthBanner message={errorInfo.message} handleBannerData={(value) => setErrorInfo(value)} />
@@ -112,7 +129,7 @@ export const ResetPasswordForm = observer(function ResetPasswordForm() {
         <input type="hidden" name="csrfmiddlewaretoken" value={csrfToken} />
         <div className="space-y-1">
           <label className="text-13 font-medium text-tertiary" htmlFor="email">
-            {t("auth.common.email.label")}
+            {IS_PPM_SHELL_ENABLED ? ppmT("auth.email") : t("auth.common.email.label")}
           </label>
           <div className="relative flex items-center rounded-md bg-surface-1">
             <Input
@@ -121,7 +138,7 @@ export const ResetPasswordForm = observer(function ResetPasswordForm() {
               type="email"
               value={resetFormData.email}
               //hasError={Boolean(errors.email)}
-              placeholder={t("auth.common.email.placeholder")}
+              placeholder={IS_PPM_SHELL_ENABLED ? ppmT("auth.email_placeholder") : t("auth.common.email.placeholder")}
               className="h-10 w-full cursor-not-allowed border border-strong !bg-surface-1 pr-12 text-placeholder"
               autoComplete="off"
               disabled
@@ -143,9 +160,13 @@ export const ResetPasswordForm = observer(function ResetPasswordForm() {
               className="h-10 w-full border border-strong !bg-surface-1 pr-12 placeholder:text-placeholder"
               minLength={8}
               onFocus={() => setIsPasswordInputFocused(true)}
-              onBlur={() => setIsPasswordInputFocused(false)}
+              onBlur={() => {
+                setIsPasswordInputFocused(false);
+                passwordHints.resetCapsLock();
+              }}
               autoComplete="new-password"
               autoFocus
+              {...passwordHints.inputProps}
             />
             {showPassword.password ? (
               <EyeOff
@@ -159,7 +180,18 @@ export const ResetPasswordForm = observer(function ResetPasswordForm() {
               />
             )}
           </div>
-          <PasswordStrengthIndicator password={resetFormData.password} isFocused={isPasswordInputFocused} />
+          {IS_PPM_SHELL_ENABLED && (
+            <PasswordFieldHints
+              id="reset-password-hints"
+              value={resetFormData.password}
+              isCapsLockOn={passwordHints.isCapsLockOn}
+            />
+          )}
+          {IS_PPM_SHELL_ENABLED ? (
+            <PpmPasswordStrengthIndicator password={resetFormData.password} isFocused={isPasswordInputFocused} />
+          ) : (
+            <PasswordStrengthIndicator password={resetFormData.password} isFocused={isPasswordInputFocused} />
+          )}
         </div>
         <div className="space-y-1">
           <label className="text-13 font-medium text-tertiary" htmlFor="confirm_password">

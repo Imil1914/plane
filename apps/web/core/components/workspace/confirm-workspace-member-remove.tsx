@@ -11,8 +11,12 @@ import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
+// components
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
 // hooks
 import { useUser } from "@/hooks/store/user";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 export type Props = {
   isOpen: boolean;
@@ -25,12 +29,15 @@ export type Props = {
 };
 
 export const ConfirmWorkspaceMemberRemove = observer(function ConfirmWorkspaceMemberRemove(props: Props) {
+  const isPpmRu = usePpmRu();
   const { isOpen, onClose, onSubmit, userDetails } = props;
   // states
   const [isRemoving, setIsRemoving] = useState(false);
   // store hooks
   const { data: currentUser } = useUser();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
 
   const handleClose = () => {
     onClose();
@@ -54,16 +61,26 @@ export const ConfirmWorkspaceMemberRemove = observer(function ConfirmWorkspaceMe
           </div>
           <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
             <h3 className="text-h5-medium leading-6 text-primary">
-              {currentUser?.id === userDetails.id ? "Leave workspace?" : `Remove ${userDetails?.display_name}?`}
+              {currentUser?.id === userDetails.id
+                ? ppmText("ui.confirm.leave_workspace_title", "Leave workspace?")
+                : ppmText("ui.confirm.remove_member_title", `Remove ${userDetails?.display_name}?`, {
+                    name: userDetails?.display_name ?? "",
+                  })}
             </h3>
             <div className="mt-2">
               {currentUser?.id === userDetails.id ? (
                 <p className="text-body-xs-regular text-secondary">
                   {t("workspace_settings.settings.members.leave_confirmation")}
                 </p>
+              ) : isPpmRu ? (
+                <p className="text-body-xs-regular text-secondary">
+                  <PpmTemplateText
+                    template={ppmT("ui.confirm.remove_workspace_member_content")}
+                    values={{ name: <span className="font-bold">{userDetails?.display_name}</span> }}
+                  />
+                </p>
               ) : (
                 <p className="text-body-xs-regular text-secondary">
-                  {/* TODO: Add translation here */}
                   Are you sure you want to remove member- <span className="font-bold">{userDetails?.display_name}</span>
                   ? They will no longer have access to this workspace. This action cannot be undone.
                 </p>
@@ -74,7 +91,7 @@ export const ConfirmWorkspaceMemberRemove = observer(function ConfirmWorkspaceMe
       </div>
       <div className="flex justify-end gap-2 p-4 sm:px-6">
         <Button variant="secondary" size="lg" onClick={handleClose}>
-          {t("cancel")}
+          {isPpmRu ? ppmT("ui.common.cancel") : t("cancel")}
         </Button>
         <Button variant="error-fill" size="lg" tabIndex={1} onClick={handleDeletion} loading={isRemoving}>
           {currentUser?.id === userDetails.id
@@ -83,7 +100,9 @@ export const ConfirmWorkspaceMemberRemove = observer(function ConfirmWorkspaceMe
               : t("leave")
             : isRemoving
               ? t("removing")
-              : t("remove")}
+              : isPpmRu
+                ? ppmT("ui.confirm.remove_member_action")
+                : t("remove")}
         </Button>
       </div>
     </ModalCore>

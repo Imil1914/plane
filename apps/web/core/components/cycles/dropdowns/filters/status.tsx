@@ -11,6 +11,7 @@ import { useTranslation } from "@plane/i18n";
 import type { TCycleGroups } from "@plane/types";
 // components
 import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/filters";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // types
 // constants
 
@@ -22,6 +23,7 @@ type Props = {
 
 export const FilterStatus = observer(function FilterStatus(props: Props) {
   const { appliedFilters, handleUpdate, searchQuery } = props;
+  const ppmText = usePpmText();
   // states
   const [previewEnabled, setPreviewEnabled] = useState(true);
   //hooks
@@ -32,7 +34,7 @@ export const FilterStatus = observer(function FilterStatus(props: Props) {
   return (
     <>
       <FilterHeader
-        title={`Status of the cycle${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
+        title={`${ppmText("ui.filter.cycle_status", "Status of the cycle")}${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
         isPreviewEnabled={previewEnabled}
         handleIsPreviewEnabled={() => setPreviewEnabled(!previewEnabled)}
       />
@@ -48,7 +50,7 @@ export const FilterStatus = observer(function FilterStatus(props: Props) {
               />
             ))
           ) : (
-            <p className="text-11 text-placeholder italic">No matches found</p>
+            <p className="text-11 text-placeholder italic">{ppmText("ui.common.no_matches", "No matches found")}</p>
           )}
         </div>
       )}

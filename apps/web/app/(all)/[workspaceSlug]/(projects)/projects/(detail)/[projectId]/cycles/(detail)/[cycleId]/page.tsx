@@ -21,8 +21,10 @@ import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
 import useLocalStorage from "@/hooks/use-local-storage";
 import type { Route } from "./+types/page";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 function CycleDetailPage({ params }: Route.ComponentProps) {
+  const ppmText = usePpmText();
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId, cycleId } = params;
@@ -56,10 +58,13 @@ function CycleDetailPage({ params }: Route.ComponentProps) {
       {!cycle && !loader ? (
         <EmptyState
           image={emptyCycle}
-          title="Cycle does not exist"
-          description="The cycle you are looking for does not exist or has been deleted."
+          title={ppmText("ui.empty.cycle_missing_title", "Cycle does not exist")}
+          description={ppmText(
+            "ui.empty.cycle_missing",
+            "The cycle you are looking for does not exist or has been deleted."
+          )}
           primaryButton={{
-            text: "View other cycles",
+            text: ppmText("ui.empty.cycle_missing_action", "View other cycles"),
             onClick: () => router.push(`/${workspaceSlug}/projects/${projectId}/cycles`),
           }}
         />

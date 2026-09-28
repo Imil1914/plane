@@ -5,7 +5,66 @@
  */
 
 import { differenceInDays, format, formatDistanceToNow, isAfter, isEqual, isValid, parseISO } from "date-fns";
+import { ru as dateFnsRu } from "date-fns/locale/ru";
 import { isNumber } from "lodash-es";
+
+// Interface language of the date helpers below. Apps that never call setDateFormatLanguage keep the upstream
+// English output byte for byte; PPM switches it to Russian together with the interface language.
+export type TDateFormatLanguage = "en" | "ru";
+let dateFormatLanguage: TDateFormatLanguage = "en";
+
+/** Switches the language of the formatted dates ("ru…" → Russian, anything else → the upstream English). */
+export const setDateFormatLanguage = (language: string | null | undefined): void => {
+  dateFormatLanguage = language?.toLowerCase().startsWith("ru") ? "ru" : "en";
+};
+
+export const getDateFormatLanguage = (): TDateFormatLanguage => dateFormatLanguage;
+
+// Russian dates follow the PPM v2 look and the canvas (Intl, CLDR short months): «22 сент.», «22 сент. 2026»,
+// «22–30 сент. 2026», «22 сент. – 1 окт. 2026». The year goes without «г.» to stay as short as the English one.
+const RU_DAY_MONTH = new Intl.DateTimeFormat("ru", { day: "numeric", month: "short" });
+const RU_DAY_MONTH_LONG = new Intl.DateTimeFormat("ru", { day: "numeric", month: "long" });
+const RU_MONTH = new Intl.DateTimeFormat("ru", { month: "short" });
+const RU_MONTH_LONG = new Intl.DateTimeFormat("ru", { month: "long" });
+
+const ruDayMonth = (date: Date) => RU_DAY_MONTH.format(date);
+const ruDayMonthYear = (date: Date) => `${ruDayMonth(date)} ${date.getFullYear()}`;
+/** Month in the genitive form it takes after a day number («мая», not «май»). */
+const ruMonthAfterDay = (date: Date) =>
+  RU_DAY_MONTH.formatToParts(date).find((part) => part.type === "month")?.value ?? RU_MONTH.format(date);
+
+/** Russian rendering of the upstream date-fns tokens used by the app; unknown tokens keep their order in ru. */
+const formatRussianDate = (date: Date, formatToken: string): string => {
+  switch (formatToken) {
+    case "MMM dd, yyyy":
+    case "MMM d, yyyy":
+    case "dd MMM yyyy":
+    case "d MMM yyyy":
+    case "dd MMM, yyyy":
+      return ruDayMonthYear(date);
+    case "MMM dd":
+    case "MMM d":
+    case "dd MMM":
+    case "d MMM":
+      return ruDayMonth(date);
+    case "MMMM d, yyyy":
+    case "MMMM dd, yyyy":
+    case "d MMMM yyyy":
+      return `${RU_DAY_MONTH_LONG.format(date)} ${date.getFullYear()}`;
+    case "MMM":
+      return RU_MONTH.format(date);
+    case "MMMM":
+      return RU_MONTH_LONG.format(date);
+    case "MMM, yyyy":
+    case "MMM yyyy":
+      return `${RU_MONTH.format(date)} ${date.getFullYear()}`;
+    default:
+      return format(date, formatToken, { locale: dateFnsRu });
+  }
+};
+
+const formatDateToken = (date: Date, formatToken: string): string =>
+  dateFormatLanguage === "ru" ? formatRussianDate(date, formatToken) : format(date, formatToken);
 
 // Format Date Helpers
 /**
@@ -29,10 +88,10 @@ export const renderFormattedDate = (
   let formattedDate;
   try {
     // Format the date in the format provided or default format (MMM dd, yyyy)
-    formattedDate = format(parsedDate, formatToken);
+    formattedDate = formatDateToken(parsedDate, formatToken);
   } catch (_e) {
     // Format the date in format (MMM dd, yyyy) in case of any error
-    formattedDate = format(parsedDate, "MMM dd, yyyy");
+    formattedDate = formatDateToken(parsedDate, "MMM dd, yyyy");
   }
   return formattedDate;
 };
@@ -51,7 +110,7 @@ export const renderFormattedDateWithoutYear = (date: string | Date): string => {
   // Check if the parsed date is valid before formatting
   if (!isValid(parsedDate)) return ""; // Return empty string for invalid dates
   // Format the date in short format (MMM dd)
-  const formattedDate = format(parsedDate, "MMM dd");
+  const formattedDate = formatDateToken(parsedDate, "MMM dd");
   return formattedDate;
 };
 
@@ -175,8 +234,17 @@ export const calculateTimeAgo = (time: string | number | Date | null): string =>
   // return if undefined
   if (!parsedTime) return ""; // Return empty string for invalid dates
   // Format the time in the form of amount of time passed since the event happened
-  const distance = formatDistanceToNow(parsedTime, { addSuffix: true });
+  const distance =
+    dateFormatLanguage === "ru"
+      ? formatDistanceToNow(parsedTime, { addSuffix: true, locale: dateFnsRu })
+      : formatDistanceToNow(parsedTime, { addSuffix: true });
   return distance;
+};
+
+// Short units of calculateTimeAgoShort / convertMinutesToHoursMinutesString per interface language.
+const SHORT_UNITS: Record<TDateFormatLanguage, Record<"s" | "m" | "h" | "d" | "mo" | "y", string>> = {
+  en: { s: "s", m: "m", h: "h", d: "d", mo: "mo", y: "y" },
+  ru: { s: " с", m: " мин", h: " ч", d: " д", mo: " мес", y: " г" },
 };
 
 export function calculateTimeAgoShort(date: string | number | Date | null): string {
@@ -187,33 +255,34 @@ export function calculateTimeAgoShort(date: string | number | Date | null): stri
   const parsedDate = typeof date === "string" ? parseISO(date) : new Date(date);
   const now = new Date();
   const diffInSeconds = (now.getTime() - parsedDate.getTime()) / 1000;
+  const units = SHORT_UNITS[dateFormatLanguage];
 
   if (diffInSeconds < 60) {
-    return `${Math.floor(diffInSeconds)}s`;
+    return `${Math.floor(diffInSeconds)}${units.s}`;
   }
 
   const diffInMinutes = diffInSeconds / 60;
   if (diffInMinutes < 60) {
-    return `${Math.floor(diffInMinutes)}m`;
+    return `${Math.floor(diffInMinutes)}${units.m}`;
   }
 
   const diffInHours = diffInMinutes / 60;
   if (diffInHours < 24) {
-    return `${Math.floor(diffInHours)}h`;
+    return `${Math.floor(diffInHours)}${units.h}`;
   }
 
   const diffInDays = diffInHours / 24;
   if (diffInDays < 30) {
-    return `${Math.floor(diffInDays)}d`;
+    return `${Math.floor(diffInDays)}${units.d}`;
   }
 
   const diffInMonths = diffInDays / 30;
   if (diffInMonths < 12) {
-    return `${Math.floor(diffInMonths)}mo`;
+    return `${Math.floor(diffInMonths)}${units.mo}`;
   }
 
   const diffInYears = diffInMonths / 12;
-  return `${Math.floor(diffInYears)}y`;
+  return `${Math.floor(diffInYears)}${units.y}`;
 }
 
 // Date Validation Helpers
@@ -366,8 +435,9 @@ export const convertMinutesToHoursAndMinutes = (mins: number): { hours: number; 
  */
 export const convertMinutesToHoursMinutesString = (totalMinutes: number): string => {
   const { hours, minutes } = convertMinutesToHoursAndMinutes(totalMinutes);
+  const units = SHORT_UNITS[dateFormatLanguage];
 
-  return `${hours ? `${hours}h ` : ``}${minutes ? `${minutes}m ` : ``}`;
+  return `${hours ? `${hours}${units.h} ` : ``}${minutes ? `${minutes}${units.m} ` : ``}`;
 };
 
 /**
@@ -483,6 +553,28 @@ export const checkDateCriteria = (dateToCheck: Date | null, filterDate: Date, ty
 };
 
 /**
+ * Russian counterpart of formatDateRange: «24 янв. 2025», «24–28 янв. 2025», «24 янв. – 6 февр. 2025»,
+ * «28 дек. 2024 – 4 янв. 2025» (an en dash; spaced between two full dates, as in the PPM v2 sprint scale).
+ */
+const formatRussianDateRange = (
+  parsedStartDate: Date | null | undefined,
+  parsedEndDate: Date | null | undefined
+): string => {
+  if (!parsedStartDate || !parsedEndDate) {
+    const single = parsedStartDate ?? parsedEndDate;
+    return single ? ruDayMonthYear(single) : "";
+  }
+  const startYear = parsedStartDate.getFullYear();
+  const endYear = parsedEndDate.getFullYear();
+  const sameMonth = startYear === endYear && parsedStartDate.getMonth() === parsedEndDate.getMonth();
+  if (sameMonth && parsedStartDate.getDate() === parsedEndDate.getDate()) return ruDayMonthYear(parsedEndDate);
+  if (sameMonth)
+    return `${parsedStartDate.getDate()}–${parsedEndDate.getDate()} ${ruMonthAfterDay(parsedEndDate)} ${endYear}`;
+  if (startYear === endYear) return `${ruDayMonth(parsedStartDate)} – ${ruDayMonth(parsedEndDate)} ${endYear}`;
+  return `${ruDayMonthYear(parsedStartDate)} – ${ruDayMonthYear(parsedEndDate)}`;
+};
+
+/**
  * Formats merged date range display with smart formatting
  * - Single date: "Jan 24, 2025"
  * - Same year, same month: "Jan 24 - 28, 2025"
@@ -497,6 +589,8 @@ export const formatDateRange = (
   if (!parsedStartDate && !parsedEndDate) {
     return "";
   }
+
+  if (dateFormatLanguage === "ru") return formatRussianDateRange(parsedStartDate, parsedEndDate);
 
   // If only start date is provided
   if (parsedStartDate && !parsedEndDate) {

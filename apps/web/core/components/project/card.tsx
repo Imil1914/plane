@@ -36,13 +36,17 @@ import { CoverImage } from "@/components/common/cover-image";
 import { DeleteProjectModal } from "./delete-project-modal";
 import { JoinProjectModal } from "./join-project-modal";
 import { ArchiveRestoreProjectModal } from "./archive-restore-modal";
+import { usePpmCount, usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   project: IProject;
 };
 
 export const ProjectCard = observer(function ProjectCard(props: Props) {
+  const isPpmRu = usePpmRu();
   const { project } = props;
+  const ppmText = usePpmText();
+  const ppmCount = usePpmCount();
   // states
   const [deleteProjectModalOpen, setDeleteProjectModal] = useState(false);
   const [joinProjectModalOpen, setJoinProjectModal] = useState(false);
@@ -84,18 +88,19 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
 
     const addToFavoritePromise = addProjectToFavorites(workspaceSlug.toString(), project.id);
     setPromiseToast(addToFavoritePromise, {
-      loading: "Adding project to favorites...",
+      loading: ppmText("ui.project.favorite_adding", "Adding project to favorites..."),
       success: {
-        title: "Success!",
-        message: () => "Project added to favorites.",
+        title: ppmText("ui.toast.success", "Success!"),
+        message: () => ppmText("ui.project.favorite_added", "Project added to favorites."),
         actionItems: () => {
           if (!isFavoriteMenuOpen) toggleFavoriteMenu(true);
           return <></>;
         },
       },
       error: {
-        title: "Error!",
-        message: () => "Couldn't add the project to favorites. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: () =>
+          ppmText("ui.project.favorite_add_failed", "Couldn't add the project to favorites. Please try again."),
       },
     });
   };
@@ -105,14 +110,15 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
 
     const removeFromFavoritePromise = removeProjectFromFavorites(workspaceSlug.toString(), project.id);
     setPromiseToast(removeFromFavoritePromise, {
-      loading: "Removing project from favorites...",
+      loading: ppmText("ui.project.favorite_removing", "Removing project from favorites..."),
       success: {
-        title: "Success!",
-        message: () => "Project removed from favorites.",
+        title: ppmText("ui.toast.success", "Success!"),
+        message: () => ppmText("ui.project.favorite_removed", "Project removed from favorites."),
       },
       error: {
-        title: "Error!",
-        message: () => "Couldn't remove the project from favorites. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: () =>
+          ppmText("ui.project.favorite_remove_failed", "Couldn't remove the project from favorites. Please try again."),
       },
     });
   };
@@ -122,8 +128,8 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
     copyUrlToClipboard(projectLink).then(() =>
       setToast({
         type: TOAST_TYPE.INFO,
-        title: "Link Copied!",
-        message: "Project link copied to clipboard.",
+        title: ppmText("ui.toast.link_copied_title", "Link Copied!"),
+        message: ppmText("ui.project.link_copied", "Project link copied to clipboard."),
       })
     );
   const handleOpenInNewTab = () => window.open(`/${projectLink}`, "_blank");
@@ -132,42 +138,42 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
     {
       key: "settings",
       action: () => router.push(`/${workspaceSlug}/settings/projects/${project.id}`),
-      title: "Settings",
+      title: ppmText("ui.project.settings", "Settings"),
       icon: Settings,
       shouldRender: !isArchived && hasAdminRole,
     },
     {
       key: "join",
       action: () => setJoinProjectModal(true),
-      title: "Join",
+      title: ppmText("ui.project.join", "Join"),
       icon: UserPlus,
       shouldRender: !isMemberOfProject && !isArchived,
     },
     {
       key: "open-new-tab",
       action: handleOpenInNewTab,
-      title: "Open in new tab",
+      title: ppmText("ui.page.open_in_new_tab", "Open in new tab"),
       icon: NewTabIcon,
       shouldRender: !isMemberOfProject && !isArchived,
     },
     {
       key: "copy-link",
       action: handleCopyText,
-      title: "Copy link",
+      title: ppmText("ui.page.copy_link", "Copy link"),
       icon: LinkIcon,
       shouldRender: !isArchived,
     },
     {
       key: "restore",
       action: () => setRestoreProject(true),
-      title: "Restore",
+      title: ppmText("ui.common.restore", "Restore"),
       icon: ArchiveRestoreIcon,
       shouldRender: isArchived && hasAdminRole,
     },
     {
       key: "delete",
       action: () => setDeleteProjectModal(true),
-      title: "Delete",
+      title: ppmText("ui.common.delete", "Delete"),
       icon: TrashIcon,
       shouldRender: isArchived && hasAdminRole,
     },
@@ -280,15 +286,21 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
           <p className="line-clamp-2 text-13 break-words text-tertiary">
             {project.description && project.description.trim() !== ""
               ? project.description
-              : `Created on ${renderFormattedDate(project.created_at)}`}
+              : ppmText("ui.page.created_on", `Created on ${renderFormattedDate(project.created_at)}`, {
+                  date: renderFormattedDate(project.created_at) ?? "",
+                })}
           </p>
           <div className="item-center flex justify-between">
             <div className="flex items-center justify-center gap-2">
               <Tooltip
                 isMobile={isMobile}
-                tooltipHeading="Members"
+                tooltipHeading={ppmText("ui.project.members", "Members")}
                 tooltipContent={
-                  project.members && project.members.length > 0 ? `${project.members.length} Members` : "No Member"
+                  project.members && project.members.length > 0
+                    ? isPpmRu
+                      ? ppmCount("ui.count.members", project.members.length)
+                      : `${project.members.length} Members`
+                    : ppmText("ui.project.no_members", "No Member")
                 }
                 position="top"
               >
@@ -305,10 +317,14 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                     </AvatarGroup>
                   </div>
                 ) : (
-                  <span className="text-13 text-placeholder italic">No Member Yet</span>
+                  <span className="text-13 text-placeholder italic">
+                    {ppmText("ui.project.no_members_yet", "No Member Yet")}
+                  </span>
                 )}
               </Tooltip>
-              {isArchived && <div className="text-11 font-medium text-placeholder">Archived</div>}
+              {isArchived && (
+                <div className="text-11 font-medium text-placeholder">{ppmText("ui.project.archived", "Archived")}</div>
+              )}
             </div>
             {isArchived ? (
               hasAdminRole && (
@@ -324,7 +340,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                   >
                     <div className="flex items-center gap-1.5">
                       <ArchiveRestoreIcon className="h-3.5 w-3.5" />
-                      Restore
+                      {ppmText("ui.common.restore", "Restore")}
                     </div>
                   </button>
                   <button
@@ -335,7 +351,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                       e.stopPropagation();
                       setDeleteProjectModal(true);
                     }}
-                    aria-label="Delete project"
+                    aria-label={ppmText("ui.confirm.delete_project_title", "Delete project")}
                   >
                     <TrashIcon className="h-3.5 w-3.5" />
                   </button>
@@ -373,7 +389,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                   ) : (
                     <span className="flex items-center gap-1 text-13 text-placeholder">
                       <CheckIcon className="h-3.5 w-3.5" />
-                      Joined
+                      {ppmText("ui.project.joined", "Joined")}
                     </span>
                   ))}
                 {!isMemberOfProject && (
@@ -387,7 +403,7 @@ export const ProjectCard = observer(function ProjectCard(props: Props) {
                         setJoinProjectModal(true);
                       }}
                     >
-                      Join
+                      {ppmText("ui.project.join", "Join")}
                     </Button>
                   </div>
                 )}

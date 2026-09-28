@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 // plane imports
 import { Loader } from "@plane/ui";
 // local imports
+import { useCycleLiveStats } from "../active-cycle/use-cycle-live-stats";
 import useCyclesDetails from "../active-cycle/use-cycles-details";
 import { CycleAnalyticsProgress } from "./issue-progress";
 import { CycleSidebarDetails } from "./sidebar-details";
@@ -31,6 +32,8 @@ export const CycleDetailsSidebar = observer(function CycleDetailsSidebar(props: 
     projectId,
     cycleId,
   });
+  // PPM line S: the sidebar's numbers and charts stay fresh while it is open
+  useCycleLiveStats({ workspaceSlug, projectId, cycle: isArchived ? null : cycleDetails });
 
   if (!cycleDetails)
     return (

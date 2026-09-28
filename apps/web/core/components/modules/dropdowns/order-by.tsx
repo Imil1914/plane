@@ -14,6 +14,7 @@ import type { TModuleOrderByOptions } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
 // helpers
 import { cn } from "@plane/utils";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // types
 // constants
 
@@ -24,6 +25,7 @@ type Props = {
 
 export function ModuleOrderByDropdown(props: Props) {
   const { onChange, value } = props;
+  const ppmText = usePpmText();
   // hooks
   const { t } = useTranslation();
 
@@ -67,7 +69,7 @@ export function ModuleOrderByDropdown(props: Props) {
               if (isDescending) onChange(value.slice(1) as TModuleOrderByOptions);
             }}
           >
-            Ascending
+            {ppmText("ui.sort.ascending", "Ascending")}
             {!isDescending && <CheckIcon className="h-3 w-3" />}
           </CustomMenu.MenuItem>
           <CustomMenu.MenuItem
@@ -76,7 +78,7 @@ export function ModuleOrderByDropdown(props: Props) {
               if (!isDescending) onChange(`-${value}` as TModuleOrderByOptions);
             }}
           >
-            Descending
+            {ppmText("ui.sort.descending", "Descending")}
             {isDescending && <CheckIcon className="h-3 w-3" />}
           </CustomMenu.MenuItem>
         </>

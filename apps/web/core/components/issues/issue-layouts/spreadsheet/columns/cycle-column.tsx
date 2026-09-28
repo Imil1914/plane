@@ -13,6 +13,7 @@ import type { TIssue } from "@plane/types";
 import { CycleDropdown } from "@/components/dropdowns/cycle";
 // hooks
 import { useIssuesStore } from "@/hooks/use-issue-layout-store";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   issue: TIssue;
@@ -22,6 +23,7 @@ type Props = {
 
 export const SpreadsheetCycleColumn = observer(function SpreadsheetCycleColumn(props: Props) {
   const { issue, disabled, onClose } = props;
+  const ppmText = usePpmText();
   // router
   const { workspaceSlug } = useParams();
   // hooks
@@ -45,7 +47,7 @@ export const SpreadsheetCycleColumn = observer(function SpreadsheetCycleColumn(p
         value={issue.cycle_id}
         onChange={handleCycle}
         disabled={disabled}
-        placeholder="Select cycle"
+        placeholder={ppmText("ui.property.select_cycle", "Select cycle")}
         buttonVariant="transparent-with-text"
         buttonContainerClassName="w-full relative flex items-center p-2 group-[.selected-issue-row]:bg-accent-primary/5 group-[.selected-issue-row]:hover:bg-accent-primary/10 px-page-x"
         buttonClassName="relative leading-4 h-4.5 bg-transparent hover:bg-transparent px-0"

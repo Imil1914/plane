@@ -33,7 +33,7 @@ type CanvasResponse = {
     entity_id: string;
     shape_id: string;
     source: {
-      display: { state?: { id: string; name: string }; title: string };
+      display: { assignees?: Array<{ id: string }>; state?: { id: string; name: string }; title: string };
     };
   }>;
   snapshot: { document: { store: Record<string, CanvasRecord> } } | null;
@@ -363,11 +363,27 @@ test.describe("PPM demo D0 browser release gate", () => {
     await expect.poll(boundWorkItemId, { message: "The new Work Item is not bound to the Canvas" }).toBeTruthy();
     const workItemId = await boundWorkItemId();
     if (!workItemId) throw new Error("The new Work Item is not bound to the Canvas.");
-    const assigneeSelect = workItemCard.getByLabel("Исполнители");
-    const teammateId = await assigneeSelect.locator("option", { hasText: "Участник ROBOT" }).getAttribute("value");
+    // G2.1 C: исполнители на карточке — кнопка с аватарками; выбор — список с флажками в портале (body), не select.
+    const assigneeButton = workItemCard.getByRole("button", { name: /^Исполнители:/ });
+    await assigneeButton.click();
+    const assigneeList = ownerPage.getByRole("dialog", { name: "Исполнители" });
+    const teammate = assigneeList.getByRole("checkbox", { name: "Участник ROBOT" });
+    const teammateId = await teammate.getAttribute("data-ppm-assignee-id");
     if (!teammateId) throw new Error("The seeded ROBOT member is not offered as an assignee.");
-    await assigneeSelect.selectOption([teammateId]);
-    await expect(assigneeSelect).toHaveValues([teammateId]);
+    await teammate.check();
+    await expect(teammate).toBeChecked();
+    await ownerPage.keyboard.press("Escape");
+    await expect(assigneeList).toHaveCount(0);
+    await expect
+      .poll(
+        async () =>
+          (await getCanvas(ownerPage)).bindings
+            .find((item) => item.entity_id === workItemId)
+            ?.source.display.assignees?.map((assignee) => assignee.id),
+        { message: "The assignee chosen on the card was not saved" }
+      )
+      .toEqual([teammateId]);
+    await expect(assigneeButton).toHaveAccessibleName(/Участник ROBOT/);
 
     const stateSelect = workItemCard.getByLabel("Статус");
     const initialState = await stateSelect.inputValue();

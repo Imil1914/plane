@@ -15,6 +15,7 @@ import type { TIssuePriorities } from "@plane/types";
 import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/filters";
 // hooks
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
+import { usePpmPriorityTitle } from "@/components/ppm-shell/priority-title";
 
 type Props = {
   searchQuery: string;
@@ -22,6 +23,7 @@ type Props = {
 
 export const FilterPriority = observer(function FilterPriority(props: Props) {
   const { searchQuery } = props;
+  const priorityTitle = usePpmPriorityTitle();
   // hooks
   const { t } = useTranslation();
   const { inboxFilters, handleInboxIssueFilters } = useProjectInbox();
@@ -30,7 +32,10 @@ export const FilterPriority = observer(function FilterPriority(props: Props) {
   // derived values
   const filterValue = inboxFilters?.priority || [];
   const appliedFiltersCount = filterValue?.length ?? 0;
-  const filteredOptions = ISSUE_PRIORITIES.filter((p) => p.key.includes(searchQuery.toLowerCase()));
+  // Options show priorityTitle(…) («Срочный» in the Russian PPM interface): search by it and by the key.
+  const filteredOptions = ISSUE_PRIORITIES.filter((p) =>
+    `${p.key} ${priorityTitle(p.key, p.title)}`.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const handleFilterValue = (value: TIssuePriorities): TIssuePriorities[] =>
     filterValue?.includes(value) ? filterValue.filter((v) => v !== value) : [...filterValue, value];
@@ -51,7 +56,7 @@ export const FilterPriority = observer(function FilterPriority(props: Props) {
                 isChecked={filterValue?.includes(priority.key) ? true : false}
                 onClick={() => handleInboxIssueFilters("priority", handleFilterValue(priority.key))}
                 icon={<PriorityIcon priority={priority.key} className="h-3.5 w-3.5" />}
-                title={priority.title}
+                title={priorityTitle(priority.key, priority.title)}
               />
             ))
           ) : (

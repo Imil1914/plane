@@ -31,6 +31,7 @@ import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useTimeZoneConverter } from "@/hooks/use-timezone-converter";
+import { usePpmCount, usePpmRu } from "@/hooks/use-ppm-text";
 // local imports
 import { CycleQuickActions } from "../quick-actions";
 import { TransferIssuesModal } from "../transfer-issues-modal";
@@ -50,6 +51,7 @@ const defaultValues: Partial<ICycle> = {
 };
 
 export const CycleListItemAction = observer(function CycleListItemAction(props: Props) {
+  const isPpmRu = usePpmRu();
   const { workspaceSlug, projectId, cycleId, cycleDetails, parentRef, isActive = false } = props;
   // router
   const { projectId: routerProjectId } = useParams();
@@ -58,6 +60,7 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
   // hooks
   const { isMobile } = usePlatformOS();
   const { t } = useTranslation();
+  const ppmCount = usePpmCount();
   const { isProjectTimeZoneDifferent, getProjectUTCOffset, renderFormattedDateInUserTimezone } =
     useTimeZoneConverter(projectId);
   // router
@@ -271,7 +274,14 @@ export const CycleListItemAction = observer(function CycleListItemAction(props: 
       {/* created by */}
       {createdByDetails && !isActive && <ButtonAvatars showTooltip={false} userIds={createdByDetails?.id} />}
       {!isActive && (
-        <Tooltip tooltipContent={`${cycleDetails.assignee_ids?.length} Members`} isMobile={isMobile}>
+        <Tooltip
+          tooltipContent={
+            isPpmRu
+              ? ppmCount("ui.count.members", cycleDetails.assignee_ids?.length ?? 0)
+              : `${cycleDetails.assignee_ids?.length} Members`
+          }
+          isMobile={isMobile}
+        >
           <div className="flex w-min cursor-default items-center justify-center">
             {cycleDetails.assignee_ids && cycleDetails.assignee_ids?.length > 0 ? (
               <AvatarGroup showTooltip={false}>

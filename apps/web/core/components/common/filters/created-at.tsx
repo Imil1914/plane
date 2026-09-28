@@ -12,6 +12,8 @@ import { isInDateFormat } from "@plane/utils";
 // components
 import { DateFilterModal } from "@/components/core/filters/date-filter-modal";
 import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/filters";
+import { usePpmDateFilterName } from "@/components/ppm-shell/date-filter-name";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   appliedFilters: string[] | null;
@@ -21,6 +23,8 @@ type Props = {
 
 export const FilterCreatedDate = observer(function FilterCreatedDate(props: Props) {
   const { appliedFilters, handleUpdate, searchQuery } = props;
+  const ppmText = usePpmText();
+  const { presetName } = usePpmDateFilterName();
 
   const [previewEnabled, setPreviewEnabled] = useState(true);
   const [isDateFilterModalOpen, setIsDateFilterModalOpen] = useState(false);
@@ -28,7 +32,8 @@ export const FilterCreatedDate = observer(function FilterCreatedDate(props: Prop
   const appliedFiltersCount = appliedFilters?.length ?? 0;
 
   const filteredOptions = DATE_BEFORE_FILTER_OPTIONS.filter((d) =>
-    d.name.toLowerCase().includes(searchQuery.toLowerCase())
+    // The option shows presetName(…) (Russian in the PPM interface): search by it and by the upstream name.
+    `${d.name} ${presetName(d.value, d.name)}`.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const isCustomDateSelected = () => {
@@ -49,11 +54,11 @@ export const FilterCreatedDate = observer(function FilterCreatedDate(props: Prop
           handleClose={() => setIsDateFilterModalOpen(false)}
           isOpen={isDateFilterModalOpen}
           onSelect={(val) => handleUpdate(val)}
-          title="Created date"
+          title={ppmText("ui.filter.created_date", "Created date")}
         />
       )}
       <FilterHeader
-        title={`Created date${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
+        title={`${ppmText("ui.filter.created_date", "Created date")}${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
         isPreviewEnabled={previewEnabled}
         handleIsPreviewEnabled={() => setPreviewEnabled(!previewEnabled)}
       />
@@ -66,14 +71,19 @@ export const FilterCreatedDate = observer(function FilterCreatedDate(props: Prop
                   key={option.value}
                   isChecked={appliedFilters?.includes(option.value) ? true : false}
                   onClick={() => handleUpdate(option.value)}
-                  title={option.name}
+                  title={presetName(option.value, option.name)}
                   multiple
                 />
               ))}
-              <FilterOption isChecked={isCustomDateSelected()} onClick={handleCustomDate} title="Custom" multiple />
+              <FilterOption
+                isChecked={isCustomDateSelected()}
+                onClick={handleCustomDate}
+                title={ppmText("ui.common.custom_dates", "Custom")}
+                multiple
+              />
             </>
           ) : (
-            <p className="text-11 text-placeholder italic">No matches found</p>
+            <p className="text-11 text-placeholder italic">{ppmText("ui.common.no_matches", "No matches found")}</p>
           )}
         </div>
       )}

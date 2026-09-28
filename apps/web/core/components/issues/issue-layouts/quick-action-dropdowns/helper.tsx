@@ -13,6 +13,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { EIssuesStoreType, TIssue } from "@plane/types";
 import type { TContextMenuItem } from "@plane/ui";
 import { copyUrlToClipboard, generateWorkItemLink } from "@plane/utils";
+import { usePpmText } from "@/hooks/use-ppm-text";
 import { createCopyMenuWithDuplication } from "./copy-menu-helper";
 
 // Generic helper function to handle optional function calls gracefully
@@ -82,6 +83,7 @@ export interface MenuItemFactoryProps {
 // Common action handlers hook
 export const useIssueActionHandlers = (props: MenuItemFactoryProps) => {
   const { issue, workspaceSlug, projectIdentifier, handleRestore } = props;
+  const ppmText = usePpmText();
 
   const workItemLink = useMemo(
     () =>
@@ -99,8 +101,8 @@ export const useIssueActionHandlers = (props: MenuItemFactoryProps) => {
     copyUrlToClipboard(workItemLink).then(() =>
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Link copied",
-        message: "Work item link copied to clipboard",
+        title: ppmText("ui.toast.link_copied", "Link copied"),
+        message: ppmText("ui.toast.task_link_copied", "Work item link copied to clipboard"),
       })
     );
 
@@ -116,15 +118,15 @@ export const useIssueActionHandlers = (props: MenuItemFactoryProps) => {
       .then(() => {
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Restore success",
-          message: "Your work item can be found in project work items.",
+          title: ppmText("ui.toast.restored", "Restore success"),
+          message: ppmText("ui.toast.task_restored", "Your work item can be found in project work items."),
         });
       })
       .catch(() => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "Work item could not be restored. Please try again.",
+          title: ppmText("ui.toast.error", "Error!"),
+          message: ppmText("ui.toast.task_restore_failed", "Work item could not be restored. Please try again."),
         });
       });
   };
@@ -139,6 +141,7 @@ export const useIssueActionHandlers = (props: MenuItemFactoryProps) => {
 
 export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   const actionHandlers = useIssueActionHandlers(props);
 
   const {
@@ -207,7 +210,7 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
 
   const createRemoveFromCycleMenuItem = (): TContextMenuItem => ({
     key: "remove-from-cycle",
-    title: "Remove from cycle",
+    title: ppmText("ui.issue.remove_from_cycle", "Remove from cycle"),
     icon: XCircle,
     action: () => handleOptionalAction(handleRemoveFromView, "Remove from cycle"),
     shouldRender: isEditingAllowed,
@@ -215,7 +218,7 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
 
   const createRemoveFromModuleMenuItem = (): TContextMenuItem => ({
     key: "remove-from-module",
-    title: "Remove from module",
+    title: ppmText("ui.issue.remove_from_module", "Remove from module"),
     icon: XCircle,
     action: () => handleOptionalAction(handleRemoveFromView, "Remove from module"),
     shouldRender: isEditingAllowed,
@@ -235,7 +238,7 @@ export const useMenuItemFactory = (props: MenuItemFactoryProps) => {
 
   const createRestoreMenuItem = (): TContextMenuItem => ({
     key: "restore",
-    title: "Restore",
+    title: ppmText("ui.common.restore", "Restore"),
     icon: ArchiveRestoreIcon,
     action: actionHandlers.handleIssueRestore,
     shouldRender: isRestoringAllowed,

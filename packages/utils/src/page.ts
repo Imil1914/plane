@@ -14,7 +14,7 @@ import type {
   TPageNavigationTabs,
 } from "@plane/types";
 // local imports
-import { getDate } from "./datetime";
+import { getDate, getDateFormatLanguage } from "./datetime";
 import { satisfiesDateFilter } from "./filter";
 
 /**
@@ -93,6 +93,7 @@ export const shouldFilterPage = (page: TPage, filters: TPageFilterProps | undefi
  */
 export const getPageName = (name: string | undefined) => {
   if (name === undefined) return "";
-  if (!name || name.trim() === "") return "Untitled";
+  // Follows the interface language set for the date helpers (PPM Russian UI: «Без названия»).
+  if (!name || name.trim() === "") return getDateFormatLanguage() === "ru" ? "Без названия" : "Untitled";
   return name;
 };

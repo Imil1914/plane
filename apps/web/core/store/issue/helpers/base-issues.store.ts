@@ -30,6 +30,8 @@ import { EIssueServiceType, EIssueLayoutTypes } from "@plane/types";
 // helpers
 import { convertToISODateString } from "@plane/utils";
 // plane web imports
+// PPM line S: tells the open sprint/module panels about saved changes the work-item map cannot show
+import { notifyLiveStats } from "@/components/ppm-live-stats/runtime";
 // services
 import { CycleService } from "@/services/cycle.service";
 import { IssueArchiveService, IssueService } from "@/services/issue";
@@ -577,6 +579,11 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
 
       // call API to update the issue
       await this.issueService.patchIssue(workspaceSlug, projectId, issueId, data);
+      // PPM line S: saved now — re-read the sprint/module numbers (the optimistic change may have been read too early)
+      notifyLiveStats(this.rootIssueStore.rootStore, {
+        cycleIds: [issueBeforeUpdate?.cycle_id, data.cycle_id],
+        moduleIds: [...(issueBeforeUpdate?.module_ids ?? []), ...(data.module_ids ?? [])],
+      });
 
       // call fetch Parent Stats
       this.fetchParentStats(workspaceSlug, projectId);
@@ -815,6 +822,8 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     issueIds: string[],
     fetchAddedIssues = true
   ) {
+    // PPM line S: the sprints these tasks leave (as this tab knows them, read before anything changes)
+    const previousCycleIds = issueIds.map((issueId) => this.rootIssueStore.issues.getIssueById(issueId)?.cycle_id);
     // Perform an APi call to add issue to cycle
     await this.issueService.addIssueToCycle(workspaceSlug, projectId, cycleId, {
       issues: issueIds,
@@ -838,6 +847,9 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
     issueIds.forEach((issueId) => {
       this.issueUpdate(workspaceSlug, projectId, issueId, { cycle_id: cycleId }, false);
     });
+    // PPM line S: tasks this tab never loaded arrive already in the sprint — the map shows no change, so tell the panels
+    // (both ends, like the single addCycleToIssue)
+    notifyLiveStats(this.rootIssueStore.rootStore, { cycleIds: uniq([cycleId, ...previousCycleIds]) });
   }
 
   /**
@@ -855,6 +867,8 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
 
     // Perform an APi call to remove issue from cycle
     await this.issueService.removeIssueFromCycle(workspaceSlug, projectId, cycleId, issueId);
+    // PPM line S: saved — also for a task this tab never loaded (the map has nothing to change then)
+    notifyLiveStats(this.rootIssueStore.rootStore, { cycleIds: [cycleId] });
 
     // if cycle Id is the current Cycle Id then call fetch parent stats
     if (this.cycleId === cycleId) this.fetchParentStats(workspaceSlug, projectId, cycleId);
@@ -904,6 +918,8 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
       await this.issueService.addIssueToCycle(workspaceSlug, projectId, cycleId, {
         issues: [issueId],
       });
+      // PPM line S: saved — re-read both sprints (the optimistic change may have been read too early)
+      notifyLiveStats(this.rootIssueStore.rootStore, { cycleIds: [cycleId, issueCycleId] });
 
       // if cycle Id is the current Cycle Id then call fetch parent stats
       if (this.cycleId === cycleId || this.cycleId === issueCycleId)
@@ -947,6 +963,8 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
 
       // make API call
       await this.issueService.removeIssueFromCycle(workspaceSlug, projectId, issueCycleId, issueId);
+      // PPM line S: saved — re-read the sprint (the optimistic change may have been read too early)
+      notifyLiveStats(this.rootIssueStore.rootStore, { cycleIds: [issueCycleId] });
 
       // if cycle Id is the current Cycle Id then call fetch parent stats
       if (this.cycleId === issueCycleId) this.fetchParentStats(workspaceSlug, projectId, issueCycleId);
@@ -1002,6 +1020,8 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
       const updatedIssueModuleIds = uniq(concat(issueModuleIds, [moduleId]));
       this.issueUpdate(workspaceSlug, projectId, issueId, { module_ids: updatedIssueModuleIds }, false);
     });
+    // PPM line S: tasks this tab never loaded arrive already in the module — the map shows no change, so tell the panels
+    notifyLiveStats(this.rootIssueStore.rootStore, { moduleIds: [moduleId] });
   }
 
   /**
@@ -1015,6 +1035,8 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
   async removeIssuesFromModule(workspaceSlug: string, projectId: string, moduleId: string, issueIds: string[]) {
     // Perform an APi call to remove issue to module
     const response = await this.moduleService.removeIssuesFromModuleBulk(workspaceSlug, projectId, moduleId, issueIds);
+    // PPM line S: saved — also for tasks this tab never loaded (the map has nothing to change then)
+    notifyLiveStats(this.rootIssueStore.rootStore, { moduleIds: [moduleId] });
 
     // if module Id is the current Module Id then call fetch parent stats
     if (this.moduleId === moduleId) this.fetchParentStats(workspaceSlug, projectId);
@@ -1052,6 +1074,8 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
       modules: moduleIds,
       removed_modules: [],
     });
+    // PPM line S: saved — also when this tab does not have the task in its map
+    notifyLiveStats(this.rootIssueStore.rootStore, { moduleIds });
 
     runInAction(() => {
       // get current Module Ids of the issue
@@ -1120,6 +1144,8 @@ export abstract class BaseIssuesStore implements IBaseIssuesStore {
         modules: addModuleIds,
         removed_modules: removeModuleIds,
       });
+      // PPM line S: saved — re-read the modules (the optimistic change may have been read too early)
+      notifyLiveStats(this.rootIssueStore.rootStore, { moduleIds: [...addModuleIds, ...removeModuleIds] });
 
       if (addModuleIds.includes(this.moduleId || "") || removeModuleIds.includes(this.moduleId || "")) {
         this.fetchParentStats(workspaceSlug, projectId);

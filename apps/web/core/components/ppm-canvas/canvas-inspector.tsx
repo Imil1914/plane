@@ -12,6 +12,7 @@ import {
 import { useTranslation } from "@plane/i18n";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { getPpmStateDisplayName } from "@/lib/ppm-design";
+import { PpmAssigneePicker } from "./canvas-assignee-picker";
 import { canvasNodeTitle, fillCanvasTemplate, formatDueDate, formatDueDateRelative } from "./canvas-grammar";
 import { LiveGlyph } from "./live-card";
 import { SEMANTIC_EDGE_STYLE, SEMANTIC_RELATION_LABELS, semanticLinksForShape } from "./semantic-edge-style";
@@ -79,7 +80,6 @@ function WorkItemInspector({
     event.stopPropagation();
     close();
   };
-  const assigneeNames = display.assignees.map((assignee) => assignee.display_name).join(", ");
   // «Живая карточка · ROBOT-12»: several boards can each show an inspector, so the region names its task.
   const regionLabel = identity.identifier
     ? fillCanvasTemplate(ppmT("canvas.inspector_label"), { identifier: identity.identifier })
@@ -199,25 +199,16 @@ function WorkItemInspector({
             <label htmlFor={`${fieldId}-assignees`}>{ppmT("canvas.work_item_assignees")}</label>
           </dt>
           <dd>
-            {editable ? (
-              <select
-                id={`${fieldId}-assignees`}
-                multiple
-                disabled={pending}
-                value={display.assignees.map((assignee) => assignee.id)}
-                onChange={(event) =>
-                  update({ assignee_ids: [...event.currentTarget.selectedOptions].map((option) => option.value) })
-                }
-              >
-                {options.assignees.map((assignee) => (
-                  <option key={assignee.id} value={assignee.id}>
-                    {assignee.display_name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span id={`${fieldId}-assignees`}>{assigneeNames || ppmT("canvas.unassigned")}</span>
-            )}
+            {/* G2.1 C: аватарки и выпадающий список (портал) вместо нативного множественного списка; без прав — только
+                аватарки */}
+            <PpmAssigneePicker
+              id={`${fieldId}-assignees`}
+              assignees={display.assignees}
+              busy={pendingWorkItemIds.has(binding.entity_id)}
+              canEdit={editable && Boolean(binding.source.source_version)}
+              options={options.assignees}
+              onChange={(assignee_ids) => update({ assignee_ids })}
+            />
           </dd>
         </div>
       </dl>

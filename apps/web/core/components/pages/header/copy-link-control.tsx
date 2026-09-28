@@ -16,12 +16,14 @@ import { cn } from "@plane/utils";
 import { usePageOperations } from "@/hooks/use-page-operations";
 // store
 import type { TPageInstance } from "@/store/pages/base-page";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   page: TPageInstance;
 };
 
 export const PageCopyLinkControl = observer(function PageCopyLinkControl({ page }: Props) {
+  const ppmText = usePpmText();
   const [isCopied, setIsCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -57,13 +59,20 @@ export const PageCopyLinkControl = observer(function PageCopyLinkControl({ page 
   }, [pageOperations]);
 
   return (
-    <Tooltip tooltipContent={isCopied ? "Copied!" : "Copy link"} position="bottom">
+    <Tooltip
+      tooltipContent={
+        isCopied ? ppmText("ui.page.link_copied_short", "Copied!") : ppmText("ui.page.copy_link", "Copy link")
+      }
+      position="bottom"
+    >
       <IconButton
         variant="ghost"
         size="lg"
         icon={isCopied ? CheckIcon : LinkIcon}
         onClick={handleCopy}
-        aria-label={isCopied ? "Copied link" : "Copy link"}
+        aria-label={
+          isCopied ? ppmText("ui.page.link_copied_aria", "Copied link") : ppmText("ui.page.copy_link", "Copy link")
+        }
         className={cn(isCopied && "text-success-primary")}
       />
     </Tooltip>

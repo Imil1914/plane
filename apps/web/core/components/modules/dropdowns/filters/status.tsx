@@ -12,6 +12,7 @@ import { ModuleStatusIcon } from "@plane/propel/icons";
 import type { TModuleStatus } from "@plane/types";
 // components
 import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/filters";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   appliedFilters: TModuleStatus[] | null;
@@ -21,6 +22,7 @@ type Props = {
 
 export const FilterStatus = observer(function FilterStatus(props: Props) {
   const { appliedFilters, handleUpdate, searchQuery } = props;
+  const ppmText = usePpmText();
   // states
   const [previewEnabled, setPreviewEnabled] = useState(true);
   const { t } = useTranslation();
@@ -31,7 +33,7 @@ export const FilterStatus = observer(function FilterStatus(props: Props) {
   return (
     <>
       <FilterHeader
-        title={`Status${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
+        title={`${ppmText("ui.filter.status", "Status")}${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
         isPreviewEnabled={previewEnabled}
         handleIsPreviewEnabled={() => setPreviewEnabled(!previewEnabled)}
       />
@@ -48,7 +50,7 @@ export const FilterStatus = observer(function FilterStatus(props: Props) {
               />
             ))
           ) : (
-            <p className="text-11 text-placeholder italic">No matches found</p>
+            <p className="text-11 text-placeholder italic">{ppmText("ui.common.no_matches", "No matches found")}</p>
           )}
         </div>
       )}

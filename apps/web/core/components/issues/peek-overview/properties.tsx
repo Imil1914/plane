@@ -44,6 +44,7 @@ import { IssueLabel } from "../issue-detail/label";
 import { IssueModuleSelect } from "../issue-detail/module-select";
 // ── AF2.2 C: (C3) «На карте» ──
 import { PpmIssueCanvasBoards } from "../issue-detail/ppm-canvas-boards";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // ── /AF2.2 C ──
 
 const INTAKE_AUTHOR_NAME = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED)
@@ -61,6 +62,7 @@ interface IPeekOverviewProperties {
 export const PeekOverviewProperties = observer(function PeekOverviewProperties(props: IPeekOverviewProperties) {
   const { workspaceSlug, projectId, issueId, issueOperations, disabled } = props;
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // store hooks
   const { getProjectById } = useProject();
   const {
@@ -205,7 +207,7 @@ export const PeekOverviewProperties = observer(function PeekOverviewProperties(p
               className="group w-full grow"
               buttonContainerClassName="w-full text-left h-7.5"
               buttonClassName={`text-body-xs-medium ${issue?.estimate_point !== undefined ? "" : "text-placeholder"}`}
-              placeholder="None"
+              placeholder={ppmText("ui.common.none", "None")}
               hideIcon
               dropdownArrow
               dropdownArrowClassName="h-3.5 w-3.5 hidden group-hover:inline"

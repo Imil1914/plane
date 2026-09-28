@@ -22,6 +22,7 @@ import { useCycle } from "@/hooks/store/use-cycle";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkItemFilterInstance } from "@/hooks/store/work-item-filters/use-work-item-filter-instance";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export const CycleEmptyState = observer(function CycleEmptyState() {
   // router
@@ -33,6 +34,7 @@ export const CycleEmptyState = observer(function CycleEmptyState() {
   const [cycleIssuesListModal, setCycleIssuesListModal] = useState(false);
   // plane hooks
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // store hooks
   const { getCycleById } = useCycle();
   const { issues } = useIssues(EIssuesStoreType.CYCLE);
@@ -58,15 +60,18 @@ export const CycleEmptyState = observer(function CycleEmptyState() {
       .then(() =>
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Success!",
-          message: "Work items added to the cycle successfully.",
+          title: ppmText("ui.toast.success", "Success!"),
+          message: ppmText("ui.cycle.tasks_added", "Work items added to the cycle successfully."),
         })
       )
       .catch(() =>
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "Selected work items could not be added to the cycle. Please try again.",
+          title: ppmText("ui.toast.error", "Error!"),
+          message: ppmText(
+            "ui.cycle.tasks_add_failed",
+            "Selected work items could not be added to the cycle. Please try again."
+          ),
         })
       );
   };
@@ -96,7 +101,7 @@ export const CycleEmptyState = observer(function CycleEmptyState() {
             description={t("common_empty_state.search.description")}
             actions={[
               {
-                label: "Clear filters",
+                label: ppmText("ui.common.clear_filters", "Clear filters"),
                 onClick: cycleWorkItemFilter?.clearFilters,
                 disabled: !canPerformEmptyStateActions || !cycleWorkItemFilter,
                 variant: "secondary",

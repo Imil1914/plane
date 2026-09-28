@@ -31,6 +31,7 @@ import { useMember } from "@/hooks/store/use-member";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // types
 import type { TAttachmentHelpers } from "../issue-detail-widgets/attachments/helper";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type TAttachmentOperationsRemoveModal = Exclude<TAttachmentHelpers, "create">;
 
@@ -43,6 +44,7 @@ type TIssueAttachmentsDetail = {
 export const IssueAttachmentsDetail = observer(function IssueAttachmentsDetail(props: TIssueAttachmentsDetail) {
   // props
   const { attachmentId, attachmentHelpers, disabled } = props;
+  const ppmText = usePpmText();
   // store hooks
   const { getUserDetails } = useMember();
   const {
@@ -82,9 +84,14 @@ export const IssueAttachmentsDetail = observer(function IssueAttachmentsDetail(p
                 </Tooltip>
                 <Tooltip
                   isMobile={isMobile}
-                  tooltipContent={`${
-                    getUserDetails(attachment.updated_by)?.display_name ?? ""
-                  } uploaded on ${renderFormattedDate(attachment.updated_at)}`}
+                  tooltipContent={ppmText(
+                    "ui.attachment.uploaded_by",
+                    `${getUserDetails(attachment.updated_by)?.display_name ?? ""} uploaded on ${renderFormattedDate(attachment.updated_at)}`,
+                    {
+                      name: getUserDetails(attachment.updated_by)?.display_name ?? "",
+                      date: renderFormattedDate(attachment.updated_at) ?? "",
+                    }
+                  )}
                 >
                   <span>
                     <AlertCircle className="h-3 w-3" />

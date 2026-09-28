@@ -14,6 +14,7 @@ import type { IWorkspaceView } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 // hooks
 import { useGlobalView } from "@/hooks/store/use-global-view";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   data: IWorkspaceView;
@@ -30,6 +31,7 @@ export const DeleteGlobalViewModal = observer(function DeleteGlobalViewModal(pro
   // store hooks
   const { deleteGlobalView } = useGlobalView();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   const handleClose = () => onClose();
 
   const handleDeletion = async () => {
@@ -41,8 +43,8 @@ export const DeleteGlobalViewModal = observer(function DeleteGlobalViewModal(pro
     } catch (_error) {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Failed to delete the view. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: ppmText("ui.toast.workspace_view_delete_failed", "Failed to delete the view. Please try again."),
       });
     }
 
@@ -60,6 +62,11 @@ export const DeleteGlobalViewModal = observer(function DeleteGlobalViewModal(pro
       isOpen={isOpen}
       title={t("workspace_views.delete_view.title")}
       content={<>{t("workspace_views.delete_view.content")}</>}
+      primaryButtonText={{
+        loading: ppmText("ui.common.deleting", "Deleting"),
+        default: ppmText("ui.common.delete", "Delete"),
+      }}
+      secondaryButtonText={ppmText("ui.common.cancel", "Cancel")}
     />
   );
 });

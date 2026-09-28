@@ -6,10 +6,14 @@
 
 import { observer } from "mobx-react";
 // plane imports
+import { useTranslation } from "@plane/i18n";
 import { StateGroupIcon } from "@plane/propel/icons";
 import type { TStateGroups } from "@plane/types";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { SingleProgressStats } from "@/components/core/sidebar/single-progress-stats";
+
+const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 export type TStateGroupData = {
   state: string | undefined;
@@ -27,6 +31,7 @@ type TStateGroupStatComponent = {
 
 export const StateGroupStatComponent = observer(function StateGroupStatComponent(props: TStateGroupStatComponent) {
   const { distribution, isEditable, totalIssuesCount, selectedStateGroups, handleStateGroupFiltersUpdate } = props;
+  const { t } = useTranslation();
 
   return (
     <div>
@@ -36,7 +41,10 @@ export const StateGroupStatComponent = observer(function StateGroupStatComponent
           title={
             <div className="flex items-center gap-2">
               <StateGroupIcon stateGroup={group.state as TStateGroups} />
-              <span className="text-11 capitalize">{group.state}</span>
+              {/* PPM line S4: the state group by its Russian name (the raw key is English, title-cased by CSS) */}
+              <span className={`text-11 ${isPpmShell ? "" : "capitalize"}`}>
+                {isPpmShell ? t(`workspace_projects.state.${group.state}`) : group.state}
+              </span>
             </div>
           }
           completed={group.completed}

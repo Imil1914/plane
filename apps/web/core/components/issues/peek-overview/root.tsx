@@ -23,6 +23,7 @@ import { useWorkItemProperties } from "@/hooks/use-issue-properties";
 // local imports
 import type { TIssueOperations } from "../issue-detail";
 import { IssueView } from "./view";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWorkItemPeekOverview) {
   const {
@@ -32,6 +33,7 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
     storeType: issueStoreFromProps,
   } = props;
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // router
   const pathname = usePathname();
   // store hook
@@ -87,7 +89,10 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
               setToast({
                 title: t("toast.error"),
                 type: TOAST_TYPE.ERROR,
-                message: t("entity.update.failed", { entity: t("issue.label", { count: 1 }) }),
+                message: ppmText(
+                  "ui.toast.task_update_failed",
+                  t("entity.update.failed", { entity: t("issue.label", { count: 1 }) })
+                ),
               });
             });
         }
@@ -102,7 +107,10 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
           setToast({
             title: t("toast.error"),
             type: TOAST_TYPE.ERROR,
-            message: t("entity.delete.failed", { entity: t("issue.label", { count: 1 }) }),
+            message: ppmText(
+              "ui.toast.task_delete_failed",
+              t("entity.delete.failed", { entity: t("issue.label", { count: 1 }) })
+            ),
           });
         }
       },

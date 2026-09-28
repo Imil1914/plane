@@ -12,6 +12,9 @@ import type { IFilterInstance } from "@plane/shared-state";
 import type { TExternalFilter, TFilterProperty, TSupportedOperators } from "@plane/types";
 import { CustomSearchSelect } from "@plane/ui";
 import { getOperatorForPayload } from "@plane/utils";
+// local imports
+import { usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmRichFilterText } from "../ppm-labels";
 
 export type TAddFilterDropdownProps<P extends TFilterProperty, E extends TExternalFilter> = {
   customButton: React.ReactNode;
@@ -30,6 +33,8 @@ export const AddFilterDropdown = observer(function AddFilterDropdown<
 >(props: TAddFilterDropdownProps<P, E>) {
   const { filter, customButton, buttonConfig } = props;
   const { className, defaultOpen = false, isDisabled = false } = buttonConfig || {};
+  const ppmText = usePpmText();
+  const { filterLabel } = usePpmRichFilterText();
 
   // Transform available filter configs to CustomSearchSelect options format
   const filterOptions = filter.configManager.allAvailableConfigs.map((config) => ({
@@ -40,12 +45,12 @@ export const AddFilterDropdown = observer(function AddFilterDropdown<
           {config.icon && (
             <config.icon className="size-4 text-tertiary transition-transform duration-200 ease-in-out" />
           )}
-          <span>{config.label}</span>
+          <span>{filterLabel(config.label)}</span>
         </div>
         {config.rightContent}
       </div>
     ),
-    query: config.label.toLowerCase(),
+    query: filterLabel(config.label).toLowerCase(),
   }));
 
   // If all filters are applied, show disabled options
@@ -54,7 +59,9 @@ export const AddFilterDropdown = observer(function AddFilterDropdown<
     ? [
         {
           value: "all_filters_applied",
-          content: <div className="text-placeholder italic">All filters applied</div>,
+          content: (
+            <div className="text-placeholder italic">{ppmText("ui.filter.all_applied", "All filters applied")}</div>
+          ),
           query: "all filters applied",
           disabled: true,
         },
@@ -68,8 +75,11 @@ export const AddFilterDropdown = observer(function AddFilterDropdown<
       props.handleFilterSelect(property, operator, isNegation);
     } else {
       setToast({
-        title: "Filter configuration error",
-        message: "This filter is not properly configured and cannot be applied",
+        title: ppmText("ui.filter.config_error_title", "Filter configuration error"),
+        message: ppmText(
+          "ui.filter.config_error_message",
+          "This filter is not properly configured and cannot be applied"
+        ),
         type: TOAST_TYPE.ERROR,
       });
     }

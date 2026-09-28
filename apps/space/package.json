@@ -31,6 +31,7 @@
     "@plane/ui": "workspace:*",
     "@plane/utils": "workspace:*",
     "@popperjs/core": "catalog:",
+    "@ppm/brand": "workspace:*",
     "@react-router/node": "catalog:",
     "@react-router/serve": "catalog:",
     "axios": "catalog:",

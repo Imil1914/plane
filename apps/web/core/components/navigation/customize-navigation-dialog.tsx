@@ -17,6 +17,8 @@ import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
 import { usePpmAdminAccess } from "@/hooks/use-ppm-admin-access";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import {
   usePersonalNavigationPreferences,
   useProjectNavigationPreferences,
@@ -49,8 +51,11 @@ const PERSONAL_ITEMS: Array<{ key: TPersonalNavigationItemKey; labelTranslationK
 export const CustomizeNavigationDialog = observer(function CustomizeNavigationDialog(
   props: TCustomizeNavigationDialogProps
 ) {
+  const isPpmRu = usePpmRu();
   const { isOpen, onClose } = props;
   const { t } = useTranslation();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
 
   // router
   const { workspaceSlug } = useParams();
@@ -197,8 +202,10 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
           <div>
             <h2 className="text-18 font-semibold text-primary">{t("customize_navigation")}</h2>
             <p className="mt-1 text-13 text-tertiary">
-              Selected items will always stay visible in your sidebar. You can still find the others anytime from the
-              More menu. These changes are personal to you and won&apos;t affect anyone else on your workspace.
+              {ppmText(
+                "ui.nav_settings.description",
+                "Selected items will always stay visible in your sidebar. You can still find the others anytime from the More menu. These changes are personal to you and won't affect anyone else on your workspace."
+              )}
             </p>
           </div>
           <button
@@ -291,9 +298,14 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
                       className="mt-1 size-4 text-accent-primary focus:ring-accent-strong"
                     />
                     <div className="flex-1">
-                      <div className="text-13 text-primary">{t("accordion_navigation_control")}</div>
+                      <div className="text-13 text-primary">
+                        {isPpmRu ? ppmT("ui.nav_settings.accordion_title") : t("accordion_navigation_control")}
+                      </div>
                       <div className="text-11 text-secondary">
-                        Feature tabs will appear as nested items under project and acts as accordion.
+                        {ppmText(
+                          "ui.nav_settings.accordion_description",
+                          "Feature tabs will appear as nested items under project and acts as accordion."
+                        )}
                       </div>
                     </div>
                   </label>
@@ -309,9 +321,14 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
                       className="mt-1 size-4 text-accent-primary focus:ring-accent-strong"
                     />
                     <div className="flex-1">
-                      <div className="text-13 text-primary">{t("horizontal_navigation_bar")}</div>
+                      <div className="text-13 text-primary">
+                        {isPpmRu ? ppmT("ui.nav_settings.tabs_title") : t("horizontal_navigation_bar")}
+                      </div>
                       <div className="text-11 text-secondary">
-                        Feature tabs will appear as horizontal tabs inside a project.
+                        {ppmText(
+                          "ui.nav_settings.tabs_description",
+                          "Feature tabs will appear as horizontal tabs inside a project."
+                        )}
                       </div>
                     </div>
                   </label>
@@ -350,7 +367,9 @@ export const CustomizeNavigationDialog = observer(function CustomizeNavigationDi
                           />
                         </div>
                         {parseInt(projectCountInput) < 1 && projectCountInput !== "" && (
-                          <span className="pl-0.5 text-11 text-danger-primary">Minimum value is 1</span>
+                          <span className="pl-0.5 text-11 text-danger-primary">
+                            {ppmText("ui.nav_settings.minimum_one", "Minimum value is 1")}
+                          </span>
                         )}
                       </div>
                     </div>

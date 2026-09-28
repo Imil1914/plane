@@ -11,6 +11,7 @@ import { useDropzone } from "react-dropzone";
 import { useFileSize } from "@/hooks/use-file-size";
 // types
 import type { TAttachmentOperations } from "../issue-detail-widgets/attachments/helper";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type TAttachmentOperationsModal = Pick<TAttachmentOperations, "create">;
 
@@ -22,6 +23,7 @@ type Props = {
 
 export const IssueAttachmentUpload = observer(function IssueAttachmentUpload(props: Props) {
   const { workspaceSlug, disabled = false, attachmentOperations } = props;
+  const ppmText = usePpmText();
   // states
   const [isLoading, setIsLoading] = useState(false);
   // file size
@@ -46,7 +48,11 @@ export const IssueAttachmentUpload = observer(function IssueAttachmentUpload(pro
   });
 
   const fileError =
-    fileRejections.length > 0 ? `Invalid file type or size (max ${maxFileSize / 1024 / 1024} MB)` : null;
+    fileRejections.length > 0
+      ? ppmText("ui.attachment.invalid_file", `Invalid file type or size (max ${maxFileSize / 1024 / 1024} MB)`, {
+          size: maxFileSize / 1024 / 1024,
+        })
+      : null;
 
   return (
     <div
@@ -58,13 +64,13 @@ export const IssueAttachmentUpload = observer(function IssueAttachmentUpload(pro
       <input {...getInputProps()} />
       <span className="flex items-center gap-2">
         {isDragActive ? (
-          <p>Drop here...</p>
+          <p>{ppmText("ui.attachment.drop_here", "Drop here...")}</p>
         ) : fileError ? (
           <p className="text-center text-danger-primary">{fileError}</p>
         ) : isLoading ? (
-          <p className="text-center">Uploading...</p>
+          <p className="text-center">{ppmText("ui.attachment.uploading", "Uploading...")}</p>
         ) : (
-          <p className="text-center">Click or drag a file here</p>
+          <p className="text-center">{ppmText("ui.attachment.click_or_drag", "Click or drag a file here")}</p>
         )}
       </span>
     </div>

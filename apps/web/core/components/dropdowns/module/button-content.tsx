@@ -11,6 +11,7 @@ import { cn } from "@plane/utils";
 // hooks
 import { useModule } from "@/hooks/store/use-module";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmCount, usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
 
 type ModuleButtonContentProps = {
   disabled: boolean;
@@ -27,6 +28,7 @@ type ModuleButtonContentProps = {
 };
 
 export function ModuleButtonContent(props: ModuleButtonContentProps) {
+  const isPpmRu = usePpmRu();
   const {
     disabled,
     dropdownArrow,
@@ -43,6 +45,8 @@ export function ModuleButtonContent(props: ModuleButtonContentProps) {
   // store hooks
   const { getModuleById } = useModule();
   const { isMobile } = usePlatformOS();
+  const ppmText = usePpmText();
+  const ppmCount = usePpmCount();
 
   if (Array.isArray(value))
     return (
@@ -54,8 +58,10 @@ export function ModuleButtonContent(props: ModuleButtonContentProps) {
               <div className="max-w-40 truncate">
                 {value.length > 0
                   ? value.length === 1
-                    ? `${getModuleById(value[0])?.name || "module"}`
-                    : `${value.length} Module${value.length === 1 ? "" : "s"}`
+                    ? `${getModuleById(value[0])?.name || ppmText("ui.property.module", "module")}`
+                    : isPpmRu
+                      ? ppmCount("ui.count.modules", value.length)
+                      : `${value.length} Module${value.length === 1 ? "" : "s"}`
                   : placeholder}
               </div>
             )}
@@ -75,7 +81,7 @@ export function ModuleButtonContent(props: ModuleButtonContentProps) {
                   {!hideIcon && <ModuleIcon className="h-2.5 w-2.5 flex-shrink-0" />}
                   {!hideText && (
                     <Tooltip
-                      tooltipHeading="Title"
+                      tooltipHeading={ppmText("ui.common.title", "Title")}
                       tooltipContent={moduleDetails?.name}
                       disabled={!showTooltip}
                       isMobile={isMobile}
@@ -86,7 +92,7 @@ export function ModuleButtonContent(props: ModuleButtonContentProps) {
                   )}
                   {!disabled && (
                     <Tooltip
-                      tooltipContent="Remove"
+                      tooltipContent={ppmText("ui.common.remove", "Remove")}
                       disabled={!showTooltip}
                       isMobile={isMobile}
                       renderByDefault={false}

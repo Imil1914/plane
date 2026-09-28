@@ -10,16 +10,20 @@ import { API_BASE_URL } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { Input, Spinner } from "@plane/ui";
+import { isPpmShellEnabled } from "@ppm/brand";
 // constants
 // helpers
 import { EAuthModes } from "@/helpers/authentication.helper";
 // hooks
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import useTimer from "@/hooks/use-timer";
 // services
 import { AuthService } from "@/services/auth.service";
 
 // services
 const authService = new AuthService();
+
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 type TAuthUniqueCodeForm = {
   mode: EAuthModes;
@@ -53,6 +57,7 @@ export function AuthUniqueCodeForm(props: TAuthUniqueCodeForm) {
   const { timer: resendTimerCode, setTimer: setResendCodeTimer } = useTimer(0);
   // plane hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
 
   const handleFormChange = (key: keyof TUniqueCodeFormValues, value: string) =>
     setUniqueCodeFormData((prev) => ({ ...prev, [key]: value }));
@@ -96,7 +101,7 @@ export function AuthUniqueCodeForm(props: TAuthUniqueCodeForm) {
       {nextPath && <input type="hidden" value={nextPath} name="next_path" />}
       <div className="space-y-1">
         <label htmlFor="email" className="text-13 font-medium text-tertiary">
-          {t("auth.common.email.label")}
+          {IS_PPM_SHELL_ENABLED ? ppmT("auth.email") : t("auth.common.email.label")}
         </label>
         <div className={`relative flex items-center rounded-md border border-strong bg-surface-1`}>
           <Input
@@ -105,7 +110,7 @@ export function AuthUniqueCodeForm(props: TAuthUniqueCodeForm) {
             type="email"
             value={uniqueCodeFormData.email}
             onChange={(e) => handleFormChange("email", e.target.value)}
-            placeholder={t("auth.common.email.placeholder")}
+            placeholder={IS_PPM_SHELL_ENABLED ? ppmT("auth.email_placeholder") : t("auth.common.email.placeholder")}
             className="h-10 w-full border-0 disable-autofill-style placeholder:text-placeholder"
             autoComplete="off"
             disabled
@@ -114,7 +119,7 @@ export function AuthUniqueCodeForm(props: TAuthUniqueCodeForm) {
             <button
               type="button"
               className="absolute right-3 grid size-5 place-items-center"
-              aria-label={t("aria_labels.auth_forms.clear_email")}
+              aria-label={IS_PPM_SHELL_ENABLED ? ppmT("auth.clear_email") : t("aria_labels.auth_forms.clear_email")}
               onClick={handleEmailClear}
             >
               <XCircle className="size-5 stroke-placeholder" />
@@ -140,7 +145,7 @@ export function AuthUniqueCodeForm(props: TAuthUniqueCodeForm) {
         <div className="flex w-full items-center justify-between px-1 pt-1 text-11">
           <p className="flex items-center gap-1 font-medium text-success-primary">
             <CircleCheck height={12} width={12} />
-            {t("auth.common.unique_code.paste_code")}
+            {IS_PPM_SHELL_ENABLED ? ppmT("auth.paste_code") : t("auth.common.unique_code.paste_code")}
           </p>
           <button
             type="button"

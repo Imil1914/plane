@@ -17,8 +17,10 @@ import { useProject } from "@/hooks/store/use-project";
 import { useProjectView } from "@/hooks/store/use-project-view";
 import { useAppRouter } from "@/hooks/use-app-router";
 import type { Route } from "./+types/page";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 function ProjectViewIssuesPage({ params }: Route.ComponentProps) {
+  const ppmText = usePpmText();
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId, viewId } = params;
@@ -36,10 +38,13 @@ function ProjectViewIssuesPage({ params }: Route.ComponentProps) {
     return (
       <EmptyState
         image={emptyView}
-        title="View does not exist"
-        description="The view you are looking for does not exist or you don't have permission to view it."
+        title={ppmText("ui.empty.view_missing_title", "View does not exist")}
+        description={ppmText(
+          "ui.empty.view_missing",
+          "The view you are looking for does not exist or you don't have permission to view it."
+        )}
         primaryButton={{
-          text: "View other views",
+          text: ppmText("ui.empty.view_missing_action", "View other views"),
           onClick: () => router.push(`/${workspaceSlug}/projects/${projectId}/views`),
         }}
       />

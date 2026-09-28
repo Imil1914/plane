@@ -14,6 +14,9 @@ import type { IIssueLabel } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 // hooks
 import { useLabel } from "@/hooks/store/use-label";
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type Props = {
   isOpen: boolean;
@@ -22,11 +25,14 @@ type Props = {
 };
 
 export const DeleteLabelModal = observer(function DeleteLabelModal(props: Props) {
+  const isPpmRu = usePpmRu();
   const { isOpen, onClose, data } = props;
   // router
   const { workspaceSlug, projectId } = useParams();
   // store hooks
   const { deleteLabel } = useLabel();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
   // states
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
 
@@ -46,10 +52,11 @@ export const DeleteLabelModal = observer(function DeleteLabelModal(props: Props)
       })
       .catch((err) => {
         setIsDeleteLoading(false);
-        const error = err?.error || "Label could not be deleted. Please try again.";
+        const error =
+          err?.error || ppmText("ui.toast.label_delete_failed", "Label could not be deleted. Please try again.");
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
+          title: ppmText("ui.toast.error", "Error!"),
           message: error,
         });
       });
@@ -61,13 +68,25 @@ export const DeleteLabelModal = observer(function DeleteLabelModal(props: Props)
       handleSubmit={handleDeletion}
       isSubmitting={isDeleteLoading}
       isOpen={isOpen}
-      title="Delete Label"
+      title={ppmText("ui.confirm.delete_label_title", "Delete Label")}
       content={
-        <>
-          Are you sure you want to delete <span className="font-medium text-primary">{data?.name}</span>? This will
-          remove the label from all the work item and from any views where the label is being filtered upon.
-        </>
+        isPpmRu ? (
+          <PpmTemplateText
+            template={ppmT("ui.confirm.delete_label_content")}
+            values={{ name: <span className="font-medium text-primary">{data?.name}</span> }}
+          />
+        ) : (
+          <>
+            Are you sure you want to delete <span className="font-medium text-primary">{data?.name}</span>? This will
+            remove the label from all the work item and from any views where the label is being filtered upon.
+          </>
+        )
       }
+      primaryButtonText={{
+        loading: ppmText("ui.common.deleting", "Deleting"),
+        default: ppmText("ui.common.delete", "Delete"),
+      }}
+      secondaryButtonText={ppmText("ui.common.cancel", "Cancel")}
     />
   );
 });

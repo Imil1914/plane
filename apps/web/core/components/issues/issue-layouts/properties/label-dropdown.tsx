@@ -22,10 +22,13 @@ import { EUserProjectRoles } from "@plane/types";
 import { ComboDropDown } from "@plane/ui";
 import { sortBySelectedFirst } from "@plane/utils";
 // hooks
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
 import { useLabel } from "@/hooks/store/use-label";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useDropdownKeyDown } from "@/hooks/use-dropdown-key-down";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 export interface ILabelDropdownProps {
   projectId: string | null;
@@ -47,6 +50,7 @@ export interface ILabelDropdownProps {
 }
 
 export function LabelDropdown(props: ILabelDropdownProps) {
+  const isPpmRu = usePpmRu();
   const {
     projectId,
     value,
@@ -66,6 +70,7 @@ export function LabelDropdown(props: ILabelDropdownProps) {
     label,
   } = props;
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
 
   //router
   const { workspaceSlug: routerWorkspaceSlug } = useParams();
@@ -313,11 +318,17 @@ export function LabelDropdown(props: ILabelDropdownProps) {
                     }}
                     className={`text-left text-secondary ${query.length ? "cursor-pointer" : "cursor-default"}`}
                   >
-                    {/* TODO: translate here */}
                     {query.length ? (
-                      <>
-                        + Add <span className="text-primary">&quot;{query}&quot;</span> to labels
-                      </>
+                      isPpmRu ? (
+                        <PpmTemplateText
+                          template={ppmT("ui.label.add_query")}
+                          values={{ query: <span className="text-primary">{query}</span> }}
+                        />
+                      ) : (
+                        <>
+                          + Add <span className="text-primary">&quot;{query}&quot;</span> to labels
+                        </>
+                      )
                     ) : (
                       t("label.create.type")
                     )}

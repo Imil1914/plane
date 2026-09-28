@@ -16,6 +16,8 @@ import { cn } from "@plane/utils";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useDropdown } from "@/hooks/use-dropdown";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // local components and constants
 import { DropdownButton } from "../buttons";
 import { BUTTON_VARIANTS_WITH_TEXT } from "../constants";
@@ -60,6 +62,8 @@ export const CycleDropdown = observer(function CycleDropdown(props: Props) {
   } = props;
   // i18n
   const { t } = useTranslation();
+  const isPpmRu = usePpmRu();
+  const ppmT = usePpmTranslation();
   // states
 
   const [isOpen, setIsOpen] = useState(false);
@@ -116,7 +120,8 @@ export const CycleDropdown = observer(function CycleDropdown(props: Props) {
             className={buttonClassName}
             isActive={isOpen}
             tooltipHeading={t("common.cycle")}
-            tooltipContent={selectedName ?? placeholder}
+            // PPM: «Спринт / Нет» instead of repeating the heading when no sprint is chosen.
+            tooltipContent={selectedName ?? (isPpmRu ? ppmT("ui.common.none") : placeholder)}
             showTooltip={showTooltip}
             variant={buttonVariant}
             renderToolTipByDefault={renderByDefault}

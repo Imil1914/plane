@@ -32,6 +32,7 @@ import type { IQuickActionProps, TRenderQuickActions } from "../list/list-view-t
 import { getSourceFromDropPayload } from "../utils";
 import { KanBan } from "./default";
 import { KanBanSwimLanes } from "./swimlanes";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export type KanbanStoreType =
   | EIssuesStoreType.PROJECT
@@ -53,6 +54,7 @@ export interface IBaseKanBanLayout {
 }
 
 export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBanLayout) {
+  const ppmText = usePpmText();
   const {
     QuickActions,
     addIssuesToView,
@@ -256,7 +258,7 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
             isDragOverDelete ? "bg-danger-primary blur-2xl" : ""
           } transition duration-300`}
         >
-          Drop here to delete the work item.
+          {ppmText("ui.issue.drop_to_delete", "Drop here to delete the work item.")}
         </div>
       </div>
       <IssueLayoutHOC layout={EIssueLayoutTypes.KANBAN}>

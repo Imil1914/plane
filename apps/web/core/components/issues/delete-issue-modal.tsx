@@ -14,10 +14,14 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TDeDupeIssue, TIssue } from "@plane/types";
 // ui
 import { AlertModalCore } from "@plane/ui";
+// components
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
 import { useProject } from "@/hooks/store/use-project";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type Props = {
   isOpen: boolean;
@@ -30,6 +34,7 @@ type Props = {
 };
 
 export const DeleteIssueModal = observer(function DeleteIssueModal(props: Props) {
+  const isPpmRu = usePpmRu();
   const { dataId, data, isOpen, handleClose, isSubIssue = false, onSubmit, isEpic = false } = props;
   // states
   const [isDeleting, setIsDeleting] = useState(false);
@@ -39,6 +44,8 @@ export const DeleteIssueModal = observer(function DeleteIssueModal(props: Props)
   const { getProjectById } = useProject();
   const { allowPermissions } = useUserPermissions();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
 
   const { data: currentUser } = useUser();
 
@@ -86,9 +93,13 @@ export const DeleteIssueModal = observer(function DeleteIssueModal(props: Props)
           setToast({
             type: TOAST_TYPE.SUCCESS,
             title: t("common.success"),
-            message: t("entity.delete.success", {
-              entity: isSubIssue ? t("common.sub_work_item") : isEpic ? t("common.epic") : t("common.work_item"),
-            }),
+            message: isPpmRu
+              ? ppmT(
+                  isSubIssue ? "ui.toast.subtask_deleted" : isEpic ? "ui.toast.epic_deleted" : "ui.toast.task_deleted"
+                )
+              : t("entity.delete.success", {
+                  entity: isSubIssue ? t("common.sub_work_item") : isEpic ? t("common.epic") : t("common.work_item"),
+                }),
           });
           onClose();
         })
@@ -114,17 +125,38 @@ export const DeleteIssueModal = observer(function DeleteIssueModal(props: Props)
       handleSubmit={handleIssueDelete}
       isSubmitting={isDeleting}
       isOpen={isOpen}
-      title={t("entity.delete.label", { entity: isEpic ? t("common.epic") : t("common.work_item") })}
-      content={
-        <>
-          {/* TODO: Translate here */}
-          {`Are you sure you want to delete ${isEpic ? "epic" : "work item"} `}
-          <span className="font-medium break-words text-primary">
-            {projectDetails?.identifier}-{issue?.sequence_id}
-          </span>
-          {` ? All of the data related to the ${isEpic ? "epic" : "work item"} will be permanently removed. This action cannot be undone.`}
-        </>
+      title={
+        isPpmRu
+          ? ppmT(isEpic ? "ui.confirm.delete_epic_title" : "ui.confirm.delete_task_title")
+          : t("entity.delete.label", { entity: isEpic ? t("common.epic") : t("common.work_item") })
       }
+      content={
+        isPpmRu ? (
+          <PpmTemplateText
+            template={ppmT(isEpic ? "ui.confirm.delete_epic_content" : "ui.confirm.delete_task_content")}
+            values={{
+              id: (
+                <span className="font-medium break-words text-primary">
+                  {projectDetails?.identifier}-{issue?.sequence_id}
+                </span>
+              ),
+            }}
+          />
+        ) : (
+          <>
+            {`Are you sure you want to delete ${isEpic ? "epic" : "work item"} `}
+            <span className="font-medium break-words text-primary">
+              {projectDetails?.identifier}-{issue?.sequence_id}
+            </span>
+            {` ? All of the data related to the ${isEpic ? "epic" : "work item"} will be permanently removed. This action cannot be undone.`}
+          </>
+        )
+      }
+      primaryButtonText={{
+        loading: ppmText("ui.common.deleting", "Deleting"),
+        default: ppmText("ui.common.delete", "Delete"),
+      }}
+      secondaryButtonText={ppmText("ui.common.cancel", "Cancel")}
     />
   );
 });

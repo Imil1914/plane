@@ -306,8 +306,153 @@ const errorCodeMessages: {
   },
 };
 
-// Error handler
-export const authErrorHandler = (errorCode: EAuthErrorCodes, email?: string): TAuthErrorInfo | undefined => {
+// ---------------- PPM (line L): sign-in errors in the interface language ----------------
+
+/** Where a sign-in error text puts its link; each app renders the link with its own router. */
+export type TAuthErrorLink = "sign_in" | "create_account" | "admin_sign_in";
+
+/**
+ * What a sign-in error says, as a text id of the PPM dictionary (`@ppm/brand`: `auth.error.<id>_title` and
+ * `auth.error.<id>_message`); several codes share a text. `link`: the message has a `{link}` placeholder. No text
+ * names a support address: in PPM people turn to their PPM administrator, never to Plane's support.
+ */
+export type TAuthErrorText = { id: string; link?: TAuthErrorLink };
+
+export const AUTH_ERROR_TEXTS: Record<EAuthErrorCodes, TAuthErrorText> = {
+  [EAuthErrorCodes.INSTANCE_NOT_CONFIGURED]: { id: "instance_not_configured" },
+  [EAuthErrorCodes.INVALID_EMAIL]: { id: "invalid_email" },
+  [EAuthErrorCodes.EMAIL_REQUIRED]: { id: "email_required" },
+  [EAuthErrorCodes.SIGNUP_DISABLED]: { id: "signup_disabled" },
+  [EAuthErrorCodes.MAGIC_LINK_LOGIN_DISABLED]: { id: "magic_link_login_disabled" },
+  [EAuthErrorCodes.BOT_USER_LOGIN_FORBIDDEN]: { id: "bot_login_forbidden" },
+  [EAuthErrorCodes.PASSWORD_LOGIN_DISABLED]: { id: "password_login_disabled" },
+  [EAuthErrorCodes.USER_ACCOUNT_DEACTIVATED]: { id: "account_deactivated" },
+  [EAuthErrorCodes.INVALID_PASSWORD]: { id: "invalid_password" },
+  [EAuthErrorCodes.PASSWORD_TOO_WEAK]: { id: "password_too_weak" },
+  [EAuthErrorCodes.SMTP_NOT_CONFIGURED]: { id: "smtp_not_configured" },
+  [EAuthErrorCodes.USER_ALREADY_EXIST]: { id: "user_already_exists", link: "sign_in" },
+  [EAuthErrorCodes.AUTHENTICATION_FAILED_SIGN_UP]: { id: "authentication_failed" },
+  [EAuthErrorCodes.REQUIRED_EMAIL_PASSWORD_SIGN_UP]: { id: "email_password_required" },
+  [EAuthErrorCodes.INVALID_EMAIL_SIGN_UP]: { id: "invalid_email" },
+  [EAuthErrorCodes.INVALID_EMAIL_MAGIC_SIGN_UP]: { id: "invalid_email" },
+  [EAuthErrorCodes.MAGIC_SIGN_UP_EMAIL_CODE_REQUIRED]: { id: "email_code_required" },
+  [EAuthErrorCodes.USER_DOES_NOT_EXIST]: { id: "user_does_not_exist", link: "create_account" },
+  [EAuthErrorCodes.AUTHENTICATION_FAILED_SIGN_IN]: { id: "authentication_failed" },
+  [EAuthErrorCodes.REQUIRED_EMAIL_PASSWORD_SIGN_IN]: { id: "email_password_required" },
+  [EAuthErrorCodes.INVALID_EMAIL_SIGN_IN]: { id: "invalid_email" },
+  [EAuthErrorCodes.INVALID_EMAIL_MAGIC_SIGN_IN]: { id: "invalid_email" },
+  [EAuthErrorCodes.MAGIC_SIGN_IN_EMAIL_CODE_REQUIRED]: { id: "email_code_required" },
+  [EAuthErrorCodes.INVALID_MAGIC_CODE_SIGN_IN]: { id: "invalid_magic_code" },
+  [EAuthErrorCodes.INVALID_MAGIC_CODE_SIGN_UP]: { id: "invalid_magic_code" },
+  [EAuthErrorCodes.EXPIRED_MAGIC_CODE_SIGN_IN]: { id: "expired_magic_code" },
+  [EAuthErrorCodes.EXPIRED_MAGIC_CODE_SIGN_UP]: { id: "expired_magic_code" },
+  [EAuthErrorCodes.EMAIL_CODE_ATTEMPT_EXHAUSTED_SIGN_IN]: { id: "expired_magic_code" },
+  [EAuthErrorCodes.EMAIL_CODE_ATTEMPT_EXHAUSTED_SIGN_UP]: { id: "expired_magic_code" },
+  [EAuthErrorCodes.OAUTH_NOT_CONFIGURED]: { id: "oauth_not_configured" },
+  [EAuthErrorCodes.GOOGLE_NOT_CONFIGURED]: { id: "google_not_configured" },
+  [EAuthErrorCodes.GITHUB_NOT_CONFIGURED]: { id: "github_not_configured" },
+  [EAuthErrorCodes.GITLAB_NOT_CONFIGURED]: { id: "gitlab_not_configured" },
+  [EAuthErrorCodes.GOOGLE_OAUTH_PROVIDER_ERROR]: { id: "google_oauth_error" },
+  [EAuthErrorCodes.GITHUB_OAUTH_PROVIDER_ERROR]: { id: "github_oauth_error" },
+  [EAuthErrorCodes.GITLAB_OAUTH_PROVIDER_ERROR]: { id: "gitlab_oauth_error" },
+  [EAuthErrorCodes.INVALID_PASSWORD_TOKEN]: { id: "invalid_password_token" },
+  [EAuthErrorCodes.EXPIRED_PASSWORD_TOKEN]: { id: "expired_password_token" },
+  [EAuthErrorCodes.INCORRECT_OLD_PASSWORD]: { id: "incorrect_old_password" },
+  [EAuthErrorCodes.MISSING_PASSWORD]: { id: "missing_password" },
+  [EAuthErrorCodes.INVALID_NEW_PASSWORD]: { id: "invalid_new_password" },
+  [EAuthErrorCodes.PASSWORD_ALREADY_SET]: { id: "password_already_set" },
+  [EAuthErrorCodes.ADMIN_ALREADY_EXIST]: { id: "admin_already_exists" },
+  [EAuthErrorCodes.REQUIRED_ADMIN_EMAIL_PASSWORD_FIRST_NAME]: { id: "admin_details_required" },
+  [EAuthErrorCodes.INVALID_ADMIN_EMAIL]: { id: "invalid_admin_email" },
+  [EAuthErrorCodes.INVALID_ADMIN_PASSWORD]: { id: "invalid_admin_password" },
+  [EAuthErrorCodes.REQUIRED_ADMIN_EMAIL_PASSWORD]: { id: "email_password_required" },
+  [EAuthErrorCodes.ADMIN_AUTHENTICATION_FAILED]: { id: "admin_authentication_failed" },
+  [EAuthErrorCodes.ADMIN_USER_ALREADY_EXIST]: { id: "admin_user_already_exists", link: "admin_sign_in" },
+  [EAuthErrorCodes.ADMIN_USER_DOES_NOT_EXIST]: { id: "admin_user_does_not_exist", link: "admin_sign_in" },
+  [EAuthErrorCodes.ADMIN_USER_DEACTIVATED]: { id: "admin_user_deactivated" },
+  [EAuthErrorCodes.RATE_LIMIT_EXCEEDED]: { id: "rate_limit_exceeded" },
+};
+
+/** Looks a PPM dictionary key up in the interface language; undefined for an unknown key. */
+export type TAuthTextLookup = (key: string) => string | undefined;
+
+export type TAuthErrorMessage = {
+  title: string;
+  /** The whole text; with `link` it is `before` + `label` + `after`. */
+  message: string;
+  link?: { target: TAuthErrorLink; label: string; before: string; after: string };
+};
+
+/**
+ * Title and text of a sign-in error in the language of `lookup`, or undefined for a code that is not a sign-in
+ * error. The caller renders `link` with its own router link.
+ */
+export const getAuthErrorMessage = (
+  errorCode: string | undefined,
+  lookup: TAuthTextLookup
+): TAuthErrorMessage | undefined => {
+  if (!errorCode || !Object.prototype.hasOwnProperty.call(AUTH_ERROR_TEXTS, errorCode)) return undefined;
+  const text = AUTH_ERROR_TEXTS[errorCode as EAuthErrorCodes];
+  const title = lookup(`auth.error.${text.id}_title`) || lookup("auth.error.default_title") || "";
+  const message = lookup(`auth.error.${text.id}_message`) || lookup("auth.error.default_message") || "";
+  if (!text.link) return { title, message };
+  const label =
+    lookup(text.link === "create_account" ? "auth.error.link_create_account" : "auth.error.link_sign_in") || "";
+  const [before = "", after = ""] = message.split("{link}");
+  return { title, message: `${before}${label}${after}`, link: { target: text.link, label, before, after } };
+};
+
+/** Names of the OAuth providers on the sign-in buttons; they stay the same in every language. */
+const OAUTH_PROVIDER_NAMES: Record<string, string> = {
+  google: "Google",
+  github: "GitHub",
+  gitlab: "GitLab",
+  gitea: "Gitea",
+};
+
+/**
+ * Text of an OAuth sign-in button in the language of `lookup` («Войти через Google»), or undefined for a provider
+ * without a known name — the caller then keeps the upstream text. The upstream buttons glue an English " with Google"
+ * to whatever action text they get.
+ */
+export const getOAuthButtonText = (
+  providerId: string,
+  mode: "sign_in" | "sign_up",
+  lookup: TAuthTextLookup
+): string | undefined => {
+  const provider = OAUTH_PROVIDER_NAMES[providerId];
+  const template = provider ? lookup(`auth.oauth_${mode}_with`) : undefined;
+  return template && provider ? template.replace("{provider}", provider) : undefined;
+};
+
+// ---------------- PPM (line L): hints under a password field ----------------
+
+/** Why a correct password may be rejected; shown under the field, never blocks submitting. */
+export type TPasswordInputHint = "caps_lock" | "cyrillic" | "edge_whitespace";
+
+const CYRILLIC_LETTER = /[Ѐ-ӿ]/;
+const EDGE_WHITESPACE = /^\s|\s$/;
+
+/**
+ * Hints for a password field, in display order: Caps Lock is on (browsers report it only with an event, so the
+ * caller reads `event.getModifierState("CapsLock")`), Russian letters (the Russian keyboard layout), a space or
+ * another blank at either edge (often copied along with the password). An empty field gets only the Caps Lock hint.
+ */
+export const getPasswordInputHints = (value: string, isCapsLockOn = false): TPasswordInputHint[] => {
+  const hints: TPasswordInputHint[] = [];
+  if (isCapsLockOn) hints.push("caps_lock");
+  if (CYRILLIC_LETTER.test(value)) hints.push("cyrillic");
+  if (EDGE_WHITESPACE.test(value)) hints.push("edge_whitespace");
+  return hints;
+};
+
+// Error handler. PPM: with `lookup` (the interface language) the texts come from the PPM dictionary; without it the
+// upstream English above stays.
+export const authErrorHandler = (
+  errorCode: EAuthErrorCodes,
+  email?: string,
+  lookup?: TAuthTextLookup
+): TAuthErrorInfo | undefined => {
   const bannerAlertErrorCodes = [
     EAuthErrorCodes.INSTANCE_NOT_CONFIGURED,
     EAuthErrorCodes.INVALID_EMAIL,
@@ -357,13 +502,21 @@ export const authErrorHandler = (errorCode: EAuthErrorCodes, email?: string): TA
     EAuthErrorCodes.USER_ACCOUNT_DEACTIVATED,
   ];
 
-  if (bannerAlertErrorCodes.includes(errorCode))
+  if (!bannerAlertErrorCodes.includes(errorCode)) return undefined;
+
+  const translated = lookup ? getAuthErrorMessage(errorCode, lookup) : undefined;
+  if (translated)
     return {
       type: EErrorAlertType.BANNER_ALERT,
       code: errorCode,
-      title: errorCodeMessages[errorCode]?.title || "Error",
-      message: errorCodeMessages[errorCode]?.message(email) || "Something went wrong. Please try again.",
+      title: translated.title,
+      message: translated.message,
     };
 
-  return undefined;
+  return {
+    type: EErrorAlertType.BANNER_ALERT,
+    code: errorCode,
+    title: errorCodeMessages[errorCode]?.title || "Error",
+    message: errorCodeMessages[errorCode]?.message(email) || "Something went wrong. Please try again.",
+  };
 };

@@ -9,6 +9,7 @@ import type { ICycle, IModule, IProjectView, IWorkspaceView } from "@plane/types
 import type { TContextMenuItem } from "@plane/ui";
 // hooks
 import { useQuickActionsFactory } from "@/components/common/quick-actions-factory";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 // Types
 interface UseCycleMenuItemsProps {
@@ -66,6 +67,7 @@ type MenuResult = {
 
 export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => {
   const factory = useQuickActionsFactory();
+  const ppmText = usePpmText();
   const { cycleDetails, isEditingAllowed, ...handlers } = props;
 
   const isArchived = !!cycleDetails?.archived_at;
@@ -79,7 +81,9 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
     factory.createArchiveMenuItem(handlers.handleArchive, {
       shouldRender: isEditingAllowed && !isArchived,
       disabled: !isCompleted,
-      description: isCompleted ? undefined : "Only completed cycles can be archived",
+      description: isCompleted
+        ? undefined
+        : ppmText("ui.cycle.archive_only_completed", "Only completed cycles can be archived"),
     }),
     factory.createRestoreMenuItem(handlers.handleRestore, isEditingAllowed && isArchived),
     factory.createDeleteMenuItem(handlers.handleDelete, isEditingAllowed && !isCompleted && !isArchived),
@@ -90,6 +94,7 @@ export const useCycleMenuItems = (props: UseCycleMenuItemsProps): MenuResult => 
 
 export const useModuleMenuItems = (props: UseModuleMenuItemsProps): MenuResult => {
   const factory = useQuickActionsFactory();
+  const ppmText = usePpmText();
   const { moduleDetails, isEditingAllowed, ...handlers } = props;
 
   const isArchived = !!moduleDetails?.archived_at;
@@ -104,7 +109,9 @@ export const useModuleMenuItems = (props: UseModuleMenuItemsProps): MenuResult =
     factory.createArchiveMenuItem(handlers.handleArchive, {
       shouldRender: isEditingAllowed && !isArchived,
       disabled: !isInArchivableGroup,
-      description: isInArchivableGroup ? undefined : "Only completed or cancelled modules can be archived",
+      description: isInArchivableGroup
+        ? undefined
+        : ppmText("ui.module.archive_only_done", "Only completed or cancelled modules can be archived"),
     }),
     factory.createRestoreMenuItem(handlers.handleRestore, isEditingAllowed && isArchived),
     factory.createDeleteMenuItem(handlers.handleDelete, isEditingAllowed && !isArchived),

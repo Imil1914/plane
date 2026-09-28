@@ -25,6 +25,9 @@ import { EAuthModes, EAuthSteps } from "@/helpers/authentication.helper";
 // services
 import { AuthService } from "@/services/auth.service";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+// local components
+import { PasswordFieldHints, usePasswordFieldHints } from "./password-field-hints";
+import { PpmPasswordStrengthIndicator } from "./password-strength";
 
 const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
@@ -68,6 +71,8 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
   const [isRetryPasswordInputFocused, setIsRetryPasswordInputFocused] = useState(false);
   const [isBannerMessage, setBannerMessage] = useState(false);
   const [csrfError, setCsrfError] = useState(false);
+  // PPM line L: Caps Lock / Russian layout / edge-space hints under the password field
+  const passwordHints = usePasswordFieldHints("password-hints", IS_PPM_SHELL_ENABLED);
 
   const handleShowPassword = (key: keyof typeof showPassword) =>
     setShowPassword((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -96,9 +101,12 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
       </div>
     ) : (
       passwordFormData.password.length > 0 &&
-      getPasswordStrength(passwordFormData.password) != E_PASSWORD_STRENGTH.STRENGTH_VALID && (
+      getPasswordStrength(passwordFormData.password) != E_PASSWORD_STRENGTH.STRENGTH_VALID &&
+      (IS_PPM_SHELL_ENABLED ? (
+        <PpmPasswordStrengthIndicator password={passwordFormData.password} isFocused={isPasswordInputFocused} />
+      ) : (
         <PasswordStrengthIndicator password={passwordFormData.password} isFocused={isPasswordInputFocused} />
-      )
+      ))
     );
 
   const isButtonDisabled = useMemo(
@@ -228,8 +236,12 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
               }
               className="h-10 w-full border border-strong !bg-surface-1 pr-12 disable-autofill-style placeholder:text-placeholder"
               onFocus={() => setIsPasswordInputFocused(true)}
-              onBlur={() => setIsPasswordInputFocused(false)}
+              onBlur={() => {
+                setIsPasswordInputFocused(false);
+                passwordHints.resetCapsLock();
+              }}
               autoComplete="off"
+              {...passwordHints.inputProps}
             />
             <button
               type="button"
@@ -252,6 +264,13 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
               )}
             </button>
           </div>
+          {IS_PPM_SHELL_ENABLED && (
+            <PasswordFieldHints
+              id="password-hints"
+              value={passwordFormData.password}
+              isCapsLockOn={passwordHints.isCapsLockOn}
+            />
+          )}
           {passwordSupport}
         </div>
 

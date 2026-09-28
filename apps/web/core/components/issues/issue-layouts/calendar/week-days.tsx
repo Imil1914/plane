@@ -66,8 +66,8 @@ export const CalendarWeekDays = observer(function CalendarWeekDays(props: Props)
     isEpic = false,
   } = props;
   // hooks
-  const { data } = useUserProfile();
-  const startOfWeek = data?.start_of_the_week;
+  const userProfile = useUserProfile();
+  const { startOfTheWeek: startOfWeek } = userProfile;
 
   const calendarLayout = issuesFilterStore?.issueFilters?.displayFilters?.calendar?.layout ?? "month";
   const showWeekends = issuesFilterStore?.issueFilters?.displayFilters?.calendar?.show_weekends ?? false;

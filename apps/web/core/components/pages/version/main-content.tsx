@@ -17,6 +17,7 @@ import { renderFormattedDate, renderFormattedTime } from "@plane/utils";
 import type { EPageStoreType } from "@/hooks/store";
 // local imports
 import type { TVersionEditorProps } from "./editor";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   activeVersion: string | null;
@@ -40,6 +41,7 @@ export const PageVersionsMainContent = observer(function PageVersionsMainContent
     restoreEnabled,
     storeType,
   } = props;
+  const ppmText = usePpmText();
   // states
   const [isRestoring, setIsRestoring] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
@@ -60,14 +62,14 @@ export const PageVersionsMainContent = observer(function PageVersionsMainContent
       .then(() => {
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Page version restored.",
+          title: ppmText("ui.page.version_restored", "Page version restored."),
         });
         handleClose();
       })
       .catch(() =>
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Failed to restore page version.",
+          title: ppmText("ui.page.version_restore_failed", "Failed to restore page version."),
         })
       )
       .finally(() => setIsRestoring(false));
@@ -90,11 +92,15 @@ export const PageVersionsMainContent = observer(function PageVersionsMainContent
               <TriangleAlert className="size-10" />
             </span>
             <div>
-              <h6 className="text-16 font-semibold">Something went wrong!</h6>
-              <p className="text-13 text-tertiary">The version could not be loaded, please try again.</p>
+              <h6 className="text-16 font-semibold">
+                {ppmText("ui.toast.something_went_wrong", "Something went wrong!")}
+              </h6>
+              <p className="text-13 text-tertiary">
+                {ppmText("ui.page.version_load_failed", "The version could not be loaded, please try again.")}
+              </p>
             </div>
             <Button variant="link" onClick={handleRetry} loading={isRetrying}>
-              Try again
+              {ppmText("ui.page.try_again", "Try again")}
             </Button>
           </div>
         </div>
@@ -105,16 +111,16 @@ export const PageVersionsMainContent = observer(function PageVersionsMainContent
               <h6 className="text-14 font-medium">
                 {versionDetails
                   ? `${renderFormattedDate(versionDetails.last_saved_at)} ${renderFormattedTime(versionDetails.last_saved_at)}`
-                  : "Loading version details"}
+                  : ppmText("ui.page.version_loading", "Loading version details")}
               </h6>
               <span className="flex flex-shrink-0 items-center gap-1 rounded-sm bg-accent-primary/20 px-1.5 py-1 text-11 font-medium text-accent-primary">
                 <EyeIcon className="size-3 flex-shrink-0" />
-                View only
+                {ppmText("ui.page.view_only", "View only")}
               </span>
             </div>
             {restoreEnabled && (
               <Button variant="primary" className="flex-shrink-0" onClick={handleRestoreVersion} loading={isRestoring}>
-                {isRestoring ? "Restoring" : "Restore"}
+                {isRestoring ? ppmText("ui.common.restoring", "Restoring") : ppmText("ui.common.restore", "Restore")}
               </Button>
             )}
           </div>

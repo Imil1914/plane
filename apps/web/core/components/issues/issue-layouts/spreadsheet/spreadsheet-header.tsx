@@ -8,10 +8,12 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // constants
 import { SPREADSHEET_SELECT_GROUP } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 // ui
 import type { IIssueDisplayFilterOptions, IIssueDisplayProperties } from "@plane/types";
 // components
 import { cn } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 import { MultipleSelectGroupAction } from "@/components/core/multiple-select";
 // hooks
 import type { TSelectionHelper } from "@/hooks/use-multiple-select";
@@ -41,10 +43,14 @@ export const SpreadsheetHeader = observer(function SpreadsheetHeader(props: Prop
   } = props;
   // router
   const { projectId } = useParams();
+  const { t } = useTranslation();
   // derived values
   const isGroupSelectionEmpty = selectionHelpers.isGroupSelected(SPREADSHEET_SELECT_GROUP) === "empty";
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   // auth
-  const canSelectIssues = canEditProperties(projectId?.toString()) && !selectionHelpers.isSelectionDisabled;
+  // PPM (линия B): в видах пространства проекта в адресе нет — флажок шапки выделяет только задачи с флажком строки.
+  const canSelectIssues =
+    !selectionHelpers.isSelectionDisabled && (projectId ? canEditProperties(projectId.toString()) : true);
 
   return (
     <thead className="sticky top-0 left-0 z-[12] border-b-[0.5px] border-subtle">
@@ -61,9 +67,9 @@ export const SpreadsheetHeader = observer(function SpreadsheetHeader(props: Prop
                 <div className="mr-1 flex w-3.5 flex-shrink-0 items-center">
                   <MultipleSelectGroupAction
                     className={cn(
-                      "pointer-events-none size-3.5 opacity-0 !outline-none group-hover/list-header:pointer-events-auto group-hover/list-header:opacity-100",
+                      "pointer-events-none size-3.5 opacity-0 !outline-none group-hover/list-header:pointer-events-auto group-hover/list-header:opacity-100 focus-visible:opacity-100",
                       {
-                        "pointer-events-auto opacity-100": !isGroupSelectionEmpty,
+                        "pointer-events-auto opacity-100": !isGroupSelectionEmpty || selectionHelpers.isSelectionActive,
                       }
                     )}
                     groupID={SPREADSHEET_SELECT_GROUP}
@@ -71,7 +77,9 @@ export const SpreadsheetHeader = observer(function SpreadsheetHeader(props: Prop
                   />
                 </div>
               )}
-              <span className="text-13 font-medium">{`${isEpic ? "Epics" : "Work items"}`}</span>
+              <span className="text-13 font-medium">
+                {isEpic ? "Epics" : isPpmShell ? t("work_items") : "Work items"}
+              </span>
             </div>
           </div>
         </th>

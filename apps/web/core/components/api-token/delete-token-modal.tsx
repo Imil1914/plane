@@ -15,6 +15,8 @@ import type { IApiToken } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 // fetch-keys
 import { API_TOKENS_LIST } from "@plane/constants";
+// hooks
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   isOpen: boolean;
@@ -30,6 +32,7 @@ export function DeleteApiTokenModal(props: Props) {
   const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
   // router params
   const { t } = useTranslation();
+  const ppmText = usePpmText();
 
   const handleClose = () => {
     onClose();
@@ -75,6 +78,11 @@ export function DeleteApiTokenModal(props: Props) {
       isOpen={isOpen}
       title={t("workspace_settings.settings.api_tokens.delete.title")}
       content={<>{t("workspace_settings.settings.api_tokens.delete.description")} </>}
+      primaryButtonText={{
+        loading: ppmText("ui.common.deleting", "Deleting"),
+        default: ppmText("ui.common.delete", "Delete"),
+      }}
+      secondaryButtonText={ppmText("ui.common.cancel", "Cancel")}
     />
   );
 }

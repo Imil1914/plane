@@ -9,6 +9,7 @@ import { generateWorkItemLink } from "@plane/utils";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type TIssueLink = {
   activityId: string;
@@ -22,6 +23,7 @@ export function IssueLink(props: TIssueLink) {
   } = useIssueDetail();
   const { isMobile } = usePlatformOS();
   const activity = getActivityById(activityId);
+  const ppmText = usePpmText();
 
   if (!activity) return <></>;
 
@@ -34,7 +36,11 @@ export function IssueLink(props: TIssueLink) {
   });
   return (
     <Tooltip
-      tooltipContent={activity.issue_detail ? activity.issue_detail.name : "This work item has been deleted"}
+      tooltipContent={
+        activity.issue_detail
+          ? activity.issue_detail.name
+          : ppmText("ui.activity.deleted_task", "This work item has been deleted")
+      }
       isMobile={isMobile}
     >
       <a
@@ -46,7 +52,7 @@ export function IssueLink(props: TIssueLink) {
       >
         {activity.issue_detail
           ? `${activity.project_detail.identifier}-${activity.issue_detail.sequence_id}`
-          : "Work items"}{" "}
+          : ppmText("ui.activity.deleted_task_label", "Work items")}{" "}
         <span className="font-regular">{activity.issue_detail?.name}</span>
       </a>
     </Tooltip>

@@ -26,6 +26,7 @@ import { useAppRouter } from "@/hooks/use-app-router";
 import { IssuePeekOverview } from "../peek-overview";
 import { IssueMainContent } from "./main-content";
 import { IssueDetailsSidebar } from "./sidebar";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export type TIssueOperations = {
   fetch: (workspaceSlug: string, projectId: string, issueId: string, loader?: boolean) => Promise<void>;
@@ -60,6 +61,7 @@ export type TIssueDetailRoot = {
 
 export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDetailRoot) {
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   const { workspaceSlug, projectId, issueId, is_archived = false } = props;
   // router
   const router = useAppRouter();
@@ -99,7 +101,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           setToast({
             title: t("common.error.label"),
             type: TOAST_TYPE.ERROR,
-            message: t("entity.update.failed", { entity: t("issue.label") }),
+            message: ppmText("ui.toast.task_update_failed", t("entity.update.failed", { entity: t("issue.label") })),
           });
         }
       },
@@ -110,14 +112,14 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
           setToast({
             title: t("common.success"),
             type: TOAST_TYPE.SUCCESS,
-            message: t("entity.delete.success", { entity: t("issue.label") }),
+            message: ppmText("ui.toast.task_deleted", t("entity.delete.success", { entity: t("issue.label") })),
           });
         } catch (error) {
           console.log("Error in deleting issue:", error);
           setToast({
             title: t("common.error.label"),
             type: TOAST_TYPE.ERROR,
-            message: t("entity.delete.failed", { entity: t("issue.label") }),
+            message: ppmText("ui.toast.task_delete_failed", t("entity.delete.failed", { entity: t("issue.label") })),
           });
         }
       },
@@ -212,6 +214,7 @@ export const IssueDetailRoot = observer(function IssueDetailRoot(props: TIssueDe
       changeModulesInIssue,
       removeIssueFromModule,
       t,
+      ppmText,
     ]
   );
 

@@ -19,6 +19,7 @@ import lightActiveCycleAsset from "@/app/assets/empty-state/cycle/active-light.w
 import { ActiveCycleStats } from "@/components/cycles/active-cycle/cycle-stats";
 import { ActiveCycleProductivity } from "@/components/cycles/active-cycle/productivity";
 import { ActiveCycleProgress } from "@/components/cycles/active-cycle/progress";
+import { useCycleLiveStats } from "@/components/cycles/active-cycle/use-cycle-live-stats";
 import useCyclesDetails from "@/components/cycles/active-cycle/use-cycles-details";
 import { CycleListGroupHeader } from "@/components/cycles/list/cycle-list-group-header";
 import { CyclesListItem } from "@/components/cycles/list/cycles-list-item";
@@ -53,6 +54,8 @@ const ActiveCyclesComponent = observer(function ActiveCyclesComponent({
   cycleIssueDetails,
 }: ActiveCyclesComponentProps) {
   const { t } = useTranslation();
+  // PPM line S: the panel's numbers, charts and priority list stay fresh while it is open
+  useCycleLiveStats({ workspaceSlug, projectId, cycle: activeCycle, withPriorityIssues: true });
 
   if (!cycleId || !activeCycle) {
     return (

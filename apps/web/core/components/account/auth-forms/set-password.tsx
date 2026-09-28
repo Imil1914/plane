@@ -18,14 +18,18 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Input, PasswordStrengthIndicator } from "@plane/ui";
 // components
 import { getPasswordStrength } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // hooks
 import { useUser } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // services
 import { AuthService } from "@/services/auth.service";
 // local components
 import { FormContainer } from "./common/container";
 import { AuthFormHeader } from "./common/header";
+import { PasswordFieldHints, usePasswordFieldHints } from "./password-field-hints";
+import { PpmPasswordStrengthIndicator } from "./password-strength";
 
 type TResetPasswordFormValues = {
   email: string;
@@ -40,6 +44,8 @@ const defaultValues: TResetPasswordFormValues = {
 
 // services
 const authService = new AuthService();
+
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 export const SetPasswordForm = observer(function SetPasswordForm() {
   // router
@@ -61,6 +67,9 @@ export const SetPasswordForm = observer(function SetPasswordForm() {
   const [isRetryPasswordInputFocused, setIsRetryPasswordInputFocused] = useState(false);
   // plane hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  // PPM line L: Caps Lock / Russian layout / edge-space hints under the password field
+  const passwordHints = usePasswordFieldHints("set-password-hints", IS_PPM_SHELL_ENABLED);
   // hooks
   const { data: user, handleSetPassword } = useUser();
 
@@ -111,11 +120,14 @@ export const SetPasswordForm = observer(function SetPasswordForm() {
 
   return (
     <FormContainer>
-      <AuthFormHeader title="Set password" description="Create a new password." />
+      <AuthFormHeader
+        title={IS_PPM_SHELL_ENABLED ? ppmT("auth.set_password") : "Set password"}
+        description={IS_PPM_SHELL_ENABLED ? ppmT("auth.new_password_description") : "Create a new password."}
+      />
       <form className="space-y-4" onSubmit={(e) => handleSubmit(e)}>
         <div className="space-y-1">
           <label className="text-13 font-medium text-tertiary" htmlFor="email">
-            {t("auth.common.email.label")}
+            {IS_PPM_SHELL_ENABLED ? ppmT("auth.email") : t("auth.common.email.label")}
           </label>
           <div className="relative flex items-center rounded-md bg-surface-1">
             <Input
@@ -124,7 +136,7 @@ export const SetPasswordForm = observer(function SetPasswordForm() {
               type="email"
               value={user?.email}
               //hasError={Boolean(errors.email)}
-              placeholder={t("auth.common.email.placeholder")}
+              placeholder={IS_PPM_SHELL_ENABLED ? ppmT("auth.email_placeholder") : t("auth.common.email.placeholder")}
               className="h-10 w-full cursor-not-allowed border border-strong !bg-surface-1 pr-12 text-placeholder"
               autoComplete="off"
               disabled
@@ -146,9 +158,13 @@ export const SetPasswordForm = observer(function SetPasswordForm() {
               className="h-10 w-full border border-strong !bg-surface-1 pr-12 placeholder:text-placeholder"
               minLength={8}
               onFocus={() => setIsPasswordInputFocused(true)}
-              onBlur={() => setIsPasswordInputFocused(false)}
+              onBlur={() => {
+                setIsPasswordInputFocused(false);
+                passwordHints.resetCapsLock();
+              }}
               autoComplete="new-password"
               autoFocus
+              {...passwordHints.inputProps}
             />
             {showPassword.password ? (
               <EyeOff
@@ -162,7 +178,18 @@ export const SetPasswordForm = observer(function SetPasswordForm() {
               />
             )}
           </div>
-          <PasswordStrengthIndicator password={passwordFormData.password} isFocused={isPasswordInputFocused} />
+          {IS_PPM_SHELL_ENABLED && (
+            <PasswordFieldHints
+              id="set-password-hints"
+              value={passwordFormData.password}
+              isCapsLockOn={passwordHints.isCapsLockOn}
+            />
+          )}
+          {IS_PPM_SHELL_ENABLED ? (
+            <PpmPasswordStrengthIndicator password={passwordFormData.password} isFocused={isPasswordInputFocused} />
+          ) : (
+            <PasswordStrengthIndicator password={passwordFormData.password} isFocused={isPasswordInputFocused} />
+          )}
         </div>
         <div className="space-y-1">
           <label className="text-13 font-medium text-tertiary" htmlFor="confirm_password">

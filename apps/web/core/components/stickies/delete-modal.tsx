@@ -10,6 +10,8 @@ import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { AlertModalCore } from "@plane/ui";
+// hooks
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 interface IStickyDelete {
   isOpen: boolean;
@@ -23,6 +25,7 @@ export const StickyDeleteModal = observer(function StickyDeleteModal(props: ISti
   const [loader, setLoader] = useState(false);
   // hooks
   const { t } = useTranslation();
+  const ppmText = usePpmText();
 
   const formSubmit = async () => {
     try {
@@ -47,6 +50,11 @@ export const StickyDeleteModal = observer(function StickyDeleteModal(props: ISti
       isOpen={isOpen}
       title={t("stickies.delete")}
       content={t("stickies.delete_confirmation")}
+      primaryButtonText={{
+        loading: ppmText("ui.common.deleting", "Deleting"),
+        default: ppmText("ui.common.delete", "Delete"),
+      }}
+      secondaryButtonText={ppmText("ui.common.cancel", "Cancel")}
     />
   );
 });

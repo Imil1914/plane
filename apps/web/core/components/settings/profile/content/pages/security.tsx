@@ -15,7 +15,10 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { Input, PasswordStrengthIndicator } from "@plane/ui";
 import { getPasswordStrength } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 // components
+import { PasswordFieldHints, usePasswordFieldHints } from "@/components/account/auth-forms/password-field-hints";
+import { PpmPasswordStrengthIndicator } from "@/components/account/auth-forms/password-strength";
 import { ProfileSettingsHeading } from "@/components/settings/profile/heading";
 // helpers
 import { authErrorHandler, EAuthenticationErrorCodes, passwordErrors } from "@/helpers/authentication.helper";
@@ -38,6 +41,8 @@ const defaultValues: FormValues = {
 
 const authService = new AuthService();
 
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+
 const defaultShowPassword = {
   oldPassword: false,
   password: false,
@@ -51,6 +56,10 @@ export const SecurityProfileSettings = observer(function SecurityProfileSettings
   const [showPassword, setShowPassword] = useState(defaultShowPassword);
   const [isPasswordInputFocused, setIsPasswordInputFocused] = useState(false);
   const [isRetryPasswordInputFocused, setIsRetryPasswordInputFocused] = useState(false);
+  // PPM line L: Caps Lock / Russian layout / edge-space hints under each password field (they never block saving)
+  const currentPasswordHints = usePasswordFieldHints("current-password-hints", IS_PPM_SHELL_ENABLED);
+  const newPasswordHints = usePasswordFieldHints("new-password-hints", IS_PPM_SHELL_ENABLED);
+  const confirmPasswordHints = usePasswordFieldHints("confirm-password-hints", IS_PPM_SHELL_ENABLED);
 
   // use form
   const {
@@ -123,10 +132,14 @@ export const SecurityProfileSettings = observer(function SecurityProfileSettings
     password !== confirmPassword ||
     password === oldPassword;
 
-  const passwordSupport = password.length > 0 &&
-    getPasswordStrength(password) != E_PASSWORD_STRENGTH.STRENGTH_VALID && (
+  const passwordSupport =
+    password.length > 0 &&
+    getPasswordStrength(password) != E_PASSWORD_STRENGTH.STRENGTH_VALID &&
+    (IS_PPM_SHELL_ENABLED ? (
+      <PpmPasswordStrengthIndicator password={password} isFocused={isPasswordInputFocused} />
+    ) : (
       <PasswordStrengthIndicator password={password} isFocused={isPasswordInputFocused} />
-    );
+    ));
 
   const renderPasswordMatchError = !isRetryPasswordInputFocused || confirmPassword.length >= password.length;
 
@@ -138,35 +151,47 @@ export const SecurityProfileSettings = observer(function SecurityProfileSettings
           {oldPasswordRequired && (
             <div className="flex flex-col gap-y-2">
               <h4 className="text-13">{t("auth.common.password.current_password.label")}</h4>
-              <div className="relative flex items-center rounded-md">
-                <Controller
-                  control={control}
-                  name="old_password"
-                  rules={{
-                    required: t("common.errors.required"),
-                  }}
-                  render={({ field: { value, onChange } }) => (
-                    <Input
-                      id="old_password"
-                      type={showPassword?.oldPassword ? "text" : "password"}
-                      value={value}
-                      onChange={onChange}
-                      placeholder={t("old_password")}
-                      className="w-full"
-                      hasError={Boolean(errors.old_password)}
-                      autoComplete="current-password"
+              <div>
+                <div className="relative flex items-center rounded-md">
+                  <Controller
+                    control={control}
+                    name="old_password"
+                    rules={{
+                      required: t("common.errors.required"),
+                    }}
+                    render={({ field: { value, onChange } }) => (
+                      <Input
+                        id="old_password"
+                        type={showPassword?.oldPassword ? "text" : "password"}
+                        value={value}
+                        onChange={onChange}
+                        placeholder={t("old_password")}
+                        className="w-full"
+                        hasError={Boolean(errors.old_password)}
+                        autoComplete="current-password"
+                        onBlur={currentPasswordHints.resetCapsLock}
+                        {...currentPasswordHints.inputProps}
+                      />
+                    )}
+                  />
+                  {showPassword?.oldPassword ? (
+                    <EyeOff
+                      className="absolute right-3 h-5 w-5 stroke-placeholder hover:cursor-pointer"
+                      onClick={() => handleShowPassword("oldPassword")}
+                    />
+                  ) : (
+                    <Eye
+                      className="absolute right-3 h-5 w-5 stroke-placeholder hover:cursor-pointer"
+                      onClick={() => handleShowPassword("oldPassword")}
                     />
                   )}
-                />
-                {showPassword?.oldPassword ? (
-                  <EyeOff
-                    className="absolute right-3 h-5 w-5 stroke-placeholder hover:cursor-pointer"
-                    onClick={() => handleShowPassword("oldPassword")}
-                  />
-                ) : (
-                  <Eye
-                    className="absolute right-3 h-5 w-5 stroke-placeholder hover:cursor-pointer"
-                    onClick={() => handleShowPassword("oldPassword")}
+                </div>
+                {IS_PPM_SHELL_ENABLED && (
+                  <PasswordFieldHints
+                    id="current-password-hints"
+                    value={oldPassword}
+                    isCapsLockOn={currentPasswordHints.isCapsLockOn}
+                    className="mt-2 empty:mt-0"
                   />
                 )}
               </div>
@@ -178,37 +203,51 @@ export const SecurityProfileSettings = observer(function SecurityProfileSettings
           <div className="grid gap-x-4 gap-y-7 sm:grid-cols-2">
             <div className="flex flex-col gap-y-2">
               <h4 className="text-13">{t("auth.common.password.new_password.label")}</h4>
-              <div className="relative flex items-center rounded-md">
-                <Controller
-                  control={control}
-                  name="new_password"
-                  rules={{
-                    required: t("common.errors.required"),
-                  }}
-                  render={({ field: { value, onChange } }) => (
-                    <Input
-                      id="new_password"
-                      type={showPassword?.password ? "text" : "password"}
-                      value={value}
-                      placeholder={t("auth.common.password.new_password.placeholder")}
-                      onChange={onChange}
-                      className="w-full"
-                      hasError={Boolean(errors.new_password)}
-                      onFocus={() => setIsPasswordInputFocused(true)}
-                      onBlur={() => setIsPasswordInputFocused(false)}
-                      autoComplete="new-password"
+              <div>
+                <div className="relative flex items-center rounded-md">
+                  <Controller
+                    control={control}
+                    name="new_password"
+                    rules={{
+                      required: t("common.errors.required"),
+                    }}
+                    render={({ field: { value, onChange } }) => (
+                      <Input
+                        id="new_password"
+                        type={showPassword?.password ? "text" : "password"}
+                        value={value}
+                        placeholder={t("auth.common.password.new_password.placeholder")}
+                        onChange={onChange}
+                        className="w-full"
+                        hasError={Boolean(errors.new_password)}
+                        onFocus={() => setIsPasswordInputFocused(true)}
+                        onBlur={() => {
+                          setIsPasswordInputFocused(false);
+                          newPasswordHints.resetCapsLock();
+                        }}
+                        autoComplete="new-password"
+                        {...newPasswordHints.inputProps}
+                      />
+                    )}
+                  />
+                  {showPassword?.password ? (
+                    <EyeOff
+                      className="absolute right-3 h-5 w-5 stroke-placeholder hover:cursor-pointer"
+                      onClick={() => handleShowPassword("password")}
+                    />
+                  ) : (
+                    <Eye
+                      className="absolute right-3 h-5 w-5 stroke-placeholder hover:cursor-pointer"
+                      onClick={() => handleShowPassword("password")}
                     />
                   )}
-                />
-                {showPassword?.password ? (
-                  <EyeOff
-                    className="absolute right-3 h-5 w-5 stroke-placeholder hover:cursor-pointer"
-                    onClick={() => handleShowPassword("password")}
-                  />
-                ) : (
-                  <Eye
-                    className="absolute right-3 h-5 w-5 stroke-placeholder hover:cursor-pointer"
-                    onClick={() => handleShowPassword("password")}
+                </div>
+                {IS_PPM_SHELL_ENABLED && (
+                  <PasswordFieldHints
+                    id="new-password-hints"
+                    value={password}
+                    isCapsLockOn={newPasswordHints.isCapsLockOn}
+                    className="mt-2 empty:mt-0"
                   />
                 )}
               </div>
@@ -224,37 +263,51 @@ export const SecurityProfileSettings = observer(function SecurityProfileSettings
             </div>
             <div className="flex flex-col gap-y-2">
               <h4 className="text-13">{t("auth.common.password.confirm_password.label")}</h4>
-              <div className="relative flex items-center rounded-md">
-                <Controller
-                  control={control}
-                  name="confirm_password"
-                  rules={{
-                    required: t("common.errors.required"),
-                  }}
-                  render={({ field: { value, onChange } }) => (
-                    <Input
-                      id="confirm_password"
-                      type={showPassword?.confirmPassword ? "text" : "password"}
-                      placeholder={t("auth.common.password.confirm_password.placeholder")}
-                      value={value}
-                      onChange={onChange}
-                      className="w-full"
-                      hasError={Boolean(errors.confirm_password)}
-                      onFocus={() => setIsRetryPasswordInputFocused(true)}
-                      onBlur={() => setIsRetryPasswordInputFocused(false)}
-                      autoComplete="new-password"
+              <div>
+                <div className="relative flex items-center rounded-md">
+                  <Controller
+                    control={control}
+                    name="confirm_password"
+                    rules={{
+                      required: t("common.errors.required"),
+                    }}
+                    render={({ field: { value, onChange } }) => (
+                      <Input
+                        id="confirm_password"
+                        type={showPassword?.confirmPassword ? "text" : "password"}
+                        placeholder={t("auth.common.password.confirm_password.placeholder")}
+                        value={value}
+                        onChange={onChange}
+                        className="w-full"
+                        hasError={Boolean(errors.confirm_password)}
+                        onFocus={() => setIsRetryPasswordInputFocused(true)}
+                        onBlur={() => {
+                          setIsRetryPasswordInputFocused(false);
+                          confirmPasswordHints.resetCapsLock();
+                        }}
+                        autoComplete="new-password"
+                        {...confirmPasswordHints.inputProps}
+                      />
+                    )}
+                  />
+                  {showPassword?.confirmPassword ? (
+                    <EyeOff
+                      className="absolute right-3 h-5 w-5 stroke-placeholder hover:cursor-pointer"
+                      onClick={() => handleShowPassword("confirmPassword")}
+                    />
+                  ) : (
+                    <Eye
+                      className="absolute right-3 h-5 w-5 stroke-placeholder hover:cursor-pointer"
+                      onClick={() => handleShowPassword("confirmPassword")}
                     />
                   )}
-                />
-                {showPassword?.confirmPassword ? (
-                  <EyeOff
-                    className="absolute right-3 h-5 w-5 stroke-placeholder hover:cursor-pointer"
-                    onClick={() => handleShowPassword("confirmPassword")}
-                  />
-                ) : (
-                  <Eye
-                    className="absolute right-3 h-5 w-5 stroke-placeholder hover:cursor-pointer"
-                    onClick={() => handleShowPassword("confirmPassword")}
+                </div>
+                {IS_PPM_SHELL_ENABLED && (
+                  <PasswordFieldHints
+                    id="confirm-password-hints"
+                    value={confirmPassword}
+                    isCapsLockOn={confirmPasswordHints.isCapsLockOn}
+                    className="mt-2 empty:mt-0"
                   />
                 )}
               </div>

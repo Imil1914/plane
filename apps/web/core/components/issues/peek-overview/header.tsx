@@ -28,6 +28,7 @@ import { IssueSubscription } from "../issue-detail/subscription";
 import { WorkItemDetailQuickActions } from "../issue-layouts/quick-action-dropdowns";
 import { NameDescriptionUpdateStatus } from "../issue-update-status";
 import { IconButton } from "@plane/propel/icon-button";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export type TPeekModes = "side-peek" | "modal" | "full-screen";
 
@@ -88,6 +89,7 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
   // ref
   const parentRef = useRef<HTMLDivElement>(null);
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // store hooks
   const { data: currentUser } = useUser();
   const {
@@ -139,7 +141,10 @@ export const IssuePeekOverviewHeader = observer(function IssuePeekOverviewHeader
       setToast({
         title: t("toast.error"),
         type: TOAST_TYPE.ERROR,
-        message: t("entity.delete.failed", { entity: t("issue.label", { count: 1 }) }),
+        message: ppmText(
+          "ui.toast.task_delete_failed",
+          t("entity.delete.failed", { entity: t("issue.label", { count: 1 }) })
+        ),
       });
     }
   };

@@ -9,6 +9,8 @@ import { LockIcon, ChevronDownIcon } from "@plane/propel/icons";
 import { PasswordInput, PasswordStrengthIndicator } from "@plane/ui";
 import { cn } from "@plane/utils";
 import { isPpmShellEnabled } from "@ppm/brand";
+import { PasswordFieldHints, usePasswordFieldHints } from "@/components/account/auth-forms/password-field-hints";
+import { PpmPasswordStrengthIndicator } from "@/components/account/auth-forms/password-strength";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 interface PasswordState {
@@ -30,6 +32,9 @@ export function SetPasswordRoot({ onPasswordChange, onConfirmPasswordChange, dis
     password: "",
     confirmPassword: "",
   });
+  // PPM line L: Caps Lock / Russian layout / edge-space hints under both fields (they never block anything)
+  const passwordHints = usePasswordFieldHints("onboarding-password-hints", isPpmShell);
+  const confirmPasswordHints = usePasswordFieldHints("onboarding-confirm-password-hints", isPpmShell);
 
   const handleToggleExpand = useCallback(() => {
     if (disabled) return;
@@ -74,7 +79,7 @@ export function SetPasswordRoot({ onPasswordChange, onConfirmPasswordChange, dis
   const expandedContentClasses = useMemo(
     () =>
       `flex flex-col gap-4 transition-all duration-300 ease-in-out overflow-hidden px-3 ${
-        isExpanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+        isExpanded ? "max-h-[36rem] opacity-100" : "max-h-0 opacity-0"
       }`,
     [isExpanded]
   );
@@ -105,14 +110,30 @@ export function SetPasswordRoot({ onPasswordChange, onConfirmPasswordChange, dis
       <div className={expandedContentClasses}>
         {/* Password input */}
         <div className="flex transform flex-col gap-2 pt-1 transition-all duration-300 ease-in-out">
-          <PasswordInput
-            id="password"
-            value={passwordState.password}
-            onChange={(value) => handlePasswordChange("password", value)}
-            placeholder={isPpmShell ? ppmT("onboarding.password_set") : "Set a password"}
-            className="transition-all duration-200"
-          />
-          {passwordState.password.length > 0 && <PasswordStrengthIndicator password={passwordState.password} />}
+          <div>
+            <PasswordInput
+              id="password"
+              value={passwordState.password}
+              onChange={(value) => handlePasswordChange("password", value)}
+              placeholder={isPpmShell ? ppmT("onboarding.password_set") : "Set a password"}
+              className="transition-all duration-200"
+              inputProps={isPpmShell ? { ...passwordHints.inputProps, onBlur: passwordHints.resetCapsLock } : undefined}
+            />
+            {isPpmShell && (
+              <PasswordFieldHints
+                id="onboarding-password-hints"
+                value={passwordState.password}
+                isCapsLockOn={passwordHints.isCapsLockOn}
+                className="mt-2 empty:mt-0"
+              />
+            )}
+          </div>
+          {passwordState.password.length > 0 &&
+            (isPpmShell ? (
+              <PpmPasswordStrengthIndicator password={passwordState.password} />
+            ) : (
+              <PasswordStrengthIndicator password={passwordState.password} />
+            ))}
         </div>
 
         <div className="flex flex-col gap-2 pb-2">
@@ -129,7 +150,20 @@ export function SetPasswordRoot({ onPasswordChange, onConfirmPasswordChange, dis
               onChange={(value) => handlePasswordChange("confirmPassword", value)}
               placeholder={isPpmShell ? ppmT("onboarding.password_confirm") : "Confirm password"}
               className="transition-all duration-200"
+              inputProps={
+                isPpmShell
+                  ? { ...confirmPasswordHints.inputProps, onBlur: confirmPasswordHints.resetCapsLock }
+                  : undefined
+              }
             />
+            {isPpmShell && (
+              <PasswordFieldHints
+                id="onboarding-confirm-password-hints"
+                value={passwordState.confirmPassword}
+                isCapsLockOn={confirmPasswordHints.isCapsLockOn}
+                className="mt-1 empty:mt-0"
+              />
+            )}
             {hasPasswordMismatch && (
               <p className="mt-1 text-11 text-danger-primary">
                 {isPpmShell ? ppmT("onboarding.password_mismatch") : "Passwords do not match"}

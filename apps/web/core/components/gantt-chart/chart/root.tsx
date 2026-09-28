@@ -91,8 +91,8 @@ export const ChartViewRoot = observer(function ChartViewRoot(props: ChartViewRoo
     updateRenderView,
     updateAllBlocksOnChartChangeWhileDragging,
   } = useTimeLineChartStore();
-  const { data } = useUserProfile();
-  const startOfWeek = data?.start_of_the_week;
+  const userProfile = useUserProfile();
+  const { startOfTheWeek: startOfWeek } = userProfile;
 
   const updateCurrentViewRenderPayload = (side: null | "left" | "right", view: TGanttViews, targetDate?: Date) => {
     const selectedCurrentView: TGanttViews = view;

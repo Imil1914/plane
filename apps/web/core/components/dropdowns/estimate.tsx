@@ -20,6 +20,8 @@ import { convertMinutesToHoursMinutesString, cn } from "@plane/utils";
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useEstimate } from "@/hooks/store/estimates/use-estimate";
 import { useDropdown } from "@/hooks/use-dropdown";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // components
 import { DropdownButton } from "./buttons";
 import { BUTTON_VARIANTS_WITH_TEXT } from "./constants";
@@ -68,6 +70,9 @@ export const EstimateDropdown = observer(function EstimateDropdown(props: Props)
   } = props;
   // i18n
   const { t } = useTranslation();
+  const isPpmRu = usePpmRu();
+  const ppmT = usePpmTranslation();
+  const ppmText = usePpmText();
   // states
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -189,8 +194,9 @@ export const EstimateDropdown = observer(function EstimateDropdown(props: Props)
           <DropdownButton
             className={buttonClassName}
             isActive={isOpen}
-            tooltipHeading={t("project_settings.estimates.label")}
-            tooltipContent={selectedEstimate ? selectedEstimate?.value : placeholder}
+            // PPM: «Оценка / Нет» instead of «Оценки / Оценка» when nothing is estimated.
+            tooltipHeading={ppmText("ui.property.estimate_heading", t("project_settings.estimates.label"))}
+            tooltipContent={selectedEstimate ? selectedEstimate?.value : isPpmRu ? ppmT("ui.common.none") : placeholder}
             showTooltip={showTooltip}
             variant={buttonVariant}
             renderToolTipByDefault={renderByDefault}

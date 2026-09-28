@@ -28,6 +28,10 @@ import { ProjectService } from "@/services/project";
 // store
 import type { CoreRootStore } from "./root.store";
 
+// PPM line S: the value of a fulfilled request, undefined for a failed one (refreshCycleStats keeps the old value then)
+const settledValue = <T>(result: PromiseSettledResult<T>): T | undefined =>
+  result.status === "fulfilled" ? result.value : undefined;
+
 export interface ICycleStore {
   // loaders
   loader: boolean;
@@ -78,6 +82,13 @@ export interface ICycleStore {
     cycleId: string,
     analytic_type: string
   ) => Promise<TCycleDistribution | TCycleEstimateDistribution>;
+  // PPM line S: quiet re-read of the numbers and charts of a sprint that is on screen
+  refreshCycleStats: (
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string,
+    options?: { withDetails?: boolean }
+  ) => Promise<void>;
   // crud
   createCycle: (workspaceSlug: string, projectId: string, data: Partial<ICycle>) => Promise<ICycle>;
   updateCycleDetails: (
@@ -112,6 +123,8 @@ export class CycleStore implements ICycleStore {
   issueService;
   cycleService;
   cycleArchiveService;
+  // PPM line S: the latest quiet refresh per sprint (an older answer that arrives later is ignored); not observable
+  private statsRefreshTokens = new Map<string, number>();
 
   constructor(_rootStore: CoreRootStore) {
     makeObservable(this, {
@@ -524,6 +537,53 @@ export class CycleStore implements ICycleStore {
         });
         return cycle;
       });
+
+  /**
+   * PPM line S: quietly re-reads the numbers and charts of a sprint that is on screen — the progress counts, the
+   * work-item distribution (burndown, assignees, labels), the points distribution when the project has estimates and,
+   * after a change made in this tab, the sprint details (members). Nothing is cleared first, so the panels keep the
+   * previous numbers until the new ones arrive; a failed part keeps its previous value; an answer older than a later
+   * refresh of the same sprint is ignored; a sprint deleted meanwhile is not brought back. The details are left out of
+   * the periodic refresh: that endpoint also records a "recent visit". A sprint without dates (a draft) has no
+   * analytics — the endpoint answers 400 — so only its progress (and details) are re-read.
+   */
+  refreshCycleStats = async (
+    workspaceSlug: string,
+    projectId: string,
+    cycleId: string,
+    options: { withDetails?: boolean } = {}
+  ) => {
+    const token = (this.statsRefreshTokens.get(cycleId) ?? 0) + 1;
+    this.statsRefreshTokens.set(cycleId, token);
+    const hasDates = Boolean(this.cycleMap[cycleId]?.start_date && this.cycleMap[cycleId]?.end_date);
+    const withPoints = hasDates && (this.rootStore.projectEstimate?.areEstimateEnabledByProjectId(projectId) ?? false);
+    const [progress, distribution, estimateDistribution, details] = await Promise.allSettled([
+      this.cycleService.workspaceActiveCyclesProgress(workspaceSlug, projectId, cycleId),
+      hasDates
+        ? this.cycleService.workspaceActiveCyclesAnalytics(workspaceSlug, projectId, cycleId, "issues")
+        : Promise.resolve(undefined),
+      withPoints
+        ? this.cycleService.workspaceActiveCyclesAnalytics(workspaceSlug, projectId, cycleId, "points")
+        : Promise.resolve(undefined),
+      options.withDetails
+        ? this.cycleService.getCycleDetails(workspaceSlug, projectId, cycleId)
+        : Promise.resolve(undefined),
+    ]);
+    if (this.statsRefreshTokens.get(cycleId) !== token || !this.cycleMap[cycleId]) return;
+    const nextDetails = settledValue(details);
+    const nextProgress = settledValue(progress);
+    const nextDistribution = settledValue(distribution);
+    const nextEstimateDistribution = settledValue(estimateDistribution);
+    runInAction(() => {
+      set(this.cycleMap, [cycleId], {
+        ...this.cycleMap[cycleId],
+        ...nextDetails,
+        ...nextProgress,
+        ...(nextDistribution ? { distribution: nextDistribution } : {}),
+        ...(nextEstimateDistribution ? { estimate_distribution: nextEstimateDistribution } : {}),
+      });
+    });
+  };
 
   /**
    * @description fetches cycle details

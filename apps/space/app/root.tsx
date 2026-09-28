@@ -5,6 +5,7 @@
  */
 
 import { Links, Meta, Outlet, Scripts } from "react-router";
+import { isPpmBrandEnabled, PPM_BRAND } from "@ppm/brand";
 // assets
 import appleTouchIcon from "@/app/assets/favicon/apple-touch-icon.png?url";
 import favicon16 from "@/app/assets/favicon/favicon-16x16.png?url";
@@ -26,6 +27,7 @@ import "@fontsource/ibm-plex-mono";
 
 const APP_TITLE = "Plane Publish | Make your Plane boards public with one-click";
 const APP_DESCRIPTION = "Plane Publish is a customer feedback management tool built on top of plane.so";
+const IS_PPM_BRAND_ENABLED = isPpmBrandEnabled(process.env.PPM_BRAND_ENABLED);
 
 export const links: Route.LinksFunction = () => [
   { rel: "apple-touch-icon", sizes: "180x180", href: appleTouchIcon },
@@ -69,7 +71,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export const meta: Route.MetaFunction = () => [
+const UPSTREAM_META: ReturnType<Route.MetaFunction> = [
   { title: APP_TITLE },
   { name: "description", content: APP_DESCRIPTION },
   { property: "og:title", content: APP_TITLE },
@@ -82,6 +84,18 @@ export const meta: Route.MetaFunction = () => [
   },
   { name: "twitter:site", content: "@planepowers" },
 ];
+
+// PPM: the public pages carry the PPM title and description, like the web app (static, so the server-rendered head and
+// the browser agree).
+export const meta: Route.MetaFunction = () =>
+  IS_PPM_BRAND_ENABLED
+    ? [
+        { title: PPM_BRAND.title },
+        { name: "description", content: PPM_BRAND.description },
+        { property: "og:title", content: PPM_BRAND.title },
+        { property: "og:description", content: PPM_BRAND.description },
+      ]
+    : UPSTREAM_META;
 
 export default function Root() {
   return <Outlet />;

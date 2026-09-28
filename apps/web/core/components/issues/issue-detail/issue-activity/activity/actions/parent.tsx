@@ -10,10 +10,13 @@ import { ParentPropertyIcon } from "@plane/propel/icons";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
 import { IssueActivityBlockComponent, IssueLink } from "./";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { PpmActivityPhrase } from "./helpers/ppm-activity";
 
 type TIssueParentActivity = { activityId: string; showIssue?: boolean; ends: "top" | "bottom" | undefined };
 
 export const IssueParentActivity = observer(function IssueParentActivity(props: TIssueParentActivity) {
+  const isPpmRu = usePpmRu();
   const { activityId, showIssue = true, ends } = props;
   // hooks
   const {
@@ -29,16 +32,26 @@ export const IssueParentActivity = observer(function IssueParentActivity(props: 
       activityId={activityId}
       ends={ends}
     >
-      <>
-        {activity.new_value ? `set the parent to ` : `removed the parent `}
-        {activity.new_value ? (
-          <span className="font-medium text-primary">{activity.new_value}</span>
-        ) : (
-          <span className="font-medium text-primary">{activity.old_value}</span>
-        )}
-        {showIssue && (activity.new_value ? ` for ` : ` from `)}
-        {showIssue && <IssueLink activityId={activityId} />}.
-      </>
+      {isPpmRu ? (
+        <PpmActivityPhrase
+          phrase={activity.new_value ? "ui.activity.parent_set" : "ui.activity.parent_removed"}
+          values={{
+            value: <span className="font-medium text-primary">{activity.new_value || activity.old_value}</span>,
+          }}
+          issue={showIssue ? <IssueLink activityId={activityId} /> : undefined}
+        />
+      ) : (
+        <>
+          {activity.new_value ? `set the parent to ` : `removed the parent `}
+          {activity.new_value ? (
+            <span className="font-medium text-primary">{activity.new_value}</span>
+          ) : (
+            <span className="font-medium text-primary">{activity.old_value}</span>
+          )}
+          {showIssue && (activity.new_value ? ` for ` : ` from `)}
+          {showIssue && <IssueLink activityId={activityId} />}.
+        </>
+      )}
     </IssueActivityBlockComponent>
   );
 });

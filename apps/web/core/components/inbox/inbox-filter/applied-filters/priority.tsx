@@ -12,11 +12,13 @@ import type { TIssuePriorities } from "@plane/types";
 import { Tag } from "@plane/ui";
 // hooks
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
+import { usePpmPriorityTitle } from "@/components/ppm-shell/priority-title";
 
 export const InboxIssueAppliedFiltersPriority = observer(function InboxIssueAppliedFiltersPriority() {
   // hooks
   const { t } = useTranslation();
   const { inboxFilters, handleInboxIssueFilters } = useProjectInbox();
+  const priorityTitle = usePpmPriorityTitle();
   // derived values
   const filteredValues = inboxFilters?.priority || [];
   const currentOptionDetail = (priority: TIssuePriorities) =>
@@ -39,7 +41,7 @@ export const InboxIssueAppliedFiltersPriority = observer(function InboxIssueAppl
             <div className="relative flex h-3 w-3 flex-shrink-0 items-center justify-center overflow-hidden">
               <PriorityIcon priority={optionDetail.key} className="h-3 w-3" />
             </div>
-            <div className="truncate text-11">{optionDetail?.title}</div>
+            <div className="truncate text-11">{priorityTitle(optionDetail.key, optionDetail.title)}</div>
             <div
               className="relative flex h-3 w-3 flex-shrink-0 cursor-pointer items-center justify-center overflow-hidden text-tertiary transition-all hover:text-secondary"
               onClick={() => handleInboxIssueFilters("priority", handleFilterValue(optionDetail?.key))}

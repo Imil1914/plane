@@ -20,6 +20,7 @@ import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
 // constants
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { CreateUpdateEpicModal } from "@/components/epic-modal";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 interface IHeaderGroupByCard {
   sub_group_by: TIssueGroupByOptions | undefined;
@@ -53,6 +54,7 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
   const verticalAlignPosition = sub_group_by ? false : collapsedGroups?.group_by.includes(column_id);
   // states
   const [isOpen, setIsOpen] = React.useState(false);
+  const ppmText = usePpmText();
   const [openExistingIssueListModal, setOpenExistingIssueListModal] = React.useState(false);
   // hooks
   const storeType = useIssueStoreType();
@@ -72,14 +74,17 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
 
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success!",
-        message: "Work items added to the cycle successfully.",
+        title: ppmText("ui.toast.success", "Success!"),
+        message: ppmText("ui.cycle.tasks_added", "Work items added to the cycle successfully."),
       });
     } catch (_error) {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Selected work items could not be added to the cycle. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: ppmText(
+          "ui.cycle.tasks_add_failed",
+          "Selected work items could not be added to the cycle. Please try again."
+        ),
       });
     }
   };
@@ -163,14 +168,18 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
                   setIsOpen(true);
                 }}
               >
-                <span className="flex items-center justify-start gap-2">Create work item</span>
+                <span className="flex items-center justify-start gap-2">
+                  {ppmText("ui.issue.create_task", "Create work item")}
+                </span>
               </CustomMenu.MenuItem>
               <CustomMenu.MenuItem
                 onClick={() => {
                   setOpenExistingIssueListModal(true);
                 }}
               >
-                <span className="flex items-center justify-start gap-2">Add an existing work item</span>
+                <span className="flex items-center justify-start gap-2">
+                  {ppmText("ui.issue.add_existing_task", "Add an existing work item")}
+                </span>
               </CustomMenu.MenuItem>
             </CustomMenu>
           ) : (

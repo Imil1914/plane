@@ -11,11 +11,14 @@ import { renderFormattedDate } from "@plane/utils";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
 import { IssueActivityBlockComponent, IssueLink } from "./";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { PpmActivityPhrase } from "./helpers/ppm-activity";
 // helpers
 
 type TIssueTargetDateActivity = { activityId: string; showIssue?: boolean; ends: "top" | "bottom" | undefined };
 
 export const IssueTargetDateActivity = observer(function IssueTargetDateActivity(props: TIssueTargetDateActivity) {
+  const isPpmRu = usePpmRu();
   const { activityId, showIssue = true, ends } = props;
   // hooks
   const {
@@ -31,16 +34,28 @@ export const IssueTargetDateActivity = observer(function IssueTargetDateActivity
       activityId={activityId}
       ends={ends}
     >
-      <>
-        {activity.new_value ? `set the due date to ` : `removed the due date `}
-        {activity.new_value && (
-          <>
-            <span className="font-medium text-primary">{renderFormattedDate(activity.new_value)}</span>
-          </>
-        )}
-        {showIssue && (activity.new_value ? ` for ` : ` from `)}
-        {showIssue && <IssueLink activityId={activityId} />}.
-      </>
+      {isPpmRu ? (
+        <PpmActivityPhrase
+          phrase={activity.new_value ? "ui.activity.due_date_set" : "ui.activity.due_date_removed"}
+          values={{
+            value: activity.new_value ? (
+              <span className="font-medium text-primary">{renderFormattedDate(activity.new_value)}</span>
+            ) : null,
+          }}
+          issue={showIssue ? <IssueLink activityId={activityId} /> : undefined}
+        />
+      ) : (
+        <>
+          {activity.new_value ? `set the due date to ` : `removed the due date `}
+          {activity.new_value && (
+            <>
+              <span className="font-medium text-primary">{renderFormattedDate(activity.new_value)}</span>
+            </>
+          )}
+          {showIssue && (activity.new_value ? ` for ` : ` from `)}
+          {showIssue && <IssueLink activityId={activityId} />}.
+        </>
+      )}
     </IssueActivityBlockComponent>
   );
 });

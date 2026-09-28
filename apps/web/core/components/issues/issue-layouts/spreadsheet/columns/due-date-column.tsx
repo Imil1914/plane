@@ -15,6 +15,7 @@ import { DateDropdown } from "@/components/dropdowns/date";
 // helpers
 // hooks
 import { useProjectState } from "@/hooks/store/use-project-state";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   issue: TIssue;
@@ -25,6 +26,7 @@ type Props = {
 
 export const SpreadsheetDueDateColumn = observer(function SpreadsheetDueDateColumn(props: Props) {
   const { issue, onChange, disabled, onClose } = props;
+  const ppmText = usePpmText();
   // store hooks
   const { getStateById } = useProjectState();
   // derived values
@@ -47,7 +49,7 @@ export const SpreadsheetDueDateColumn = observer(function SpreadsheetDueDateColu
           );
         }}
         disabled={disabled}
-        placeholder="Due date"
+        placeholder={ppmText("ui.date.due", "Due date")}
         icon={<DueDatePropertyIcon className="h-3 w-3 flex-shrink-0" />}
         buttonVariant="transparent-with-text"
         buttonContainerClassName="w-full"

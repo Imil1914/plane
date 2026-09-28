@@ -15,8 +15,11 @@ import { EIssueLayoutTypes } from "@plane/types";
 import { MultipleSelectGroup } from "@/components/core/multiple-select";
 import { IssueBulkOperationsRoot } from "@/components/issues/bulk-operations";
 // hooks
+import { useIssues } from "@/hooks/store/use-issues";
 import { useProject } from "@/hooks/store/use-project";
 import { useBulkOperationStatus } from "@/hooks/use-bulk-operation-status";
+import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
+import { getPpmSelectableEntities } from "@/hooks/use-multiple-select-helpers";
 // local imports
 import type { TRenderQuickActions } from "../list/list-view-types";
 import { QuickAddIssueRoot, SpreadsheetAddIssueButton } from "../quick-add";
@@ -62,8 +65,10 @@ export const SpreadsheetView = observer(function SpreadsheetView(props: Props) {
   const portalRef = useRef<HTMLDivElement | null>(null);
   // store hooks
   const { currentProjectDetails } = useProject();
+  const { issueMap } = useIssues();
+  const storeType = useIssueStoreType();
   // plane web hooks
-  const isBulkOperationsEnabled = useBulkOperationStatus();
+  const isBulkOperationsEnabled = useBulkOperationStatus(EIssueLayoutTypes.SPREADSHEET, storeType);
 
   const isEstimateEnabled: boolean = currentProjectDetails?.estimate !== null;
 
@@ -76,14 +81,17 @@ export const SpreadsheetView = observer(function SpreadsheetView(props: Props) {
       });
 
   if (!issueIds || issueIds.length === 0) return <></>;
+  // PPM (линия B): «выбрать всё» и Shift-диапазон — только задачи с флажком (которые пользователь может менять).
+  const isSelectableIssue = (issueId: string) => {
+    const issue = issueMap[issueId];
+    return !!issue && !issue.tempId && !!canEditProperties(issue.project_id ?? undefined);
+  };
   return (
     <div className="relative flex h-full w-full flex-col overflow-x-hidden bg-layer-1 whitespace-nowrap text-secondary">
       <div ref={portalRef} className="spreadsheet-menu-portal" />
       <MultipleSelectGroup
         containerRef={containerRef}
-        entities={{
-          [SPREADSHEET_SELECT_GROUP]: issueIds,
-        }}
+        entities={getPpmSelectableEntities({ [SPREADSHEET_SELECT_GROUP]: issueIds }, isSelectableIssue)}
         disabled={!isBulkOperationsEnabled || isEpic}
       >
         {(helpers) => (

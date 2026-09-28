@@ -76,3 +76,13 @@ export function getPpmStateDisplayName(
   if (!preset || preset.name !== state.name || !isPpmDesignV2()) return state.name;
   return getPpmTranslation(locale, preset.key);
 }
+
+/**
+ * Same display rule for a bare state name (activity records keep only the name): an EXACT default name is shown in
+ * the UI language under v2, anything else as stored.
+ */
+export function getPpmStateDisplayNameByName(name: string | undefined, locale: string | undefined): string | undefined {
+  if (!name || !isPpmDesignV2()) return name;
+  const preset = Object.values(PPM_DEFAULT_STATES).find((item) => item.name === name);
+  return preset ? getPpmTranslation(locale, preset.key) : name;
+}

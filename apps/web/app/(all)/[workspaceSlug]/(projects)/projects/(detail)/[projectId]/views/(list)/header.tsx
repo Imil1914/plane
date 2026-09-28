@@ -21,8 +21,10 @@ import { useProject } from "@/hooks/store/use-project";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export const ProjectViewsHeader = observer(function ProjectViewsHeader() {
+  const ppmText = usePpmText();
   const { workspaceSlug, projectId } = useParams();
   // store hooks
   const { toggleCreateViewModal } = useCommandPalette();
@@ -59,7 +61,7 @@ export const ProjectViewsHeader = observer(function ProjectViewsHeader() {
               size="lg"
               onClick={() => toggleCreateViewModal(true)}
             >
-              Add view
+              {ppmText("ui.display.add_view", "Add view")}
             </Button>
           </div>
         </Header.RightItem>

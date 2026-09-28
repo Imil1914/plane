@@ -15,6 +15,7 @@ import type { IProjectView } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 // hooks
 import { useProjectView } from "@/hooks/store/use-project-view";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   data: IProjectView;
@@ -32,6 +33,7 @@ export const DeleteProjectViewModal = observer(function DeleteProjectViewModal(p
   // store hooks
   const { deleteView } = useProjectView();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   const handleClose = () => {
     onClose();
     setIsDeleteLoading(false);
@@ -46,14 +48,14 @@ export const DeleteProjectViewModal = observer(function DeleteProjectViewModal(p
       router.push(`/${workspaceSlug}/projects/${projectId}/views`);
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success!",
-        message: "View deleted successfully.",
+        title: ppmText("ui.toast.success", "Success!"),
+        message: ppmText("ui.toast.view_deleted", "View deleted successfully."),
       });
     } catch (_error) {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "View could not be deleted. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: ppmText("ui.toast.view_delete_failed", "View could not be deleted. Please try again."),
       });
     }
     setIsDeleteLoading(false);
@@ -67,6 +69,11 @@ export const DeleteProjectViewModal = observer(function DeleteProjectViewModal(p
       isOpen={isOpen}
       title={t("project_views.delete_view.title")}
       content={<>{t("project_views.delete_view.content")}</>}
+      primaryButtonText={{
+        loading: ppmText("ui.common.deleting", "Deleting"),
+        default: ppmText("ui.common.delete", "Delete"),
+      }}
+      secondaryButtonText={ppmText("ui.common.cancel", "Cancel")}
     />
   );
 });

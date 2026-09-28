@@ -7,6 +7,8 @@
 import Link from "next/link";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { PPM_BRAND } from "@ppm/brand";
+import { IS_PPM_SHELL_TEXT } from "@/hooks/use-ppm-text";
 
 type TIssueUser = {
   activityId: string;
@@ -27,7 +29,9 @@ export function IssueCreatorDisplay(props: TIssueUser) {
   return (
     <>
       {customUserName ? (
-        <span className="font-medium text-primary">{customUserName || "Plane"}</span>
+        <span className="font-medium text-primary">
+          {customUserName || (IS_PPM_SHELL_TEXT ? PPM_BRAND.name : "Plane")}
+        </span>
       ) : (
         <Link
           href={`/${activity?.workspace_detail?.slug}/profile/${activity?.actor_detail?.id}`}

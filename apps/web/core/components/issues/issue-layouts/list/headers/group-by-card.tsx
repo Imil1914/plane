@@ -16,6 +16,7 @@ import type { TIssue, ISearchIssueResponse, TIssueGroupByOptions } from "@plane/
 import { CustomMenu } from "@plane/ui";
 // components
 import { cn } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 import { ExistingIssuesListModal } from "@/components/core/modals/existing-issues-list-modal";
 import { MultipleSelectGroupAction } from "@/components/core/multiple-select";
 import { CreateUpdateIssueModal } from "@/components/issues/issue-modal/modal";
@@ -71,10 +72,16 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
   const existingIssuesListModalPayload = moduleId ? { module: moduleId.toString() } : { cycle: true };
   const isGroupSelectionEmpty = selectionHelpers.isGroupSelected(groupID) === "empty";
   // auth
-  const canSelectIssues = canEditProperties(projectId?.toString()) && !selectionHelpers.isSelectionDisabled;
+  // PPM (линия B): в «Моих задачах» проекта в адресе нет — флажок группы выделяет только задачи с флажком строки.
+  const canSelectIssues =
+    !selectionHelpers.isSelectionDisabled && (projectId ? canEditProperties(projectId.toString()) : true);
   const isDesignV2 = usePpmDesignV2();
   const ppmT = usePpmTranslation();
   const addInGroupLabel = formatPpmTemplate(ppmT("tasks.group.add_in_group"), { group: title });
+  // PPM (линия B, раунд 2): тосты добавления существующих задач — по-русски, спринт и направление своими словами.
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const addedMessage = ppmT(moduleId ? "bulk.group.added_to_direction" : "bulk.group.added_to_sprint");
+  const addFailed = ppmT(moduleId ? "bulk.group.add_failed_direction" : "bulk.group.add_failed_sprint");
   const groupIcon = icon ?? <CircleDashed className="size-3.5" strokeWidth={2} />;
 
   const handleAddIssuesToView = async (data: ISearchIssueResponse[]) => {
@@ -87,14 +94,14 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
 
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success!",
-        message: "Work items added to the cycle successfully.",
+        title: isPpmShell ? ppmT("bulk.group.added_title") : "Success!",
+        message: isPpmShell ? addedMessage : "Work items added to the cycle successfully.",
       });
     } catch (_error) {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Selected work items could not be added to the cycle. Please try again.",
+        title: isPpmShell ? ppmT("bulk.group.add_failed_title") : "Error!",
+        message: isPpmShell ? addFailed : "Selected work items could not be added to the cycle. Please try again.",
       });
     }
   };
@@ -112,9 +119,9 @@ export const HeaderGroupByCard = observer(function HeaderGroupByCard(props: IHea
           <div className="absolute left-1 flex w-3.5 flex-shrink-0 items-center">
             <MultipleSelectGroupAction
               className={cn(
-                "pointer-events-none size-3.5 opacity-0 !outline-none group-hover/list-header:pointer-events-auto group-hover/list-header:opacity-100",
+                "pointer-events-none size-3.5 opacity-0 !outline-none group-hover/list-header:pointer-events-auto group-hover/list-header:opacity-100 focus-visible:opacity-100",
                 {
-                  "pointer-events-auto opacity-100": !isGroupSelectionEmpty,
+                  "pointer-events-auto opacity-100": !isGroupSelectionEmpty || selectionHelpers.isSelectionActive,
                 }
               )}
               groupID={groupID}

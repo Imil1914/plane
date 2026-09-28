@@ -16,6 +16,7 @@ import type { IEmailCheckData } from "@plane/types";
 import { Input, Spinner } from "@plane/ui";
 // helpers
 import { cn } from "@plane/utils";
+import { IS_PPM_SHELL_ENABLED, useAuthLanguage } from "@/helpers/ppm-auth-language";
 import { checkEmailValidity } from "@/helpers/string.helper";
 
 type TAuthEmailForm = {
@@ -28,10 +29,13 @@ export const AuthEmailForm = observer(function AuthEmailForm(props: TAuthEmailFo
   // states
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [email, setEmail] = useState(defaultEmail);
+  // PPM line L: the interface language of the sign-in screens
+  const { t } = useAuthLanguage();
+  const invalidEmailText = IS_PPM_SHELL_ENABLED ? t("auth.invalid_email") : "Email is invalid";
 
   const emailError = useMemo(
-    () => (email && !checkEmailValidity(email) ? { email: "Email is invalid" } : undefined),
-    [email]
+    () => (email && !checkEmailValidity(email) ? { email: invalidEmailText } : undefined),
+    [email, invalidEmailText]
   );
 
   const handleFormSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -53,7 +57,7 @@ export const AuthEmailForm = observer(function AuthEmailForm(props: TAuthEmailFo
     <form onSubmit={handleFormSubmit} className="mt-5 space-y-4">
       <div className="space-y-1">
         <label className="text-13 font-medium text-tertiary" htmlFor="email">
-          Email
+          {IS_PPM_SHELL_ENABLED ? t("auth.email") : "Email"}
         </label>
         <div
           className={cn(
@@ -73,7 +77,7 @@ export const AuthEmailForm = observer(function AuthEmailForm(props: TAuthEmailFo
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="name@company.com"
+            placeholder={IS_PPM_SHELL_ENABLED ? t("auth.email_placeholder") : "name@company.com"}
             className={`h-10 w-full border-0 disable-autofill-style placeholder:text-placeholder autofill:bg-danger-subtle focus:bg-none active:bg-transparent`}
             autoComplete="off"
             autoFocus
@@ -82,7 +86,7 @@ export const AuthEmailForm = observer(function AuthEmailForm(props: TAuthEmailFo
           {email.length > 0 && (
             <button
               type="button"
-              aria-label="Clear email"
+              aria-label={IS_PPM_SHELL_ENABLED ? t("auth.clear_email") : "Clear email"}
               onClick={() => {
                 setEmail("");
                 inputRef.current?.focus();
@@ -101,7 +105,7 @@ export const AuthEmailForm = observer(function AuthEmailForm(props: TAuthEmailFo
         )}
       </div>
       <Button type="submit" variant="primary" className="w-full" size="xl" disabled={isButtonDisabled}>
-        {isSubmitting ? <Spinner height="20px" width="20px" /> : "Continue"}
+        {isSubmitting ? <Spinner height="20px" width="20px" /> : IS_PPM_SHELL_ENABLED ? t("auth.continue") : "Continue"}
       </Button>
     </form>
   );

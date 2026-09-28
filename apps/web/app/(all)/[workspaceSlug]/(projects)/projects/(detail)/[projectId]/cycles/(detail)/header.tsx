@@ -51,6 +51,7 @@ import useLocalStorage from "@/hooks/use-local-storage";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   // refs
@@ -62,6 +63,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
   const { workspaceSlug, projectId, cycleId } = useParams();
   // i18n
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   const ppmT = usePpmTranslation();
   const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   const cyclesLabel = isPpmShell ? ppmT("project.stages") : "Cycles";
@@ -176,9 +178,11 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
             {workItemsCount && workItemsCount > 0 ? (
               <Tooltip
                 isMobile={isMobile}
-                tooltipContent={`There are ${workItemsCount} ${
-                  workItemsCount > 1 ? "work items" : "work item"
-                } in this cycle`}
+                tooltipContent={ppmText(
+                  "ui.cycle.tasks_in_cycle",
+                  `There are ${workItemsCount} ${workItemsCount > 1 ? "work items" : "work item"} in this cycle`,
+                  { count: workItemsCount }
+                )}
                 position="bottom"
               >
                 <span className="flex flex-shrink-0 cursor-default items-center justify-center rounded-xl bg-accent-primary/20 px-2 text-center text-11 font-semibold text-accent-primary">
@@ -239,7 +243,7 @@ export const CycleIssuesHeader = observer(function CycleIssuesHeader() {
             {canUserCreateIssue && (
               <>
                 <Button onClick={() => setAnalyticsModal(true)} variant="secondary" size="lg">
-                  <span className="hidden @4xl:flex">Analytics</span>
+                  <span className="hidden @4xl:flex">{ppmText("ui.display.analytics", "Analytics")}</span>
                   <span className="@4xl:hidden">
                     <ChartNoAxesColumn className="size-3.5" />
                   </span>

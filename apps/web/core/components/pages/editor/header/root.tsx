@@ -14,6 +14,7 @@ import { cn } from "@plane/utils";
 import type { TPageInstance } from "@/store/pages/base-page";
 // local imports
 import { PageEditorHeaderLogoPicker } from "./logo-picker";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   page: TPageInstance;
@@ -22,6 +23,7 @@ type Props = {
 
 export const PageEditorHeaderRoot = observer(function PageEditorHeaderRoot(props: Props) {
   const { page } = props;
+  const ppmText = usePpmText();
   // states
   const [isLogoPickerOpen, setIsLogoPickerOpen] = useState(false);
   // derived values
@@ -54,7 +56,7 @@ export const PageEditorHeaderRoot = observer(function PageEditorHeaderRoot(props
                   )}
                 >
                   <SmilePlus className="size-4 flex-shrink-0" />
-                  Icon
+                  {ppmText("ui.page.icon", "Icon")}
                 </button>
               }
               onChange={updatePageLogo}

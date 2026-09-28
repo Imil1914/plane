@@ -76,7 +76,8 @@ export class CalendarStore implements ICalendarStore {
 
     // Watch for changes in startOfWeek preference and regenerate calendar
     reaction(
-      () => this.rootStore.rootStore.user.userProfile.data?.start_of_the_week,
+      // PPM: the effective first day (Monday by default in the Russian UI), see ProfileStore.startOfTheWeek
+      () => this.rootStore.rootStore.user.userProfile.startOfTheWeek,
       () => {
         // Regenerate calendar when startOfWeek preference changes
         this.regenerateCalendar();
@@ -134,7 +135,7 @@ export class CalendarStore implements ICalendarStore {
     if (!monthData) return undefined;
 
     // Calculate firstDayOfMonth offset (same logic as calendar generation)
-    const startOfWeek = this.rootStore?.rootStore?.user?.userProfile?.data?.start_of_the_week ?? EStartOfTheWeek.SUNDAY;
+    const startOfWeek = this.rootStore?.rootStore?.user?.userProfile?.startOfTheWeek ?? EStartOfTheWeek.SUNDAY;
     const firstDayOfMonthRaw = new Date(year, month, 1).getDay();
     const firstDayOfMonth = (firstDayOfMonthRaw - startOfWeek + 7) % 7;
 
@@ -181,7 +182,7 @@ export class CalendarStore implements ICalendarStore {
     if (!this.calendarPayload) return null;
 
     const nextDate = new Date(date);
-    const startOfWeek = this.rootStore.rootStore.user.userProfile.data?.start_of_the_week ?? EStartOfTheWeek.SUNDAY;
+    const startOfWeek = this.rootStore.rootStore.user.userProfile.startOfTheWeek ?? EStartOfTheWeek.SUNDAY;
 
     runInAction(() => {
       this.calendarPayload = generateCalendarData(this.calendarPayload, nextDate, startOfWeek);
@@ -189,7 +190,7 @@ export class CalendarStore implements ICalendarStore {
   };
 
   initCalendar = () => {
-    const startOfWeek = this.rootStore.rootStore.user.userProfile.data?.start_of_the_week ?? EStartOfTheWeek.SUNDAY;
+    const startOfWeek = this.rootStore.rootStore.user.userProfile.startOfTheWeek ?? EStartOfTheWeek.SUNDAY;
     const newCalendarPayload = generateCalendarData(null, new Date(), startOfWeek);
 
     runInAction(() => {
@@ -202,7 +203,7 @@ export class CalendarStore implements ICalendarStore {
    * This should be called when startOfWeek preference changes
    */
   regenerateCalendar = () => {
-    const startOfWeek = this.rootStore.rootStore.user.userProfile.data?.start_of_the_week ?? EStartOfTheWeek.SUNDAY;
+    const startOfWeek = this.rootStore.rootStore.user.userProfile.startOfTheWeek ?? EStartOfTheWeek.SUNDAY;
     const { activeMonthDate } = this.calendarFilters;
 
     // Force complete regeneration by passing null to clear all cached data

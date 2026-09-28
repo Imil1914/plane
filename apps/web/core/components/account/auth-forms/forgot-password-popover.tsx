@@ -10,6 +10,11 @@ import { Popover } from "@headlessui/react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { CloseIcon } from "@plane/propel/icons";
+import { isPpmShellEnabled } from "@ppm/brand";
+// hooks
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+
+const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 export function ForgotPasswordPopover() {
   // popper-js refs
@@ -29,6 +34,7 @@ export function ForgotPasswordPopover() {
   });
   // plane hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
 
   return (
     <Popover className="relative">
@@ -50,7 +56,11 @@ export function ForgotPasswordPopover() {
             {...attributes.popper}
           >
             <span className="flex-shrink-0">🤥</span>
-            <p className="text-11">{t("auth.forgot_password.errors.smtp_not_enabled")}</p>
+            <p className="text-11">
+              {IS_PPM_SHELL_ENABLED
+                ? ppmT("auth.reset_unavailable")
+                : t("auth.forgot_password.errors.smtp_not_enabled")}
+            </p>
             <button
               type="button"
               className="grid size-3 flex-shrink-0 place-items-center"

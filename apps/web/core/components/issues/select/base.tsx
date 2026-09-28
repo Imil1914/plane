@@ -18,10 +18,13 @@ import { CheckIcon, SearchIcon, LabelPropertyIcon } from "@plane/propel/icons";
 import type { IIssueLabel } from "@plane/types";
 import { cn } from "@plane/utils";
 // components
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
 import { IssueLabelsList } from "@/components/ui/labels-list";
 // hooks
 import { useDropdownKeyDown } from "@/hooks/use-dropdown-key-down";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 export type TWorkItemLabelSelectBaseProps = {
   buttonClassName?: string;
@@ -40,6 +43,7 @@ export type TWorkItemLabelSelectBaseProps = {
 };
 
 export const WorkItemLabelSelectBase = observer(function WorkItemLabelSelectBase(props: TWorkItemLabelSelectBaseProps) {
+  const isPpmRu = usePpmRu();
   const {
     buttonClassName,
     buttonContainerClassName,
@@ -66,6 +70,7 @@ export const WorkItemLabelSelectBase = observer(function WorkItemLabelSelectBase
   const [submitting, setSubmitting] = useState<boolean>(false);
   // plane hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
   // store hooks
   const { isMobile } = usePlatformOS();
   // popper-js init
@@ -296,11 +301,17 @@ export const WorkItemLabelSelectBase = observer(function WorkItemLabelSelectBase
                     }}
                     className={`text-left text-secondary ${query.length ? "cursor-pointer" : "cursor-default"}`}
                   >
-                    {/* TODO: translate here */}
                     {query.length ? (
-                      <>
-                        + Add <span className="text-primary">&quot;{query}&quot;</span> to labels
-                      </>
+                      isPpmRu ? (
+                        <PpmTemplateText
+                          template={ppmT("ui.label.add_query")}
+                          values={{ query: <span className="text-primary">{query}</span> }}
+                        />
+                      ) : (
+                        <>
+                          + Add <span className="text-primary">&quot;{query}&quot;</span> to labels
+                        </>
+                      )
                     ) : (
                       t("label.create.type")
                     )}

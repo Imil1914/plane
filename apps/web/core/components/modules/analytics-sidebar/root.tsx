@@ -29,6 +29,7 @@ import { Loader, CustomSelect, TextArea } from "@plane/ui";
 // components
 // helpers
 import { getDate, renderFormattedPayloadDate } from "@plane/utils";
+import { isPpmShellEnabled } from "@ppm/brand";
 import { DateRangeDropdown } from "@/components/dropdowns/date-range";
 import { MemberDropdown } from "@/components/dropdowns/member/dropdown";
 import { CreateUpdateModuleLinkModal, ModuleAnalyticsProgress, ModuleLinksList } from "@/components/modules";
@@ -36,6 +37,9 @@ import { CreateUpdateModuleLinkModal, ModuleAnalyticsProgress, ModuleLinksList }
 import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useModule } from "@/hooks/store/use-module";
 import { useUserPermissions } from "@/hooks/store/user";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+// local imports
+import { useModuleLiveStats } from "./use-module-live-stats";
 // plane web constants
 const defaultValues: Partial<IModule> = {
   lead_id: "",
@@ -62,6 +66,8 @@ export const ModuleAnalyticsSidebar = observer(function ModuleAnalyticsSidebar(p
 
   // store hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
   const { allowPermissions } = useUserPermissions();
 
   const { getModuleById, updateModuleDetails, createModuleLink, updateModuleLink, deleteModuleLink } = useModule();
@@ -69,6 +75,13 @@ export const ModuleAnalyticsSidebar = observer(function ModuleAnalyticsSidebar(p
 
   // derived values
   const moduleDetails = getModuleById(moduleId);
+  // PPM line S: the module's numbers and charts stay fresh while the sidebar is open
+  useModuleLiveStats({
+    workspaceSlug: workspaceSlug?.toString() ?? "",
+    projectId: projectId?.toString() ?? "",
+    module: moduleDetails,
+    isArchived,
+  });
   const areEstimateEnabled = projectId && areEstimateEnabledByProjectId(projectId.toString());
   const estimateType = areEstimateEnabled && currentActiveEstimateId && estimateById(currentActiveEstimateId);
   const isEstimatePointValid = estimateType && estimateType?.type == EEstimateSystem.POINTS ? true : false;
@@ -100,14 +113,14 @@ export const ModuleAnalyticsSidebar = observer(function ModuleAnalyticsSidebar(p
       await deleteModuleLink(workspaceSlug.toString(), projectId.toString(), moduleId.toString(), linkId);
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success!",
-        message: "Module link deleted successfully.",
+        title: isPpmShell ? ppmT("stats.toast_success") : "Success!",
+        message: isPpmShell ? ppmT("stats.module_link_deleted") : "Module link deleted successfully.",
       });
     } catch (_error) {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Some error occurred",
+        title: isPpmShell ? ppmT("stats.toast_error") : "Error!",
+        message: isPpmShell ? ppmT("stats.something_went_wrong") : "Some error occurred",
       });
     }
   };
@@ -119,8 +132,8 @@ export const ModuleAnalyticsSidebar = observer(function ModuleAnalyticsSidebar(p
     });
     setToast({
       type: TOAST_TYPE.SUCCESS,
-      title: "Success!",
-      message: "Module updated successfully.",
+      title: isPpmShell ? ppmT("stats.toast_success") : "Success!",
+      message: isPpmShell ? ppmT("stats.module_updated") : "Module updated successfully.",
     });
   };
 
@@ -153,14 +166,15 @@ export const ModuleAnalyticsSidebar = observer(function ModuleAnalyticsSidebar(p
 
   const moduleStatus = MODULE_STATUS.find((status) => status.value === moduleDetails.status);
 
+  // PPM line S4: «0 задач» in the Russian interface
+  const noWorkItems = isPpmShell ? ppmT("stats.no_work_items") : "0 work items";
+
   const issueCount =
-    moduleDetails.total_issues === 0
-      ? "0 work items"
-      : `${moduleDetails.completed_issues}/${moduleDetails.total_issues}`;
+    moduleDetails.total_issues === 0 ? noWorkItems : `${moduleDetails.completed_issues}/${moduleDetails.total_issues}`;
 
   const issueEstimatePointCount =
     moduleDetails.total_estimate_points === 0
-      ? "0 work items"
+      ? noWorkItems
       : `${moduleDetails.completed_estimate_points}/${moduleDetails.total_estimate_points}`;
 
   const isEditingAllowed = allowPermissions(

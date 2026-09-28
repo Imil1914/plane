@@ -13,7 +13,10 @@ import { AlertModalCore } from "@plane/ui";
 import { getPageName } from "@plane/utils";
 // constants
 // plane web hooks
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import type { EPageStoreType } from "@/hooks/store";
 import { usePageStore } from "@/hooks/store";
 // store
@@ -27,11 +30,14 @@ type TConfirmPageDeletionProps = {
 };
 
 export const DeletePageModal = observer(function DeletePageModal(props: TConfirmPageDeletionProps) {
+  const isPpmRu = usePpmRu();
   const { isOpen, onClose, page, storeType } = props;
   // states
   const [isDeleting, setIsDeleting] = useState(false);
   // store hooks
   const { removePage } = usePageStore(storeType);
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
 
   // derived values
   const { id: pageId, name } = page;
@@ -52,8 +58,8 @@ export const DeletePageModal = observer(function DeletePageModal(props: TConfirm
         handleClose();
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Success!",
-          message: "Page deleted successfully.",
+          title: ppmText("ui.toast.success", "Success!"),
+          message: ppmText("ui.toast.page_deleted", "Page deleted successfully."),
         });
 
         if (routePageId) {
@@ -63,8 +69,8 @@ export const DeletePageModal = observer(function DeletePageModal(props: TConfirm
       .catch(() => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "Page could not be deleted. Please try again.",
+          title: ppmText("ui.toast.error", "Error!"),
+          message: ppmText("ui.toast.page_delete_failed", "Page could not be deleted. Please try again."),
         });
       });
 
@@ -79,14 +85,28 @@ export const DeletePageModal = observer(function DeletePageModal(props: TConfirm
       handleSubmit={handleDelete}
       isSubmitting={isDeleting}
       isOpen={isOpen}
-      title="Delete page"
+      title={ppmText("ui.confirm.delete_page_title", "Delete page")}
       content={
-        <>
-          Are you sure you want to delete page-{" "}
-          <span className="font-medium break-words break-all text-primary">{getPageName(name)}</span> ? The Page will be
-          deleted permanently. This action cannot be undone.
-        </>
+        isPpmRu ? (
+          <PpmTemplateText
+            template={ppmT("ui.confirm.delete_page_content")}
+            values={{
+              name: <span className="font-medium break-words break-all text-primary">{getPageName(name)}</span>,
+            }}
+          />
+        ) : (
+          <>
+            Are you sure you want to delete page-{" "}
+            <span className="font-medium break-words break-all text-primary">{getPageName(name)}</span> ? The Page will
+            be deleted permanently. This action cannot be undone.
+          </>
+        )
       }
+      primaryButtonText={{
+        loading: ppmText("ui.common.deleting", "Deleting"),
+        default: ppmText("ui.common.delete", "Delete"),
+      }}
+      secondaryButtonText={ppmText("ui.common.cancel", "Cancel")}
     />
   );
 });

@@ -11,10 +11,13 @@ import { MembersPropertyIcon } from "@plane/propel/icons";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
 import { IssueActivityBlockComponent, IssueLink } from "./";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { PpmActivityPhrase } from "./helpers/ppm-activity";
 
 type TIssueAssigneeActivity = { activityId: string; showIssue?: boolean; ends: "top" | "bottom" | undefined };
 
 export const IssueAssigneeActivity = observer(function IssueAssigneeActivity(props: TIssueAssigneeActivity) {
+  const isPpmRu = usePpmRu();
   const { activityId, ends, showIssue = true } = props;
   // hooks
   const {
@@ -30,19 +33,38 @@ export const IssueAssigneeActivity = observer(function IssueAssigneeActivity(pro
       activityId={activityId}
       ends={ends}
     >
-      <>
-        {activity.old_value === "" ? `added a new assignee ` : `removed the assignee `}
-        <a
-          href={`/${activity.workspace_detail?.slug}/profile/${activity.new_identifier ?? activity.old_identifier}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center font-medium text-primary capitalize hover:underline"
-        >
-          {activity.new_value && activity.new_value !== "" ? activity.new_value : activity.old_value}
-        </a>
-        {showIssue && (activity.old_value === "" ? ` to ` : ` from `)}
-        {showIssue && <IssueLink activityId={activityId} />}.
-      </>
+      {isPpmRu ? (
+        <PpmActivityPhrase
+          phrase={activity.old_value === "" ? "ui.activity.assignee_added" : "ui.activity.assignee_removed"}
+          values={{
+            value: (
+              <a
+                href={`/${activity.workspace_detail?.slug}/profile/${activity.new_identifier ?? activity.old_identifier}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center font-medium text-primary capitalize hover:underline"
+              >
+                {activity.new_value && activity.new_value !== "" ? activity.new_value : activity.old_value}
+              </a>
+            ),
+          }}
+          issue={showIssue ? <IssueLink activityId={activityId} /> : undefined}
+        />
+      ) : (
+        <>
+          {activity.old_value === "" ? `added a new assignee ` : `removed the assignee `}
+          <a
+            href={`/${activity.workspace_detail?.slug}/profile/${activity.new_identifier ?? activity.old_identifier}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center font-medium text-primary capitalize hover:underline"
+          >
+            {activity.new_value && activity.new_value !== "" ? activity.new_value : activity.old_value}
+          </a>
+          {showIssue && (activity.old_value === "" ? ` to ` : ` from `)}
+          {showIssue && <IssueLink activityId={activityId} />}.
+        </>
+      )}
     </IssueActivityBlockComponent>
   );
 });

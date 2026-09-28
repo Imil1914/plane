@@ -21,6 +21,7 @@ import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useWorkItemFilterInstance } from "@/hooks/store/work-item-filters/use-work-item-filter-instance";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export const ModuleEmptyState = observer(function ModuleEmptyState() {
   // router
@@ -32,6 +33,7 @@ export const ModuleEmptyState = observer(function ModuleEmptyState() {
   const [moduleIssuesListModal, setModuleIssuesListModal] = useState(false);
   // plane hooks
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // store hooks
   const { issues } = useIssues(EIssuesStoreType.MODULE);
   const { toggleCreateIssueModal } = useCommandPalette();
@@ -52,15 +54,18 @@ export const ModuleEmptyState = observer(function ModuleEmptyState() {
       .then(() =>
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Success!",
-          message: "Work items added to the module successfully.",
+          title: ppmText("ui.toast.success", "Success!"),
+          message: ppmText("ui.module.tasks_added", "Work items added to the module successfully."),
         })
       )
       .catch(() =>
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "Selected work items could not be added to the module. Please try again.",
+          title: ppmText("ui.toast.error", "Error!"),
+          message: ppmText(
+            "ui.module.tasks_add_failed",
+            "Selected work items could not be added to the module. Please try again."
+          ),
         })
       );
   };
@@ -83,7 +88,7 @@ export const ModuleEmptyState = observer(function ModuleEmptyState() {
             description={t("common_empty_state.search.description")}
             actions={[
               {
-                label: "Clear filters",
+                label: ppmText("ui.common.clear_filters", "Clear filters"),
                 onClick: moduleWorkItemFilter?.clearFilters,
                 disabled: !canPerformEmptyStateActions || !moduleWorkItemFilter,
                 variant: "secondary",

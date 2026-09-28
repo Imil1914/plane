@@ -29,6 +29,7 @@ import { useBulkOperationStatus } from "@/hooks/use-bulk-operation-status";
 import { IssueLayoutHOC } from "../issue-layout-HOC";
 import { GanttQuickAddIssueButton, QuickAddIssueRoot } from "../quick-add";
 import { IssueGanttBlock } from "./blocks";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 interface IBaseGanttRoot {
   viewId?: string | undefined;
@@ -46,6 +47,7 @@ export type GanttStoreType =
 export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRoot) {
   const { viewId, isCompletedCycle = false, isEpic = false } = props;
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // router
   const { workspaceSlug, projectId } = useParams();
 
@@ -102,7 +104,10 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
         setToast({
           type: TOAST_TYPE.ERROR,
           title: t("toast.error"),
-          message: "Error while updating work item dates, Please try again Later",
+          message: ppmText(
+            "ui.toast.task_dates_update_failed",
+            "Error while updating work item dates, Please try again Later"
+          ),
         });
       }),
     [issues, projectId, workspaceSlug]

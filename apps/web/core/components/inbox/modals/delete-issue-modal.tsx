@@ -14,8 +14,12 @@ import type { TIssue } from "@plane/types";
 // ui
 import { AlertModalCore } from "@plane/ui";
 // constants
+// components
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type Props = {
   data: Partial<TIssue>;
@@ -30,11 +34,14 @@ export const DeleteInboxIssueModal = observer(function DeleteInboxIssueModal({
   onSubmit,
   data,
 }: Props) {
+  const isPpmRu = usePpmRu();
   // states
   const [isDeleting, setIsDeleting] = useState(false);
   // store hooks
   const { getProjectById } = useProject();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
   // derived values
   const projectDetails = data.project_id ? getProjectById(data?.project_id) : undefined;
 
@@ -74,16 +81,33 @@ export const DeleteInboxIssueModal = observer(function DeleteInboxIssueModal({
       isSubmitting={isDeleting}
       isOpen={isOpen}
       title={t("inbox_issue.modals.delete.title")}
-      // TODO: Need to translate the confirmation message
       content={
-        <>
-          Are you sure you want to delete work item{" "}
-          <span className="font-medium break-words text-primary">
-            {projectDetails?.identifier}-{data?.sequence_id}
-          </span>
-          {""}? The work item will only be deleted from the intake and this action cannot be undone.
-        </>
+        isPpmRu ? (
+          <PpmTemplateText
+            template={ppmT("ui.confirm.delete_request_content")}
+            values={{
+              id: (
+                <span className="font-medium break-words text-primary">
+                  {projectDetails?.identifier}-{data?.sequence_id}
+                </span>
+              ),
+            }}
+          />
+        ) : (
+          <>
+            Are you sure you want to delete work item{" "}
+            <span className="font-medium break-words text-primary">
+              {projectDetails?.identifier}-{data?.sequence_id}
+            </span>
+            {""}? The work item will only be deleted from the intake and this action cannot be undone.
+          </>
+        )
       }
+      primaryButtonText={{
+        loading: ppmText("ui.common.deleting", "Deleting"),
+        default: ppmText("ui.common.delete", "Delete"),
+      }}
+      secondaryButtonText={ppmText("ui.common.cancel", "Cancel")}
     />
   );
 });

@@ -9,12 +9,17 @@ import React from "react";
 import { AreaChart } from "@plane/propel/charts/area-chart";
 import type { TChartData, TModuleCompletionChartDistribution } from "@plane/types";
 import { renderFormattedDateWithoutYear } from "@plane/utils";
+// PPM line S3
+import { buildBurndownChartData, toLocalDateKey } from "@/components/ppm-live-stats/burndown-chart-data";
 
 type Props = {
   distribution: TModuleCompletionChartDistribution;
   totalIssues: number;
   className?: string;
   plotTitle?: string;
+  // PPM line S3: a completed sprint keeps the original drawing (every day, a missing value as 0); otherwise the
+  // actual line stops at today instead of falling to 0 on the days that have not happened yet.
+  isCompleted?: boolean;
   // PPM shell: pre-translated overrides for the legend/axis copy below. Undefined keeps the
   // upstream English default (`Current ${plotTitle}` / "Date" / "Completion") unchanged for any
   // caller that does not opt in, per the "no revert of upstream behavior" constraint.
@@ -29,16 +34,18 @@ function ProgressChart({
   totalIssues,
   className = "",
   plotTitle = "work items",
+  isCompleted = false,
   currentLabel,
   idealLabel,
   dateAxisLabel,
   completionAxisLabel,
 }: Props) {
-  const chartData: TChartData<string, string>[] = Object.keys(distribution ?? []).map((key, index) => ({
-    name: renderFormattedDateWithoutYear(key),
-    current: distribution[key] ?? 0,
-    ideal: totalIssues * (1 - index / (Object.keys(distribution ?? []).length - 1)),
-  }));
+  // `current` is null on the days after today: the chart draws no point and no line there, the tooltip skips it
+  const chartData: TChartData<"name", "current" | "ideal">[] = buildBurndownChartData(distribution, totalIssues, {
+    today: toLocalDateKey(new Date()),
+    isCompleted,
+    formatLabel: renderFormattedDateWithoutYear,
+  });
 
   return (
     <div className={`flex w-full items-center justify-center ${className}`}>

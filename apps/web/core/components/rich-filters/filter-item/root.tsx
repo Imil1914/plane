@@ -20,6 +20,7 @@ import { CustomSearchSelect } from "@plane/ui";
 import { cn, getOperatorForPayload } from "@plane/utils";
 // local imports
 import { FilterValueInput } from "../filter-value-input/root";
+import { usePpmRichFilterText } from "../ppm-labels";
 import { COMMON_FILTER_ITEM_BORDER_CLASSNAME } from "../shared";
 import { FilterItemCloseButton } from "./close-button";
 import { FilterItemContainer } from "./container";
@@ -38,14 +39,15 @@ export const FilterItem = observer(function FilterItem<P extends TFilterProperty
   props: IFilterItemProps<P, E>
 ) {
   const { condition, filter, isDisabled = false, showTransition = true } = props;
+  const { filterLabel, operatorLabel } = usePpmRichFilterText();
   // derived values
   const filterConfig = condition?.property ? filter.configManager.getConfigByProperty(condition.property) : undefined;
   const operatorOptions = filterConfig
     ?.getAllDisplayOperatorOptionsByValue(condition.value as TFilterValue)
     .map((option) => ({
       value: option.value,
-      content: option.label,
-      query: option.label.toLowerCase(),
+      content: operatorLabel(option.label),
+      query: operatorLabel(option.label).toLowerCase(),
     }));
   const selectedOperatorFieldConfig = filterConfig?.getOperatorConfig(condition.operator);
   const selectedOperatorOption = filterConfig?.getDisplayOperatorByValue(
@@ -91,7 +93,7 @@ export const FilterItem = observer(function FilterItem<P extends TFilterProperty
         filter={filter}
         icon={filterConfig.icon}
         isDisabled={isDisabled}
-        label={filterConfig.label}
+        label={filterLabel(filterConfig.label)}
         tooltipContent={filterConfig.tooltipContent}
       />
 
@@ -110,7 +112,7 @@ export const FilterItem = observer(function FilterItem<P extends TFilterProperty
         disabled={isOperatorSelectionDisabled}
         customButton={
           <div className="flex h-full items-center" aria-disabled={isOperatorSelectionDisabled}>
-            {filterConfig.getLabelForOperator(selectedOperatorOption)}
+            {operatorLabel(filterConfig.getLabelForOperator(selectedOperatorOption))}
           </div>
         }
       />

@@ -18,6 +18,8 @@ import { useModule } from "@/hooks/store/use-module";
 import { useProject } from "@/hooks/store/use-project";
 import useKeypress from "@/hooks/use-keypress";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmServerError } from "@/hooks/use-ppm-server-error";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   isOpen: boolean;
@@ -43,6 +45,8 @@ export const CreateUpdateModuleModal = observer(function CreateUpdateModuleModal
   const { workspaceProjectIds } = useProject();
   const { createModule, updateModuleDetails } = useModule();
   const { isMobile } = usePlatformOS();
+  const ppmText = usePpmText();
+  const ppmServerError = usePpmServerError();
 
   const handleClose = () => {
     reset(defaultValues);
@@ -62,15 +66,18 @@ export const CreateUpdateModuleModal = observer(function CreateUpdateModuleModal
         handleClose();
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Success!",
-          message: "Module created successfully.",
+          title: ppmText("ui.toast.success", "Success!"),
+          message: ppmText("ui.module.created", "Module created successfully."),
         });
       })
       .catch((err) => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.detail ?? err?.error ?? "Module could not be created. Please try again.",
+          ...ppmServerError(
+            err,
+            { title: "ui.module.create_failed_title", message: "ui.module.create_failed" },
+            { title: "Error!", message: err?.detail ?? err?.error ?? "Module could not be created. Please try again." }
+          ),
         });
       });
   };
@@ -85,15 +92,18 @@ export const CreateUpdateModuleModal = observer(function CreateUpdateModuleModal
 
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Success!",
-          message: "Module updated successfully.",
+          title: ppmText("ui.toast.success", "Success!"),
+          message: ppmText("ui.module.updated", "Module updated successfully."),
         });
       })
       .catch((err) => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.detail ?? err?.error ?? "Module could not be updated. Please try again.",
+          ...ppmServerError(
+            err,
+            { title: "ui.module.update_failed_title", message: "ui.module.update_failed" },
+            { title: "Error!", message: err?.detail ?? err?.error ?? "Module could not be updated. Please try again." }
+          ),
         });
       });
   };

@@ -15,6 +15,7 @@ import { calculateTimeAgoShort, getFileURL, renderFormattedDate } from "@plane/u
 import { useMember } from "@/hooks/store/use-member";
 // store
 import type { TPageInstance } from "@/store/pages/base-page";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   page: TPageInstance;
@@ -22,6 +23,7 @@ type Props = {
 
 export const PageNavigationPaneInfoTabActorsInfo = observer(function PageNavigationPaneInfoTabActorsInfo(props: Props) {
   const { page } = props;
+  const ppmText = usePpmText();
   // navigation
   const { workspaceSlug } = useParams();
   // store hooks
@@ -47,7 +49,11 @@ export const PageNavigationPaneInfoTabActorsInfo = observer(function PageNavigat
             />
             <span>{editorInformation?.display_name ?? t("common.deactivated_user")}</span>
           </Link>
-          <span className="flex-shrink-0 text-tertiary">{calculateTimeAgoShort(page.updated_at ?? "")} ago</span>
+          <span className="flex-shrink-0 text-tertiary">
+            {ppmText("ui.page.time_ago", `${calculateTimeAgoShort(page.updated_at ?? "")} ago`, {
+              time: calculateTimeAgoShort(page.updated_at ?? ""),
+            })}
+          </span>
         </div>
       </div>
       <div>

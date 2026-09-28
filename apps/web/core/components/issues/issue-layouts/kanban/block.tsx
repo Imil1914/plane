@@ -34,6 +34,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 // local components
 import type { TRenderQuickActions } from "../list/list-view-types";
 import { IssueProperties } from "../properties/all-properties";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 interface IssueBlockProps {
   issueId: string;
@@ -157,6 +158,7 @@ export const KanbanIssueBlock = observer(function KanbanIssueBlock(props: IssueB
   } = props;
 
   const cardRef = useRef<HTMLAnchorElement | null>(null);
+  const ppmText = usePpmText();
   // router
   const { workspaceSlug: routerWorkspaceSlug } = useParams();
   const workspaceSlug = routerWorkspaceSlug?.toString();
@@ -249,10 +251,10 @@ export const KanbanIssueBlock = observer(function KanbanIssueBlock(props: IssueB
           else {
             setToast({
               type: TOAST_TYPE.WARNING,
-              title: "Cannot move work item",
+              title: ppmText("ui.issue.cannot_move_title", "Cannot move work item"),
               message: !canEditIssueProperties
-                ? "You are not allowed to move this work item"
-                : "Drag and drop is disabled for the current grouping",
+                ? ppmText("ui.issue.cannot_move_no_rights", "You are not allowed to move this work item")
+                : ppmText("ui.issue.cannot_move_grouping", "Drag and drop is disabled for the current grouping"),
             });
           }
         }}

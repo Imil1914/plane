@@ -19,6 +19,8 @@ import type { TIssuePriorities } from "@plane/types";
 import { ComboDropDown } from "@plane/ui";
 // helpers
 import { cn } from "@plane/utils";
+// components
+import { usePpmPriorityTitle } from "@/components/ppm-shell/priority-title";
 // hooks
 import { useDropdown } from "@/hooks/use-dropdown";
 import { usePlatformOS } from "@/hooks/use-platform-os";
@@ -67,6 +69,8 @@ function BorderButton(props: ButtonProps) {
   } = props;
 
   const priorityDetails = ISSUE_PRIORITIES.find((p) => p.key === priority);
+  const priorityTitle = usePpmPriorityTitle();
+  const localizedTitle = priorityDetails ? priorityTitle(priorityDetails.key, priorityDetails.title) : undefined;
 
   const priorityClasses = {
     urgent: "bg-layer-2 border-priority-urgent px-1",
@@ -82,7 +86,7 @@ function BorderButton(props: ButtonProps) {
   return (
     <Tooltip
       tooltipHeading={t("priority")}
-      tooltipContent={priorityDetails?.title ?? t("common.none")}
+      tooltipContent={localizedTitle ?? t("common.none")}
       disabled={!showTooltip}
       isMobile={isMobile}
       renderByDefault={renderToolTipByDefault}
@@ -132,7 +136,7 @@ function BorderButton(props: ButtonProps) {
               "text-placeholder": !priority || priority === "none",
             })}
           >
-            {priorityDetails?.title ?? placeholder}
+            {localizedTitle ?? placeholder}
           </span>
         )}
         {dropdownArrow && (
@@ -158,6 +162,8 @@ function BackgroundButton(props: ButtonProps) {
   } = props;
 
   const priorityDetails = ISSUE_PRIORITIES.find((p) => p.key === priority);
+  const priorityTitle = usePpmPriorityTitle();
+  const localizedTitle = priorityDetails ? priorityTitle(priorityDetails.key, priorityDetails.title) : undefined;
 
   const priorityClasses = {
     urgent: "bg-layer-2",
@@ -173,7 +179,7 @@ function BackgroundButton(props: ButtonProps) {
   return (
     <Tooltip
       tooltipHeading={t("priority")}
-      tooltipContent={t(priorityDetails?.key ?? "none")}
+      tooltipContent={priorityDetails ? priorityTitle(priorityDetails.key, t(priorityDetails.key)) : t("none")}
       disabled={!showTooltip}
       isMobile={isMobile}
       renderByDefault={renderToolTipByDefault}
@@ -223,7 +229,7 @@ function BackgroundButton(props: ButtonProps) {
               "text-placeholder": !priority || priority === "none",
             })}
           >
-            {priorityDetails?.title ?? t("common.priority") ?? placeholder}
+            {localizedTitle ?? t("common.priority") ?? placeholder}
           </span>
         )}
         {dropdownArrow && (
@@ -250,6 +256,8 @@ function TransparentButton(props: ButtonProps) {
   } = props;
 
   const priorityDetails = ISSUE_PRIORITIES.find((p) => p.key === priority);
+  const priorityTitle = usePpmPriorityTitle();
+  const localizedTitle = priorityDetails ? priorityTitle(priorityDetails.key, priorityDetails.title) : undefined;
 
   const { isMobile } = usePlatformOS();
   const { t } = useTranslation();
@@ -257,7 +265,7 @@ function TransparentButton(props: ButtonProps) {
   return (
     <Tooltip
       tooltipHeading={t("priority")}
-      tooltipContent={priorityDetails?.title ?? t("common.none")}
+      tooltipContent={localizedTitle ?? t("common.none")}
       disabled={!showTooltip}
       isMobile={isMobile}
       renderByDefault={renderToolTipByDefault}
@@ -307,7 +315,7 @@ function TransparentButton(props: ButtonProps) {
               "text-placeholder": !priority || priority === "none",
             })}
           >
-            {priorityDetails?.title ?? t("common.priority") ?? placeholder}
+            {localizedTitle ?? t("common.priority") ?? placeholder}
           </span>
         )}
         {dropdownArrow && (
@@ -341,6 +349,7 @@ export function PriorityDropdown(props: Props) {
     value = "none",
     renderByDefault = true,
   } = props;
+  const priorityTitle = usePpmPriorityTitle();
   // states
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -365,11 +374,12 @@ export function PriorityDropdown(props: Props) {
 
   const options = ISSUE_PRIORITIES.map((priority) => ({
     value: priority.key,
-    query: priority.key,
+    // The localized title is searchable too («сроч» finds «Срочный»).
+    query: `${priority.key} ${priorityTitle(priority.key, priority.title)}`,
     content: (
       <div className="flex items-center gap-2">
         <PriorityIcon priority={priority.key} size={14} withContainer />
-        <span className="flex-grow truncate">{priority.title}</span>
+        <span className="flex-grow truncate">{priorityTitle(priority.key, priority.title)}</span>
       </div>
     ),
   }));

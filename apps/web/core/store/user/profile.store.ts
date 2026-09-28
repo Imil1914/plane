@@ -5,7 +5,7 @@
  */
 
 import { cloneDeep, set } from "lodash-es";
-import { action, makeObservable, observable, runInAction } from "mobx";
+import { action, computed, makeObservable, observable, runInAction } from "mobx";
 // plane imports
 import { LANGUAGE_STORAGE_KEY, setLanguage } from "@plane/i18n";
 import type { TLanguage } from "@plane/i18n";
@@ -13,6 +13,12 @@ import { isPpmShellEnabled, PPM_DEFAULT_LANGUAGE, shouldInitializePpmProfileLang
 // types
 import type { IUserTheme, TUserProfile } from "@plane/types";
 import { EStartOfTheWeek } from "@plane/types";
+// components
+import {
+  markPpmWeekStartExplicit,
+  readPpmWeekStartExplicit,
+  resolvePpmStartOfWeek,
+} from "@/components/ppm-shell/week-start";
 // services
 import { UserService } from "@/services/user.service";
 // store
@@ -28,6 +34,8 @@ export interface IUserProfileStore {
   isLoading: boolean;
   error: TError | undefined;
   data: TUserProfile;
+  // computed
+  startOfTheWeek: EStartOfTheWeek;
   // actions
   fetchUserProfile: () => Promise<TUserProfile | undefined>;
   updateUserProfile: (data: Partial<TUserProfile>) => Promise<TUserProfile | undefined>;
@@ -69,6 +77,9 @@ export class ProfileStore implements IUserProfileStore {
     start_of_the_week: EStartOfTheWeek.SUNDAY,
   };
 
+  // PPM: the user (id) who picked the first day of the week themselves (see resolvePpmStartOfWeek)
+  weekStartExplicitUserId: string | undefined = undefined;
+
   // services
   userService: UserService;
 
@@ -78,6 +89,9 @@ export class ProfileStore implements IUserProfileStore {
       isLoading: observable.ref,
       error: observable,
       data: observable,
+      weekStartExplicitUserId: observable.ref,
+      // computed
+      startOfTheWeek: computed,
       // actions
       fetchUserProfile: action,
       updateUserProfile: action,
@@ -86,6 +100,20 @@ export class ProfileStore implements IUserProfileStore {
     });
     // services
     this.userService = new UserService();
+  }
+
+  /**
+   * The first day of the week for calendars and date pickers: the stored preference, except that the Russian PPM
+   * interface starts on Monday until the user picks a day explicitly.
+   */
+  get startOfTheWeek(): EStartOfTheWeek {
+    const language =
+      this.data.language || (typeof window === "undefined" ? undefined : localStorage.getItem(LANGUAGE_STORAGE_KEY));
+    return resolvePpmStartOfWeek(this.data.start_of_the_week, {
+      shellEnabled: isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED),
+      language: language ?? undefined,
+      explicit: !!this.data.user && this.weekStartExplicitUserId === this.data.user,
+    });
   }
 
   // helper action
@@ -124,6 +152,9 @@ export class ProfileStore implements IUserProfileStore {
       runInAction(() => {
         this.isLoading = false;
         this.data = resolvedUserProfile;
+        this.weekStartExplicitUserId = readPpmWeekStartExplicit(resolvedUserProfile.user)
+          ? resolvedUserProfile.user
+          : undefined;
       });
       if (resolvedUserProfile.language) {
         void setLanguage(resolvedUserProfile.language as TLanguage);
@@ -156,6 +187,14 @@ export class ProfileStore implements IUserProfileStore {
         void setLanguage(data.language as TLanguage);
       }
       const userProfile = await this.userService.updateCurrentUserProfile(data);
+      // Only a saved choice counts as explicit (a failed PATCH leaves the Russian Monday default in place).
+      if (data.start_of_the_week !== undefined) {
+        const userId = this.data.user;
+        markPpmWeekStartExplicit(userId);
+        runInAction(() => {
+          this.weekStartExplicitUserId = userId;
+        });
+      }
       return userProfile;
     } catch {
       if (currentUserProfileData) {

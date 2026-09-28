@@ -20,6 +20,7 @@ import type { IIssueLabel } from "@plane/types";
 import { cn } from "@plane/utils";
 import { useLabel } from "@/hooks/store/use-label";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmCount, usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
 import { LabelDropdown } from "./label-dropdown";
 
 export interface IIssuePropertyLabels {
@@ -51,12 +52,13 @@ type NoLabelProps = {
 
 const NoLabel = observer(function NoLabel({ isMobile, noLabelBorder, fullWidth, placeholderText }: NoLabelProps) {
   const { t } = useTranslation();
+  const ppmText = usePpmText();
 
   return (
     <Tooltip
       position="top"
       tooltipHeading={t("common.labels")}
-      tooltipContent="None"
+      tooltipContent={ppmText("ui.common.none", "None")}
       isMobile={isMobile}
       renderByDefault={false}
     >
@@ -84,7 +86,9 @@ type LabelSummaryProps = {
 };
 
 function LabelSummary({ isMobile, fullWidth, noLabelBorder, disabled, projectLabels, value }: LabelSummaryProps) {
+  const isPpmRu = usePpmRu();
   const { t } = useTranslation();
+  const ppmCount = usePpmCount();
   return (
     <div
       className={cn(
@@ -106,7 +110,7 @@ function LabelSummary({ isMobile, fullWidth, noLabelBorder, disabled, projectLab
       >
         <div className="flex h-full items-center gap-1.5 text-secondary">
           <span className="h-2 w-2 flex-shrink-0 rounded-full bg-accent-primary" />
-          {`${value.length} Labels`}
+          {isPpmRu ? ppmCount("ui.count.labels", value.length) : `${value.length} Labels`}
         </div>
       </Tooltip>
     </div>

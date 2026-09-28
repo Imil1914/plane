@@ -28,6 +28,7 @@ type TModuleDropdownBaseProps = TDropdownProps & {
   dropdownArrowClassName?: string;
   getModuleById: (moduleId: string) => IModule | null;
   itemClassName?: string;
+  tooltipContent?: ReactNode;
   moduleIds?: string[];
   onClose?: () => void;
   onDropdownOpen?: () => void;
@@ -71,6 +72,7 @@ export const ModuleDropdownBase = observer(function ModuleDropdownBase(props: TM
     showCount = false,
     showTooltip = false,
     tabIndex,
+    tooltipContent,
     value,
   } = props;
   // i18n
@@ -145,12 +147,13 @@ export const ModuleDropdownBase = observer(function ModuleDropdownBase(props: TM
             isActive={isOpen}
             tooltipHeading={t("common.module")}
             tooltipContent={
-              Array.isArray(value)
+              tooltipContent ??
+              (Array.isArray(value)
                 ? `${value
                     .map((moduleId) => getModuleById(moduleId)?.name)
                     .toString()
                     .replaceAll(",", ", ")}`
-                : ""
+                : "")
             }
             showTooltip={showTooltip}
             variant={buttonVariant}

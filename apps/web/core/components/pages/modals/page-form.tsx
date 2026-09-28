@@ -22,6 +22,7 @@ import { getTabIndex } from "@plane/utils";
 import { AccessField } from "@/components/common/access-field";
 // hooks
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   formData: Partial<TPage>;
@@ -41,6 +42,7 @@ const PAGE_ACCESS_SPECIFIERS: {
 
 export function PageForm(props: Props) {
   const { formData, handleFormData, handleModalClose, handleFormSubmit } = props;
+  const ppmText = usePpmText();
   // hooks
   const { isMobile } = usePlatformOS();
   const { t } = useTranslation();
@@ -68,7 +70,7 @@ export function PageForm(props: Props) {
   return (
     <form onSubmit={handlePageFormSubmit}>
       <div className="space-y-5 p-5">
-        <h3 className="text-18 font-medium text-secondary">Create page</h3>
+        <h3 className="text-18 font-medium text-secondary">{ppmText("ui.page.create_title", "Create page")}</h3>
         <div className="flex h-9 w-full items-start gap-2">
           <EmojiPicker
             isOpen={isOpen}
@@ -119,7 +121,7 @@ export function PageForm(props: Props) {
               type="text"
               value={formData.name}
               onChange={(e) => handleFormData("name", e.target.value)}
-              placeholder="Title"
+              placeholder={ppmText("ui.common.title", "Title")}
               className="w-full resize-none text-14"
               tabIndex={getIndex("name")}
               required
@@ -127,7 +129,7 @@ export function PageForm(props: Props) {
             />
             {isTitleLengthMoreThan255Character && (
               <span className="text-11 text-danger-primary">
-                Max length of the name should be less than 255 characters
+                {ppmText("ui.page.name_too_long", "Max length of the name should be less than 255 characters")}
               </span>
             )}
           </div>
@@ -145,7 +147,7 @@ export function PageForm(props: Props) {
         </div>
         <div className="flex items-center justify-end gap-2">
           <Button variant="secondary" size="lg" onClick={handleModalClose} tabIndex={getIndex("cancel")}>
-            Cancel
+            {ppmText("ui.common.cancel", "Cancel")}
           </Button>
           <Button
             variant="primary"
@@ -155,7 +157,7 @@ export function PageForm(props: Props) {
             disabled={isTitleLengthMoreThan255Character}
             tabIndex={getIndex("submit")}
           >
-            {isSubmitting ? "Creating" : "Create Page"}
+            {isSubmitting ? ppmText("ui.page.creating", "Creating") : ppmText("ui.page.create", "Create Page")}
           </Button>
         </div>
       </div>

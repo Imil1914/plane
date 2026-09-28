@@ -23,6 +23,7 @@ import { cn, renderFormattedDate } from "@plane/utils";
 // hooks
 import { useUserProfile } from "@/hooks/store/user";
 import { useDropdown } from "@/hooks/use-dropdown";
+import { usePpmCalendarLocale } from "@/hooks/use-ppm-calendar-locale";
 // components
 import { DropdownButton } from "./buttons";
 import { MergedDateDisplay } from "./merged-date";
@@ -109,8 +110,8 @@ export const DateRangeDropdown = observer(function DateRangeDropdown(props: Prop
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const [dateRange, setDateRange] = useState<DateRange>(value);
   // hooks
-  const { data } = useUserProfile();
-  const startOfWeek = data?.start_of_the_week;
+  const { startOfTheWeek: startOfWeek } = useUserProfile();
+  const calendarLocale = usePpmCalendarLocale();
   // refs
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   // popper-js refs
@@ -281,6 +282,7 @@ export const DateRangeDropdown = observer(function DateRangeDropdown(props: Prop
           fixedWeeks
           weekStartsOn={startOfWeek}
           initialFocus
+          {...calendarLocale}
         />
       </div>
     </Combobox.Options>

@@ -48,6 +48,8 @@ export interface IModuleStore {
   fetchArchivedModules: (workspaceSlug: string, projectId: string) => Promise<undefined | IModule[]>;
   fetchArchivedModuleDetails: (workspaceSlug: string, projectId: string, moduleId: string) => Promise<IModule>;
   fetchModuleDetails: (workspaceSlug: string, projectId: string, moduleId: string) => Promise<IModule>;
+  // PPM line S: quiet re-read of the numbers and charts of a module that is on screen
+  refreshModuleStats: (workspaceSlug: string, projectId: string, moduleId: string) => Promise<void>;
   // crud
   createModule: (workspaceSlug: string, projectId: string, data: Partial<IModule>) => Promise<IModule>;
   updateModuleDetails: (
@@ -92,6 +94,8 @@ export class ModulesStore implements IModuleStore {
   projectService;
   moduleService;
   moduleArchiveService;
+  // PPM line S: the latest quiet refresh per module (an older answer that arrives later is ignored); not observable
+  private statsRefreshTokens = new Map<string, number>();
 
   constructor(_rootStore: CoreRootStore) {
     makeObservable(this, {
@@ -404,6 +408,21 @@ export class ModulesStore implements IModuleStore {
       });
       return response;
     });
+
+  /**
+   * PPM line S: quietly re-reads a module that is on screen — its details carry the numbers and the distribution
+   * (burndown, assignees, labels), exactly what `fetchModuleDetails` stores. Nothing is cleared first; an answer older
+   * than a later refresh of the same module is ignored; a module deleted meanwhile is not brought back.
+   */
+  refreshModuleStats = async (workspaceSlug: string, projectId: string, moduleId: string) => {
+    const token = (this.statsRefreshTokens.get(moduleId) ?? 0) + 1;
+    this.statsRefreshTokens.set(moduleId, token);
+    const response = await this.moduleService.getModuleDetails(workspaceSlug, projectId, moduleId);
+    if (this.statsRefreshTokens.get(moduleId) !== token || !this.moduleMap[moduleId]) return;
+    runInAction(() => {
+      set(this.moduleMap, [moduleId], response);
+    });
+  };
 
   /**
    * @description creates a new module

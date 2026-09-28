@@ -5,7 +5,7 @@
  */
 
 import { useCallback } from "react";
-import { format } from "date-fns";
+import { renderFormattedDate } from "@plane/utils";
 import { useProject } from "@/hooks/store/use-project";
 import { useUser } from "@/hooks/store/user";
 
@@ -27,8 +27,8 @@ export const useTimeZoneConverter = (projectId: string) => {
       if (!date || !userTimezone) return;
       // convert the date to the user's timezone
       const convertedDate = new Date(date).toLocaleString("en-US", { timeZone: userTimezone });
-      // return the formatted date
-      return format(convertedDate, formatToken);
+      // return the formatted date (in the interface language, see setDateFormatLanguage)
+      return renderFormattedDate(new Date(convertedDate), formatToken);
     },
     [userTimezone]
   );

@@ -18,6 +18,7 @@ import { IssueLinkCreateUpdateModal } from "../issue-detail/links/create-update-
 import { CreateUpdateIssueModal } from "../issue-modal/modal";
 import { useLinkOperations } from "./links/helper";
 import { useSubIssueOperations } from "./sub-issues/helper";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   workspaceSlug: string;
@@ -50,6 +51,7 @@ export const IssueDetailWidgetModals = observer(function IssueDetailWidgetModals
 
   // helper hooks
   const subIssueOperations = useSubIssueOperations(issueServiceType);
+  const ppmText = usePpmText();
   const handleLinkOperations = useLinkOperations(workspaceSlug, projectId, issueId, issueServiceType);
 
   // handlers
@@ -111,8 +113,8 @@ export const IssueDetailWidgetModals = observer(function IssueDetailWidgetModals
     if (data.length === 0) {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Please select at least one work item.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: ppmText("ui.error.select_work_items", "Please select at least one work item."),
       });
       return;
     }

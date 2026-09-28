@@ -12,6 +12,7 @@ import { useTranslation } from "@plane/i18n";
 import type { TIssueOrderByOptions } from "@plane/types";
 // helpers
 import { cn } from "@plane/utils";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   dragColumnOrientation: "justify-start" | "justify-center" | "justify-end";
@@ -37,6 +38,7 @@ export function GroupDragOverlay(props: Props) {
   } = props;
   // hooks
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // refs
   const messageContainerRef = useRef<HTMLDivElement>(null);
 
@@ -76,7 +78,12 @@ export function GroupDragOverlay(props: Props) {
                   {t("issue.layouts.ordered_by_label")} <span className="font-semibold">{t(readableOrderBy)}</span>.
                 </span>
               )}
-              <span>{t("entity.drop_here_to_move", { entity: isEpic ? "epic" : "work item" })}</span>
+              <span>
+                {ppmText(
+                  isEpic ? "ui.issue.drop_to_move_epic" : "ui.issue.drop_to_move",
+                  t("entity.drop_here_to_move", { entity: isEpic ? "epic" : "work item" })
+                )}
+              </span>
             </>
           )}
         </div>

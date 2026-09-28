@@ -655,6 +655,9 @@ importers:
       '@plane/utils':
         specifier: workspace:*
         version: link:../../packages/utils
+      '@ppm/brand':
+        specifier: workspace:*
+        version: link:../../packages/ppm-brand
       '@react-router/node':
         specifier: 7.18.1
         version: 7.18.1(react-router@7.18.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(typescript@5.8.3)
@@ -927,6 +930,9 @@ importers:
       '@popperjs/core':
         specifier: 'catalog:'
         version: 2.11.8
+      '@ppm/brand':
+        specifier: workspace:*
+        version: link:../../packages/ppm-brand
       '@react-router/node':
         specifier: 7.18.1
         version: 7.18.1(react-router@7.18.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(typescript@5.8.3)

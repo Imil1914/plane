@@ -22,6 +22,7 @@ import { ExistingIssuesListModal } from "@/components/core/modals/existing-issue
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { QuickAddIssueRoot } from "../quick-add";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type TCalendarQuickAddIssueActions = {
   prePopulatedData?: Partial<TIssue>;
@@ -36,6 +37,7 @@ export const CalendarQuickAddIssueActions = observer(function CalendarQuickAddIs
 ) {
   const { prePopulatedData, quickAddCallback, addIssuesToView, onOpen, isEpic = false } = props;
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // router
   const { workspaceSlug, projectId, moduleId } = useParams();
   // states
@@ -62,7 +64,8 @@ export const CalendarQuickAddIssueActions = observer(function CalendarQuickAddIs
       loading: t("issue.adding", { count: issueIds.length }),
       success: {
         title: t("toast.success"),
-        message: () => t("entity.add.success", { entity: t("issue.label", { count: 2 }) }),
+        message: () =>
+          ppmText("ui.toast.tasks_added", t("entity.add.success", { entity: t("issue.label", { count: 2 }) })),
       },
       error: {
         title: t("toast.error"),

@@ -9,10 +9,13 @@ import { useSearchParams } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 // plane internal packages
 import type { EAdminAuthErrorCodes, TAdminAuthErrorInfo } from "@plane/constants";
-import { API_BASE_URL } from "@plane/constants";
+import { API_BASE_URL, EAuthErrorCodes } from "@plane/constants";
 import { Button } from "@plane/propel/button";
 import { AuthService } from "@plane/services";
 import { Input, Spinner } from "@plane/ui";
+import { getAuthErrorMessage } from "@plane/utils";
+import { getPpmTranslation, resolvePpmLocale } from "@ppm/brand";
+import type { TPpmTranslationKey } from "@ppm/brand";
 // components
 import { Banner } from "@/components/common/banner";
 // local components
@@ -20,6 +23,8 @@ import { FormHeader } from "@/components/instance/form-header";
 import { AuthBanner } from "./auth-banner";
 import { AuthHeader } from "./auth-header";
 import { authErrorHandler } from "./auth-helpers";
+import { PasswordFieldHints, usePasswordFieldHints } from "./password-field-hints";
+import { IS_PPM_SHELL_ENABLED, useAuthLanguage } from "./ppm-auth-language";
 
 // service initialization
 const authService = new AuthService();
@@ -36,6 +41,16 @@ enum EErrorCodes {
 type TError = {
   type: EErrorCodes | undefined;
   message: string | undefined;
+};
+
+// PPM line L: these older redirects name the error and carry an English `error_message`; the PPM screen shows the
+// text of the matching numbered error in the interface language instead.
+const PPM_LEGACY_ERROR_CODES: Record<EErrorCodes, EAuthErrorCodes> = {
+  [EErrorCodes.INSTANCE_NOT_CONFIGURED]: EAuthErrorCodes.INSTANCE_NOT_CONFIGURED,
+  [EErrorCodes.REQUIRED_EMAIL_PASSWORD]: EAuthErrorCodes.REQUIRED_ADMIN_EMAIL_PASSWORD,
+  [EErrorCodes.INVALID_EMAIL]: EAuthErrorCodes.INVALID_ADMIN_EMAIL,
+  [EErrorCodes.USER_DOES_NOT_EXIST]: EAuthErrorCodes.ADMIN_USER_DOES_NOT_EXIST,
+  [EErrorCodes.AUTHENTICATION_FAILED]: EAuthErrorCodes.ADMIN_AUTHENTICATION_FAILED,
 };
 
 // form data
@@ -61,6 +76,9 @@ export function InstanceSignInForm() {
   const [formData, setFormData] = useState<TFormData>(defaultFromData);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorInfo, setErrorInfo] = useState<TAdminAuthErrorInfo | undefined>(undefined);
+  // PPM line L: the interface language and the Caps Lock / Russian layout / edge-space hints
+  const { language, t } = useAuthLanguage();
+  const passwordHints = usePasswordFieldHints("admin-password-hints", IS_PPM_SHELL_ENABLED);
 
   const handleFormChange = (key: keyof TFormData, value: string | boolean) =>
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -101,21 +119,35 @@ export function InstanceSignInForm() {
 
   useEffect(() => {
     if (errorCode) {
-      const errorDetail = authErrorHandler(errorCode?.toString() as EAdminAuthErrorCodes);
+      const errorDetail = authErrorHandler(errorCode?.toString() as EAdminAuthErrorCodes, language);
       if (errorDetail) {
         setErrorInfo(errorDetail);
       }
     }
-  }, [errorCode]);
+  }, [errorCode, language]);
+
+  const legacyErrorMessage =
+    IS_PPM_SHELL_ENABLED && errorData.type
+      ? getAuthErrorMessage(PPM_LEGACY_ERROR_CODES[errorData.type], (key) =>
+          getPpmTranslation(language, key as TPpmTranslationKey)
+        )?.message
+      : errorData.message;
 
   return (
     <>
       <AuthHeader />
-      <div className="mt-10 flex w-full flex-grow flex-col items-center justify-center py-6">
+      <div
+        className="mt-10 flex w-full flex-grow flex-col items-center justify-center py-6"
+        lang={IS_PPM_SHELL_ENABLED ? resolvePpmLocale(language) : undefined}
+      >
         <div className="relative flex w-full max-w-[22.5rem] flex-col gap-6">
           <FormHeader
-            heading="Manage your Plane instance"
-            subHeading="Configure instance-wide settings to secure your instance"
+            heading={IS_PPM_SHELL_ENABLED ? t("auth.admin_title") : "Manage your Plane instance"}
+            subHeading={
+              IS_PPM_SHELL_ENABLED
+                ? t("auth.admin_description")
+                : "Configure instance-wide settings to secure your instance"
+            }
           />
           <form
             className="space-y-4"
@@ -124,8 +156,8 @@ export function InstanceSignInForm() {
             onSubmit={() => setIsSubmitting(true)}
             onError={() => setIsSubmitting(false)}
           >
-            {errorData.type && errorData?.message ? (
-              <Banner type="error" message={errorData?.message} />
+            {errorData.type && errorData?.message && legacyErrorMessage ? (
+              <Banner type="error" message={legacyErrorMessage} />
             ) : (
               <>{errorInfo && <AuthBanner bannerData={errorInfo} handleBannerData={setErrorInfo} />}</>
             )}
@@ -133,7 +165,7 @@ export function InstanceSignInForm() {
 
             <div className="w-full space-y-1">
               <label className="text-13 font-medium text-tertiary" htmlFor="email">
-                Email <span className="text-danger-primary">*</span>
+                {IS_PPM_SHELL_ENABLED ? t("auth.email") : "Email"} <span className="text-danger-primary">*</span>
               </label>
               <Input
                 className="w-full border border-subtle !bg-surface-1 placeholder:text-placeholder"
@@ -141,7 +173,7 @@ export function InstanceSignInForm() {
                 name="email"
                 type="email"
                 inputSize="md"
-                placeholder="name@company.com"
+                placeholder={IS_PPM_SHELL_ENABLED ? t("auth.email_placeholder") : "name@company.com"}
                 value={formData.email}
                 onChange={(e) => handleFormChange("email", e.target.value)}
                 autoComplete="off"
@@ -151,7 +183,7 @@ export function InstanceSignInForm() {
 
             <div className="w-full space-y-1">
               <label className="text-13 font-medium text-tertiary" htmlFor="password">
-                Password <span className="text-danger-primary">*</span>
+                {IS_PPM_SHELL_ENABLED ? t("auth.password") : "Password"} <span className="text-danger-primary">*</span>
               </label>
               <div className="relative">
                 <Input
@@ -160,15 +192,17 @@ export function InstanceSignInForm() {
                   name="password"
                   type={showPassword ? "text" : "password"}
                   inputSize="md"
-                  placeholder="Enter your password"
+                  placeholder={IS_PPM_SHELL_ENABLED ? t("auth.password_placeholder") : "Enter your password"}
                   value={formData.password}
                   onChange={(e) => handleFormChange("password", e.target.value)}
+                  onBlur={passwordHints.resetCapsLock}
                   autoComplete="off"
+                  {...passwordHints.inputProps}
                 />
                 {showPassword ? (
                   <button
                     type="button"
-                    aria-label="Hide password"
+                    aria-label={IS_PPM_SHELL_ENABLED ? t("auth.hide_password") : "Hide password"}
                     className="absolute top-3.5 right-3 flex items-center justify-center text-placeholder"
                     onClick={() => setShowPassword(false)}
                   >
@@ -177,7 +211,7 @@ export function InstanceSignInForm() {
                 ) : (
                   <button
                     type="button"
-                    aria-label="Show password"
+                    aria-label={IS_PPM_SHELL_ENABLED ? t("auth.show_password") : "Show password"}
                     className="absolute top-3.5 right-3 flex items-center justify-center text-placeholder"
                     onClick={() => setShowPassword(true)}
                   >
@@ -185,10 +219,24 @@ export function InstanceSignInForm() {
                   </button>
                 )}
               </div>
+              {IS_PPM_SHELL_ENABLED && (
+                <PasswordFieldHints
+                  id="admin-password-hints"
+                  value={formData.password}
+                  isCapsLockOn={passwordHints.isCapsLockOn}
+                  t={t}
+                />
+              )}
             </div>
             <div className="py-2">
               <Button type="submit" size="xl" className="w-full" disabled={isButtonDisabled}>
-                {isSubmitting ? <Spinner height="20px" width="20px" /> : "Sign in"}
+                {isSubmitting ? (
+                  <Spinner height="20px" width="20px" />
+                ) : IS_PPM_SHELL_ENABLED ? (
+                  t("auth.sign_in")
+                ) : (
+                  "Sign in"
+                )}
               </Button>
             </div>
           </form>

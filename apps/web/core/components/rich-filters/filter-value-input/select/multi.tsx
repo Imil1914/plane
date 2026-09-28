@@ -19,6 +19,7 @@ import { toFilterArray, getFilterValueLength } from "@plane/utils";
 // local imports
 import { SelectedOptionsDisplay } from "./selected-options-display";
 import { getCommonCustomSearchSelectProps, getFormattedOptions, loadOptions } from "./shared";
+import { usePpmRichFilterText } from "../../ppm-labels";
 
 type TMultiSelectFilterValueInputProps<P extends TFilterProperty> = {
   config: TMultiSelectFilterFieldConfig<string>;
@@ -32,14 +33,15 @@ export const MultiSelectFilterValueInput = observer(function MultiSelectFilterVa
 ) {
   const { config, condition, isDisabled, onChange } = props;
   // states
+  const { localizeOptions } = usePpmRichFilterText();
   const [options, setOptions] = useState<IFilterOption<string>[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   // derived values
   const formattedOptions = useMemo(() => getFormattedOptions<string>(options), [options]);
 
   useEffect(() => {
-    loadOptions({ config, setOptions, setLoading });
-  }, [config]);
+    loadOptions({ config, setOptions: (loaded) => setOptions(localizeOptions(loaded)), setLoading });
+  }, [config, localizeOptions]);
 
   const handleSelectChange = (values: string[]) => {
     onChange(values);

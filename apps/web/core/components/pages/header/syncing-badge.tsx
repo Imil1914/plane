@@ -8,12 +8,14 @@ import { useState, useEffect } from "react";
 import { CloudOff, Dot } from "lucide-react";
 import { Tooltip } from "@plane/propel/tooltip";
 import { Badge } from "@plane/propel/badge";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   syncStatus: "syncing" | "synced" | "error";
 };
 
 export function PageSyncingBadge({ syncStatus }: Props) {
+  const ppmText = usePpmText();
   const [prevSyncStatus, setPrevSyncStatus] = useState<"syncing" | "synced" | "error" | null>(null);
   const [isVisible, setIsVisible] = useState(syncStatus !== "synced");
 
@@ -36,15 +38,20 @@ export function PageSyncingBadge({ syncStatus }: Props) {
 
   const badgeContent = {
     syncing: {
-      label: "Syncing...",
-      tooltipHeading: "Syncing...",
-      tooltipContent: "Your changes are being synced with the server. You can continue making changes.",
+      label: ppmText("ui.page.syncing", "Syncing..."),
+      tooltipHeading: ppmText("ui.page.syncing", "Syncing..."),
+      tooltipContent: ppmText(
+        "ui.page.syncing_hint",
+        "Your changes are being synced with the server. You can continue making changes."
+      ),
     },
     error: {
-      label: "Connection lost",
-      tooltipHeading: "Connection lost",
-      tooltipContent:
-        "We're having trouble connecting to the websocket server. Your changes will be synced and saved every 10 seconds.",
+      label: ppmText("ui.page.connection_lost", "Connection lost"),
+      tooltipHeading: ppmText("ui.page.connection_lost", "Connection lost"),
+      tooltipContent: ppmText(
+        "ui.page.connection_lost_hint",
+        "We're having trouble connecting to the websocket server. Your changes will be synced and saved every 10 seconds."
+      ),
     },
   };
 

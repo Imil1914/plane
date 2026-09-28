@@ -14,9 +14,13 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { ICycle } from "@plane/types";
 // ui
 import { AlertModalCore } from "@plane/ui";
+// components
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 interface ICycleDelete {
   cycle: ICycle;
@@ -27,12 +31,15 @@ interface ICycleDelete {
 }
 
 export const CycleDeleteModal = observer(function CycleDeleteModal(props: ICycleDelete) {
+  const isPpmRu = usePpmRu();
   const { isOpen, handleClose, cycle, workspaceSlug, projectId } = props;
   // states
   const [loader, setLoader] = useState(false);
   // store hooks
   const { deleteCycle } = useCycle();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
   // router
   const router = useAppRouter();
   const { cycleId } = useParams();
@@ -49,8 +56,8 @@ export const CycleDeleteModal = observer(function CycleDeleteModal(props: ICycle
           if (cycleId || peekCycle) router.push(`/${workspaceSlug}/projects/${projectId}/cycles`);
           setToast({
             type: TOAST_TYPE.SUCCESS,
-            title: "Success!",
-            message: "Cycle deleted successfully.",
+            title: ppmText("ui.toast.success", "Success!"),
+            message: ppmText("ui.toast.cycle_deleted", "Cycle deleted successfully."),
           });
         })
         .catch((errors) => {
@@ -68,8 +75,8 @@ export const CycleDeleteModal = observer(function CycleDeleteModal(props: ICycle
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Warning!",
-        message: "Something went wrong please try again later.",
+        title: ppmText("ui.toast.warning", "Warning!"),
+        message: ppmText("ui.toast.try_again_later", "Something went wrong please try again later."),
       });
     }
 
@@ -82,14 +89,26 @@ export const CycleDeleteModal = observer(function CycleDeleteModal(props: ICycle
       handleSubmit={formSubmit}
       isSubmitting={loader}
       isOpen={isOpen}
-      title="Delete cycle"
+      title={ppmText("ui.confirm.delete_cycle_title", "Delete cycle")}
       content={
-        <>
-          Are you sure you want to delete cycle{' "'}
-          <span className="font-medium break-words text-primary">{cycle?.name}</span>
-          {'"'}? All of the data related to the cycle will be permanently removed. This action cannot be undone.
-        </>
+        isPpmRu ? (
+          <PpmTemplateText
+            template={ppmT("ui.confirm.delete_cycle_content")}
+            values={{ name: <span className="font-medium break-words text-primary">{cycle?.name}</span> }}
+          />
+        ) : (
+          <>
+            Are you sure you want to delete cycle{' "'}
+            <span className="font-medium break-words text-primary">{cycle?.name}</span>
+            {'"'}? All of the data related to the cycle will be permanently removed. This action cannot be undone.
+          </>
+        )
       }
+      primaryButtonText={{
+        loading: ppmText("ui.common.deleting", "Deleting"),
+        default: ppmText("ui.common.delete", "Delete"),
+      }}
+      secondaryButtonText={ppmText("ui.common.cancel", "Cancel")}
     />
   );
 });

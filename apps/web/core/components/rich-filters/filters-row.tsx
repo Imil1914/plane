@@ -16,6 +16,7 @@ import { cn, EHeaderVariant, Header, Loader } from "@plane/ui";
 // local imports
 import type { TAddFilterButtonProps } from "./add-filters/button";
 import { AddFilterButton } from "./add-filters/button";
+import { usePpmText } from "@/hooks/use-ppm-text";
 import { FilterItem } from "./filter-item/root";
 
 export type TFiltersRowProps<K extends TFilterProperty, E extends TExternalFilter> = {
@@ -42,6 +43,7 @@ export const FiltersRow = observer(function FiltersRow<K extends TFilterProperty
   } = props;
   // states
   const [isUpdating, setIsUpdating] = useState(false);
+  const ppmText = usePpmText();
   // derived values
   const disabledAllOperations = disabledAllOperationsProp || !filter.configManager.areConfigsReady;
   const hasAnyConditions = filter.allConditionsForDisplay.length > 0;
@@ -53,7 +55,7 @@ export const FiltersRow = observer(function FiltersRow<K extends TFilterProperty
   };
 
   const modalButtonConfig: Partial<TAddFilterButtonProps<K, E>["buttonConfig"]> = {
-    label: !hasAnyConditions ? "Filters" : null,
+    label: !hasAnyConditions ? ppmText("ui.common.filters", "Filters") : null,
   };
 
   const handleUpdate = useCallback(async () => {
@@ -96,7 +98,7 @@ export const FiltersRow = observer(function FiltersRow<K extends TFilterProperty
           onClick={filter.clearFilters}
           data-ph-element={trackerElements?.clearFilter}
         >
-          {filter.clearFilterOptions?.label ?? "Clear all"}
+          {filter.clearFilterOptions?.label ?? ppmText("ui.filter.clear_all", "Clear all")}
         </Button>
       </ElementTransition>
       <ElementTransition show={filter.canSaveView}>
@@ -106,7 +108,7 @@ export const FiltersRow = observer(function FiltersRow<K extends TFilterProperty
           onClick={filter.saveView}
           data-ph-element={trackerElements?.saveView}
         >
-          {filter.saveViewOptions?.label ?? "Save view"}
+          {filter.saveViewOptions?.label ?? ppmText("ui.filter.save_view", "Save view")}
         </Button>
       </ElementTransition>
       <ElementTransition show={filter.canUpdateView}>
@@ -118,7 +120,9 @@ export const FiltersRow = observer(function FiltersRow<K extends TFilterProperty
           disabled={isUpdating}
           data-ph-element={trackerElements?.updateView}
         >
-          {isUpdating ? "Confirming" : (filter.updateViewOptions?.label ?? "Update view")}
+          {isUpdating
+            ? ppmText("ui.filter.confirming", "Confirming")
+            : (filter.updateViewOptions?.label ?? ppmText("ui.filter.update_view", "Update view"))}
         </Button>
       </ElementTransition>
     </>

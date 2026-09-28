@@ -20,8 +20,8 @@ type Props = {
 export const CalendarWeekHeader = observer(function CalendarWeekHeader(props: Props) {
   const { isLoading, showWeekends } = props;
   // hooks
-  const { data } = useUserProfile();
-  const startOfWeek = data?.start_of_the_week;
+  const userProfile = useUserProfile();
+  const { startOfTheWeek: startOfWeek } = userProfile;
 
   // derived
   const orderedDays = getOrderedDays(Object.values(DAYS_LIST), (item) => item.value, startOfWeek);

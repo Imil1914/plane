@@ -18,6 +18,12 @@ type TPasswordInputProps = {
   showToggle?: boolean;
   error?: boolean;
   autoComplete?: React.HTMLInputAutoCompleteAttribute;
+  // PPM: more attributes and handlers of the input itself (the password hints: key handlers, onBlur,
+  // aria-describedby); the controlled ones above stay with the component.
+  inputProps?: Omit<
+    React.InputHTMLAttributes<HTMLInputElement>,
+    "id" | "type" | "value" | "onChange" | "className" | "placeholder" | "autoComplete"
+  >;
 };
 
 export function PasswordInput({
@@ -29,6 +35,7 @@ export function PasswordInput({
   showToggle = true,
   error = false,
   autoComplete = "off",
+  inputProps,
 }: TPasswordInputProps) {
   const [showPassword, setShowPassword] = useState(false);
   return (
@@ -48,6 +55,7 @@ export function PasswordInput({
         )}
         placeholder={placeholder}
         autoComplete={autoComplete}
+        {...inputProps}
       />
       {showToggle && (
         <Tooltip tooltipContent={showPassword ? "Hide password" : "Show password"} position="top">

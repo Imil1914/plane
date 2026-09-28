@@ -8,6 +8,7 @@ import React, { useState } from "react";
 import { observer } from "mobx-react";
 import { useSearchParams } from "next/navigation";
 import { EAuthModes, EAuthSteps } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
 import type { IEmailCheckData } from "@plane/types";
 // helpers
 import type { TAuthErrorInfo } from "@/helpers/authentication.helper";
@@ -18,7 +19,9 @@ import { useAppRouter } from "@/hooks/use-app-router";
 // services
 import { AuthService } from "@/services/auth.service";
 // local components
+import { AuthAccountNotFound } from "./account-not-found";
 import { AuthEmailForm } from "./email";
+import { resolveEmailCheckOutcome } from "./email-check-outcome";
 import { AuthPasswordForm } from "./password";
 import { AuthUniqueCodeForm } from "./unique-code";
 
@@ -39,44 +42,48 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
   const { authStep, authMode, email, setEmail, setAuthMode, setAuthStep, setErrorInfo, currentAuthMode } = props;
   // router
   const router = useAppRouter();
+  // PPM line L: errors in the interface language
+  const { currentLocale } = useTranslation();
   // query params
   const searchParams = useSearchParams();
   const nextPath = searchParams.get("next_path");
   // states
   const [isExistingEmail, setIsExistingEmail] = useState(false);
+  // Sign-in page, unknown e-mail: the step to open if the person chooses to create an account after all.
+  const [notFoundStep, setNotFoundStep] = useState<EAuthSteps | undefined | null>(null);
   // hooks
   const { config } = useInstance();
 
   const isSMTPConfigured = config?.is_smtp_configured || false;
 
+  const openStep = (step: EAuthSteps | undefined, emailAddress: string) => {
+    if (step === EAuthSteps.UNIQUE_CODE) {
+      setAuthStep(EAuthSteps.UNIQUE_CODE);
+      generateEmailUniqueCode(emailAddress);
+    } else if (step === EAuthSteps.PASSWORD) {
+      setAuthStep(EAuthSteps.PASSWORD);
+    }
+  };
+
   // submit handler- email verification
   const handleEmailVerification = async (data: IEmailCheckData) => {
     setEmail(data.email);
     setErrorInfo(undefined);
+    setNotFoundStep(null);
     await authService
       .emailCheck(data)
       .then(async (response) => {
-        if (response.existing) {
-          if (currentAuthMode === EAuthModes.SIGN_UP) setAuthMode(EAuthModes.SIGN_IN);
-          if (response.status === "MAGIC_CODE") {
-            setAuthStep(EAuthSteps.UNIQUE_CODE);
-            generateEmailUniqueCode(data.email);
-          } else if (response.status === "CREDENTIAL") {
-            setAuthStep(EAuthSteps.PASSWORD);
-          }
-        } else {
-          if (currentAuthMode === EAuthModes.SIGN_IN) setAuthMode(EAuthModes.SIGN_UP);
-          if (response.status === "MAGIC_CODE") {
-            setAuthStep(EAuthSteps.UNIQUE_CODE);
-            generateEmailUniqueCode(data.email);
-          } else if (response.status === "CREDENTIAL") {
-            setAuthStep(EAuthSteps.PASSWORD);
-          }
-        }
+        const outcome = resolveEmailCheckOutcome(response, currentAuthMode);
         setIsExistingEmail(response.existing);
+        if (outcome.kind === "not_found") {
+          setNotFoundStep(outcome.step);
+          return;
+        }
+        if (outcome.mode !== authMode) setAuthMode(outcome.mode);
+        openStep(outcome.step, data.email);
       })
       .catch((error) => {
-        const errorhandler = authErrorHandler(error?.error_code?.toString(), data?.email || undefined);
+        const errorhandler = authErrorHandler(error?.error_code?.toString(), data?.email || undefined, currentLocale);
         if (errorhandler?.type) setErrorInfo(errorhandler);
       });
   };
@@ -97,14 +104,33 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
       .generateUniqueCode(payload)
       .then(() => ({ code: "" }))
       .catch((error) => {
-        const errorhandler = authErrorHandler(error?.error_code?.toString());
+        const errorhandler = authErrorHandler(error?.error_code?.toString(), undefined, currentLocale);
         if (errorhandler?.type) setErrorInfo(errorhandler);
         throw error;
       });
   };
 
   if (authStep === EAuthSteps.EMAIL) {
-    return <AuthEmailForm defaultEmail={email} onSubmit={handleEmailVerification} />;
+    return (
+      <>
+        <AuthEmailForm
+          defaultEmail={email}
+          onSubmit={handleEmailVerification}
+          onEmailChange={() => setNotFoundStep(null)}
+        />
+        {notFoundStep !== null && (
+          <AuthAccountNotFound
+            signUpOpen={Boolean(config?.enable_signup)}
+            onCreateAccount={() => {
+              const step = notFoundStep;
+              setNotFoundStep(null);
+              setAuthMode(EAuthModes.SIGN_UP);
+              openStep(step, email);
+            }}
+          />
+        )}
+      </>
+    );
   }
   if (authStep === EAuthSteps.UNIQUE_CODE) {
     return (

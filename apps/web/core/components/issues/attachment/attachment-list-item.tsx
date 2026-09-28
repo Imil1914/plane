@@ -23,6 +23,7 @@ import { getFileIcon } from "@/components/icons";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type TIssueAttachmentsListItem = {
   attachmentId: string;
@@ -34,6 +35,7 @@ export const IssueAttachmentsListItem = observer(function IssueAttachmentsListIt
   const { t } = useTranslation();
   // props
   const { attachmentId, disabled, issueServiceType = EIssueServiceType.ISSUES } = props;
+  const ppmText = usePpmText();
   // store hooks
   const { getUserDetails } = useMember();
   const {
@@ -75,9 +77,14 @@ export const IssueAttachmentsListItem = observer(function IssueAttachmentsListIt
               <>
                 <Tooltip
                   isMobile={isMobile}
-                  tooltipContent={`${
-                    getUserDetails(attachment?.created_by)?.display_name ?? ""
-                  } uploaded on ${renderFormattedDate(attachment.updated_at)}`}
+                  tooltipContent={ppmText(
+                    "ui.attachment.uploaded_by",
+                    `${getUserDetails(attachment?.created_by)?.display_name ?? ""} uploaded on ${renderFormattedDate(attachment.updated_at)}`,
+                    {
+                      name: getUserDetails(attachment?.created_by)?.display_name ?? "",
+                      date: renderFormattedDate(attachment.updated_at) ?? "",
+                    }
+                  )}
                 >
                   <div className="flex items-center justify-center">
                     <ButtonAvatars showTooltip userIds={attachment?.created_by} />

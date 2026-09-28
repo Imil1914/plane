@@ -11,6 +11,7 @@ import { ISSUE_PRIORITIES } from "@plane/constants";
 import { PriorityIcon } from "@plane/propel/icons";
 import type { TIssue, TIssuePriorities } from "@plane/types";
 // local imports
+import { usePpmPriorityTitle } from "@/components/ppm-shell/priority-title";
 import { PowerKModalCommandItem } from "../../../modal/command-item";
 
 type Props = {
@@ -20,6 +21,7 @@ type Props = {
 
 export const PowerKWorkItemPrioritiesMenu = observer(function PowerKWorkItemPrioritiesMenu(props: Props) {
   const { handleSelect, workItemDetails } = props;
+  const priorityTitle = usePpmPriorityTitle();
 
   return (
     <Command.Group>
@@ -27,7 +29,7 @@ export const PowerKWorkItemPrioritiesMenu = observer(function PowerKWorkItemPrio
         <PowerKModalCommandItem
           key={priority.key}
           iconNode={<PriorityIcon priority={priority.key} />}
-          label={priority.title}
+          label={priorityTitle(priority.key, priority.title)}
           isSelected={priority.key === workItemDetails.priority}
           onSelect={() => handleSelect(priority.key)}
         />

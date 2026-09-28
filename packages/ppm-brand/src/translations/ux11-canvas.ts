@@ -93,7 +93,7 @@ export const UX11_CANVAS_TRANSLATIONS = {
     "canvas.open_in_knowledge": "Открыть {name} в Хранилище",
     "canvas.open_in_pages": "Открыть {name} в Документах",
     "canvas.open_in_code": "Открыть {name} в Коде",
-    "canvas.unassigned": "Не назначены",
+    "canvas.unassigned": "Не назначен",
     "canvas.inspector_close": "Снять выделение",
     "canvas.inspector_source": "Источник",
     "canvas.inspector_hint": "Правки сохраняются в задаче, карточка на холсте обновится сама.",

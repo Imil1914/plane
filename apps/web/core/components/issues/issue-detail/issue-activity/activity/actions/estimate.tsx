@@ -10,10 +10,13 @@ import { EstimatePropertyIcon } from "@plane/propel/icons";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
 import { IssueActivityBlockComponent, IssueLink } from "./";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { PpmActivityPhrase } from "./helpers/ppm-activity";
 
 type TIssueEstimateActivity = { activityId: string; showIssue?: boolean; ends: "top" | "bottom" | undefined };
 
 export const IssueEstimateActivity = observer(function IssueEstimateActivity(props: TIssueEstimateActivity) {
+  const isPpmRu = usePpmRu();
   const { activityId, showIssue = true, ends } = props;
   // hooks
   const {
@@ -30,12 +33,20 @@ export const IssueEstimateActivity = observer(function IssueEstimateActivity(pro
       activityId={activityId}
       ends={ends}
     >
-      <>
-        {activity.new_value ? `set the estimate point to ` : `removed the estimate point`}
-        {activity.new_value ? activity.new_value : activity?.old_value}
-        {showIssue && (activity.new_value ? ` to ` : ` from `)}
-        {showIssue && <IssueLink activityId={activityId} />}.
-      </>
+      {isPpmRu ? (
+        <PpmActivityPhrase
+          phrase={activity.new_value ? "ui.activity.estimate_set" : "ui.activity.estimate_removed"}
+          values={{ value: activity.new_value ? activity.new_value : activity?.old_value }}
+          issue={showIssue ? <IssueLink activityId={activityId} /> : undefined}
+        />
+      ) : (
+        <>
+          {activity.new_value ? `set the estimate point to ` : `removed the estimate point`}
+          {activity.new_value ? activity.new_value : activity?.old_value}
+          {showIssue && (activity.new_value ? ` to ` : ` from `)}
+          {showIssue && <IssueLink activityId={activityId} />}.
+        </>
+      )}
     </IssueActivityBlockComponent>
   );
 });

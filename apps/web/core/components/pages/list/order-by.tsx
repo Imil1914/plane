@@ -11,6 +11,8 @@ import { getButtonStyling } from "@plane/propel/button";
 import { CheckIcon } from "@plane/propel/icons";
 import type { TPageFiltersSortBy, TPageFiltersSortKey } from "@plane/types";
 import { CustomMenu } from "@plane/ui";
+import { usePpmText } from "@/hooks/use-ppm-text";
+import type { TPpmTranslationKey } from "@ppm/brand";
 
 type Props = {
   onChange: (value: { key?: TPageFiltersSortKey; order?: TPageFiltersSortBy }) => void;
@@ -27,8 +29,20 @@ const PAGE_SORTING_KEY_OPTIONS: {
   { key: "updated_at", label: "Date modified" },
 ];
 
+// PPM names of the sort keys (the labels above stay the upstream fallback).
+const PAGE_SORTING_KEY_LABELS: Partial<Record<TPageFiltersSortKey, TPpmTranslationKey>> = {
+  name: "ui.page.sort_name",
+  created_at: "ui.page.sort_created",
+  updated_at: "ui.page.sort_updated",
+};
+
 export function PageOrderByDropdown(props: Props) {
   const { onChange, sortBy, sortKey } = props;
+  const ppmText = usePpmText();
+  const sortLabel = (option: { key: TPageFiltersSortKey; label: string }) => {
+    const key = PAGE_SORTING_KEY_LABELS[option.key];
+    return key ? ppmText(key, option.label) : option.label;
+  };
 
   const orderByDetails = PAGE_SORTING_KEY_OPTIONS.find((option) => sortKey === option.key);
   const isDescending = sortBy === "desc";
@@ -38,7 +52,7 @@ export function PageOrderByDropdown(props: Props) {
       customButton={
         <div className={getButtonStyling("secondary", "lg")}>
           {!isDescending ? <ArrowUpWideNarrow className="size-3" /> : <ArrowDownWideNarrow className="size-3" />}
-          {orderByDetails?.label}
+          {orderByDetails ? sortLabel(orderByDetails) : undefined}
         </div>
       }
       placement="bottom-end"
@@ -55,7 +69,7 @@ export function PageOrderByDropdown(props: Props) {
             })
           }
         >
-          {option.label}
+          {sortLabel(option)}
           {sortKey === option.key && <CheckIcon className="h-3 w-3" />}
         </CustomMenu.MenuItem>
       ))}
@@ -69,7 +83,7 @@ export function PageOrderByDropdown(props: Props) {
             });
         }}
       >
-        Ascending
+        {ppmText("ui.sort.ascending", "Ascending")}
         {!isDescending && <CheckIcon className="h-3 w-3" />}
       </CustomMenu.MenuItem>
       <CustomMenu.MenuItem
@@ -81,7 +95,7 @@ export function PageOrderByDropdown(props: Props) {
             });
         }}
       >
-        Descending
+        {ppmText("ui.sort.descending", "Descending")}
         {isDescending && <CheckIcon className="h-3 w-3" />}
       </CustomMenu.MenuItem>
     </CustomMenu>

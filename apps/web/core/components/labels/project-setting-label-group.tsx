@@ -18,6 +18,7 @@ import type { ICustomMenuItem } from "./label-block/label-item-block";
 import { LabelItemBlock } from "./label-block/label-item-block";
 import { LabelDndHOC } from "./label-drag-n-drop-HOC";
 import { ProjectSettingLabelItem } from "./project-setting-label-item";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   label: IIssueLabel;
@@ -48,6 +49,7 @@ export const ProjectSettingLabelGroup = observer(function ProjectSettingLabelGro
     isEditable = false,
     labelOperationsCallbacks,
   } = props;
+  const ppmText = usePpmText();
 
   // states
   const [isEditLabelForm, setEditLabelForm] = useState(false);
@@ -60,7 +62,7 @@ export const ProjectSettingLabelGroup = observer(function ProjectSettingLabelGro
         setIsUpdating(true);
       },
       isVisible: true,
-      text: "Edit label",
+      text: ppmText("ui.label.edit", "Edit label"),
       key: "edit_label",
     },
     {
@@ -69,7 +71,7 @@ export const ProjectSettingLabelGroup = observer(function ProjectSettingLabelGro
         handleLabelDelete(label);
       },
       isVisible: true,
-      text: "Delete label",
+      text: ppmText("ui.label.delete", "Delete label"),
       key: "delete_label",
     },
   ];

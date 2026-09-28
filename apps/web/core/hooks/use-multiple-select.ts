@@ -4,10 +4,19 @@
  * See the LICENSE file for details.
  */
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 // hooks
 import { useMultipleSelectStore } from "@/hooks/store/use-multiple-select-store";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 //
+import {
+  getPpmEntitiesToAdd,
+  getPpmMissingSelection,
+  getPpmNeighbourEntities,
+  getPpmShiftRange,
+  isPpmSelectionKeyTargetIgnored,
+} from "./use-multiple-select-helpers";
+import type { TPpmIsEntityHidden } from "./use-multiple-select-helpers";
 import useReloadConfirmations from "./use-reload-confirmation";
 
 export type TEntityDetails = {
@@ -19,6 +28,8 @@ type Props = {
   containerRef: React.MutableRefObject<HTMLElement | null>;
   disabled: boolean;
   entities: Record<string, string[]>; // { groupID: entityIds[] }
+  /** PPM (линия B): строка скрыта (её группа свёрнута) — Shift-диапазон и стрелки её пропускают. */
+  isEntityHidden?: TPpmIsEntityHidden;
 };
 
 export type TSelectionSnapshot = {
@@ -34,38 +45,41 @@ export type TSelectionHelper = {
   handleGroupClick: (groupID: string) => void;
   isGroupSelected: (groupID: string) => "empty" | "partial" | "complete";
   isSelectionDisabled: boolean;
+  /** Выделена хотя бы одна задача: флажки строк видны без наведения (линия B). */
+  isSelectionActive: boolean;
 };
 
 export const useMultipleSelect = (props: Props) => {
-  const { containerRef, disabled, entities } = props;
+  const { containerRef, disabled, entities, isEntityHidden } = props;
+  // Последняя функция «строка скрыта» без переподписки слушателей клавиш на каждый рендер списка.
+  const isEntityHiddenRef = useRef(isEntityHidden);
+  isEntityHiddenRef.current = isEntityHidden;
+  const isHidden = useCallback((entity: TEntityDetails) => !!isEntityHiddenRef.current?.(entity), []);
   // router
   // const router = useAppRouter();
   // store hooks
+  const multipleSelectStore = useMultipleSelectStore();
   const {
+    isSelectionActive,
     selectedEntityIds,
     updateSelectedEntityDetails,
     bulkUpdateSelectedEntityDetails,
     getActiveEntityDetails,
     updateActiveEntityDetails,
-    getPreviousActiveEntity,
     updatePreviousActiveEntity,
-    getNextActiveEntity,
     updateNextActiveEntity,
     getLastSelectedEntityDetails,
+    updateLastSelectedEntityDetails,
     clearSelection,
     getIsEntitySelected,
     getIsEntityActive,
     getEntityDetailsFromEntityID,
-  } = useMultipleSelectStore();
+  } = multipleSelectStore;
+  const ppmT = usePpmTranslation();
 
-  useReloadConfirmations(
-    selectedEntityIds && selectedEntityIds.length > 0,
-    "Are you sure you want to leave? Your current bulk operation selections will be lost.",
-    true,
-    () => {
-      clearSelection();
-    }
-  );
+  useReloadConfirmations(selectedEntityIds && selectedEntityIds.length > 0, ppmT("bulk.leave_confirm"), true, () => {
+    clearSelection();
+  });
 
   const groups = useMemo(() => Object.keys(entities), [entities]);
 
@@ -82,35 +96,10 @@ export const useMultipleSelect = (props: Props) => {
     [entities, groups]
   );
 
+  // PPM (линия B): соседи — по паре «задача + группа» (одна задача бывает в нескольких группах) и мимо свёрнутых групп.
   const getPreviousAndNextEntities = useCallback(
-    (entityID: string) => {
-      const currentEntityIndex = entitiesList.findIndex((entity) => entity?.entityID === entityID);
-
-      // entity position
-      const isFirstEntity = currentEntityIndex === 0;
-      const isLastEntity = currentEntityIndex === entitiesList.length - 1;
-
-      let previousEntity: TEntityDetails | null = null;
-      let nextEntity: TEntityDetails | null = null;
-
-      if (isLastEntity) {
-        nextEntity = null;
-      } else {
-        nextEntity = entitiesList[currentEntityIndex + 1];
-      }
-
-      if (isFirstEntity) {
-        previousEntity = null;
-      } else {
-        previousEntity = entitiesList[currentEntityIndex - 1];
-      }
-
-      return {
-        previousEntity,
-        nextEntity,
-      };
-    },
-    [entitiesList]
+    (entityDetails: TEntityDetails) => getPpmNeighbourEntities(entitiesList, entityDetails, isHidden),
+    [entitiesList, isHidden]
   );
 
   const handleActiveEntityChange = useCallback(
@@ -146,9 +135,8 @@ export const useMultipleSelect = (props: Props) => {
         }
       }
 
-      const { previousEntity: previousActiveEntity, nextEntity: nextActiveEntity } = getPreviousAndNextEntities(
-        entityDetails.entityID
-      );
+      const { previousEntity: previousActiveEntity, nextEntity: nextActiveEntity } =
+        getPreviousAndNextEntities(entityDetails);
       updatePreviousActiveEntity(previousActiveEntity);
       updateNextActiveEntity(nextActiveEntity);
     },
@@ -171,16 +159,22 @@ export const useMultipleSelect = (props: Props) => {
       if (disabled) return;
 
       if (Array.isArray(entityDetails)) {
-        bulkUpdateSelectedEntityDetails(entityDetails, forceAction === "force-add" ? "add" : "remove");
-        if (forceAction === "force-add" && entityDetails.length > 0) {
-          handleActiveEntityChange(entityDetails[entityDetails.length - 1], shouldScroll);
+        if (forceAction !== "force-add") {
+          bulkUpdateSelectedEntityDetails(entityDetails, "remove");
+          return;
+        }
+        // PPM (линия B): каждая задача один раз (она бывает в нескольких группах) и без уже выделенных — иначе
+        // «Выбрано: N» и удаление считали бы одну задачу дважды.
+        const entitiesToAdd = getPpmEntitiesToAdd(entityDetails, getIsEntitySelected);
+        if (entitiesToAdd.length > 0) {
+          bulkUpdateSelectedEntityDetails(entitiesToAdd, "add");
+          handleActiveEntityChange(entitiesToAdd[entitiesToAdd.length - 1], shouldScroll);
         }
         return;
       }
 
       if (forceAction) {
         if (forceAction === "force-add") {
-          console.log("force adding");
           updateSelectedEntityDetails(entityDetails, "add");
           handleActiveEntityChange(entityDetails, shouldScroll);
         }
@@ -219,41 +213,35 @@ export const useMultipleSelect = (props: Props) => {
       if (disabled) return;
       const lastSelectedEntityDetails = getLastSelectedEntityDetails();
       if (e.shiftKey && lastSelectedEntityDetails) {
-        const currentEntityIndex = entitiesList.findIndex((entity) => entity?.entityID === entityID);
-
-        const lastEntityIndex = entitiesList.findIndex(
-          (entity) => entity?.entityID === lastSelectedEntityDetails.entityID
-        );
-        if (lastEntityIndex < currentEntityIndex) {
-          for (let i = lastEntityIndex + 1; i <= currentEntityIndex; i++) {
-            const entityDetails = entitiesList[i];
-            if (entityDetails) {
-              handleEntitySelection(entityDetails, false);
-            }
+        // PPM (линия B): весь диапазон получает состояние нажатой задачи — выделяется целиком или целиком снимается
+        // (раньше каждая задача диапазона переключалась и уже выделенные внутри него снимались). Опорная и нажатая
+        // строки — по паре «задача + группа», строки свёрнутых групп не входят, повторы и уже выделенные не добавляются.
+        const target = { entityID, groupID };
+        const range = getPpmShiftRange(entitiesList, lastSelectedEntityDetails, target, isHidden);
+        if (range.length > 0) {
+          if (getIsEntitySelected(entityID)) handleEntitySelection(range, false, "force-remove");
+          else {
+            handleEntitySelection(range, false, "force-add");
+            // Следующий Shift-клик и стрелки — от нажатой строки, а не от последней добавленной.
+            updateLastSelectedEntityDetails(target);
+            handleActiveEntityChange(target, false);
           }
-        } else if (lastEntityIndex > currentEntityIndex) {
-          for (let i = currentEntityIndex; i <= lastEntityIndex - 1; i++) {
-            const entityDetails = entitiesList[i];
-            if (entityDetails) {
-              handleEntitySelection(entityDetails, false);
-            }
-          }
-        } else {
-          const startIndex = lastEntityIndex + 1;
-          const endIndex = currentEntityIndex;
-          for (let i = startIndex; i <= endIndex; i++) {
-            const entityDetails = entitiesList[i];
-            if (entityDetails) {
-              handleEntitySelection(entityDetails, false);
-            }
-          }
+          return;
         }
-        return;
       }
 
       handleEntitySelection({ entityID, groupID }, false);
     },
-    [disabled, entitiesList, handleEntitySelection, getLastSelectedEntityDetails]
+    [
+      disabled,
+      entitiesList,
+      handleActiveEntityChange,
+      handleEntitySelection,
+      getIsEntitySelected,
+      getLastSelectedEntityDetails,
+      isHidden,
+      updateLastSelectedEntityDetails,
+    ]
   );
 
   /**
@@ -293,10 +281,15 @@ export const useMultipleSelect = (props: Props) => {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!e.shiftKey) return;
+      // PPM (линия B): только пока идёт выделение и не из полей, редакторов, диалогов и меню — Shift+↓ при выделении
+      // текста в карточке задачи не должен выделять задачи в списке за ней.
+      if (!multipleSelectStore.isSelectionActive || isPpmSelectionKeyTargetIgnored(e.target)) return;
 
       const activeEntityDetails = getActiveEntityDetails();
-      const nextActiveEntity = getNextActiveEntity();
-      const previousActiveEntity = getPreviousActiveEntity();
+      // Соседи — на момент нажатия: группа могла свернуться после того, как строка стала активной.
+      const { nextEntity: nextActiveEntity, previousEntity: previousActiveEntity } = activeEntityDetails
+        ? getPreviousAndNextEntities(activeEntityDetails)
+        : { nextEntity: null, previousEntity: null };
 
       if (e.key === "ArrowDown" && activeEntityDetails) {
         if (!nextActiveEntity) return;
@@ -312,31 +305,26 @@ export const useMultipleSelect = (props: Props) => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [
-    disabled,
-    getActiveEntityDetails,
-    handleEntitySelection,
-    getLastSelectedEntityDetails,
-    getNextActiveEntity,
-    getPreviousActiveEntity,
-  ]);
+  }, [disabled, getActiveEntityDetails, getPreviousAndNextEntities, handleEntitySelection, multipleSelectStore]);
 
   useEffect(() => {
     if (disabled) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.shiftKey) return;
+      // PPM (линия B): стрелки двигают активную строку только во время выделения и не из полей, диалогов и меню.
+      if (!multipleSelectStore.isSelectionActive || isPpmSelectionKeyTargetIgnored(e.target)) return;
       const activeEntityDetails = getActiveEntityDetails();
       // set active entity id to the first entity
       if (["ArrowUp", "ArrowDown"].includes(e.key) && !activeEntityDetails) {
-        const firstElementDetails = entitiesList[0];
+        const firstElementDetails = entitiesList.find((entity) => !isHidden(entity));
         if (!firstElementDetails) return;
         handleActiveEntityChange(firstElementDetails);
       }
 
       if (e.key === "ArrowDown" && activeEntityDetails) {
         if (!activeEntityDetails) return;
-        const { nextEntity: nextActiveEntity } = getPreviousAndNextEntities(activeEntityDetails.entityID);
+        const { nextEntity: nextActiveEntity } = getPreviousAndNextEntities(activeEntityDetails);
         if (nextActiveEntity) {
           handleActiveEntityChange(nextActiveEntity);
         }
@@ -344,7 +332,7 @@ export const useMultipleSelect = (props: Props) => {
 
       if (e.key === "ArrowUp" && activeEntityDetails) {
         if (!activeEntityDetails) return;
-        const { previousEntity: previousActiveEntity } = getPreviousAndNextEntities(activeEntityDetails.entityID);
+        const { previousEntity: previousActiveEntity } = getPreviousAndNextEntities(activeEntityDetails);
         if (previousActiveEntity) {
           handleActiveEntityChange(previousActiveEntity);
         }
@@ -356,7 +344,22 @@ export const useMultipleSelect = (props: Props) => {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [disabled, getActiveEntityDetails, entitiesList, groups, getPreviousAndNextEntities, handleActiveEntityChange]);
+  }, [
+    disabled,
+    getActiveEntityDetails,
+    entitiesList,
+    groups,
+    getPreviousAndNextEntities,
+    handleActiveEntityChange,
+    isHidden,
+    multipleSelectStore,
+  ]);
+
+  // PPM (линия B): список закрылся (другая страница, другой вид) — выделение не переезжает на следующий экран.
+  useEffect(() => {
+    if (disabled) return;
+    return () => clearSelection();
+  }, [clearSelection, disabled]);
 
   // clear selection on route change
   // useEffect(() => {
@@ -370,18 +373,26 @@ export const useMultipleSelect = (props: Props) => {
   // }, [clearSelection, router.events]);
 
   // when entities list change, remove entityIds from the selected entities array, which are not present in the new list
+  // PPM (линия B): одним снятием и без «призрачной» активной строки — удалённые, отфильтрованные и ушедшие при
+  // перезагрузке списка задачи не остаются ни в выделении, ни курсором клавиатуры.
   useEffect(() => {
     if (disabled) return;
-    selectedEntityIds.map((entityID) => {
-      const isEntityPresent = entitiesList.find((en) => en?.entityID === entityID);
-      if (!isEntityPresent) {
-        const entityDetails = getEntityDetailsFromEntityID(entityID);
-        if (entityDetails) {
-          handleEntitySelection(entityDetails);
-        }
-      }
-    });
-  }, [disabled, entitiesList, getEntityDetailsFromEntityID, handleEntitySelection, selectedEntityIds]);
+    const missing = getPpmMissingSelection(selectedEntityIds, entitiesList)
+      .map((entityID) => getEntityDetailsFromEntityID(entityID))
+      .filter((entityDetails): entityDetails is TEntityDetails => !!entityDetails);
+    if (missing.length > 0) handleEntitySelection(missing, false, "force-remove");
+    const activeEntityDetails = getActiveEntityDetails();
+    if (activeEntityDetails && !entitiesList.some((entity) => entity.entityID === activeEntityDetails.entityID))
+      handleActiveEntityChange(null, false);
+  }, [
+    disabled,
+    entitiesList,
+    getActiveEntityDetails,
+    getEntityDetailsFromEntityID,
+    handleActiveEntityChange,
+    handleEntitySelection,
+    selectedEntityIds,
+  ]);
 
   /**
    * @description helper functions for selection
@@ -395,6 +406,7 @@ export const useMultipleSelect = (props: Props) => {
       handleGroupClick,
       isGroupSelected,
       isSelectionDisabled: disabled,
+      isSelectionActive,
     }),
     [
       clearSelection,
@@ -404,6 +416,7 @@ export const useMultipleSelect = (props: Props) => {
       handleEntityClick,
       handleGroupClick,
       isGroupSelected,
+      isSelectionActive,
     ]
   );
 

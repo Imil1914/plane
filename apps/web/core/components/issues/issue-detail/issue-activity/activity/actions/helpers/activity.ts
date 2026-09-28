@@ -5,6 +5,7 @@
  */
 
 import type { TIssueActivity } from "@plane/types";
+import type { TPpmTranslationKey } from "@ppm/brand";
 
 export const getRelationActivityContent = (activity: TIssueActivity | undefined): string | undefined => {
   if (!activity) return;
@@ -26,5 +27,22 @@ export const getRelationActivityContent = (activity: TIssueActivity | undefined)
       return activity.old_value === "" ? `marked that this work item relates to ` : `removed the relation from `;
   }
 
+  return;
+};
+
+/** The PPM sentence for a relation change (the related work item is filled in as {value}). */
+export const getPpmRelationActivityPhrase = (activity: TIssueActivity | undefined): TPpmTranslationKey | undefined => {
+  if (!activity) return;
+  const added = activity.old_value === "";
+  switch (activity.field) {
+    case "blocking":
+      return added ? "ui.activity.blocking_added" : "ui.activity.blocking_removed";
+    case "blocked_by":
+      return added ? "ui.activity.blocked_by_added" : "ui.activity.blocked_by_removed";
+    case "duplicate":
+      return added ? "ui.activity.duplicate_added" : "ui.activity.duplicate_removed";
+    case "relates_to":
+      return added ? "ui.activity.relates_to_added" : "ui.activity.relates_to_removed";
+  }
   return;
 };

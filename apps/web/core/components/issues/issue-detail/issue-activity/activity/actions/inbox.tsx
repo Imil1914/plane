@@ -10,11 +10,14 @@ import { IntakeIcon } from "@plane/propel/icons";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
 import { IssueActivityBlockComponent } from "./";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { PpmActivityPhrase } from "./helpers/ppm-activity";
 // icons
 
 type TIssueInboxActivity = { activityId: string; ends: "top" | "bottom" | undefined };
 
 export const IssueInboxActivity = observer(function IssueInboxActivity(props: TIssueInboxActivity) {
+  const isPpmRu = usePpmRu();
   const { activityId, ends } = props;
   // hooks
   const {
@@ -45,7 +48,23 @@ export const IssueInboxActivity = observer(function IssueInboxActivity(props: TI
       activityId={activityId}
       ends={ends}
     >
-      <>{getInboxActivityMessage()}</>
+      {isPpmRu ? (
+        <PpmActivityPhrase
+          phrase={
+            activity.verb === "-1"
+              ? "ui.activity.intake_declined"
+              : activity.verb === "0"
+                ? "ui.activity.intake_snoozed"
+                : activity.verb === "1"
+                  ? "ui.activity.intake_accepted"
+                  : activity.verb === "2"
+                    ? "ui.activity.intake_duplicate"
+                    : "ui.activity.intake_updated"
+          }
+        />
+      ) : (
+        <>{getInboxActivityMessage()}</>
+      )}
     </IssueActivityBlockComponent>
   );
 });

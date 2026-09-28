@@ -20,6 +20,8 @@ import { cn, renderFormattedDate, getDate } from "@plane/utils";
 // hooks
 import { useUserProfile } from "@/hooks/store/user";
 import { useDropdown } from "@/hooks/use-dropdown";
+import { usePpmCalendarLocale } from "@/hooks/use-ppm-calendar-locale";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // components
 import { DropdownButton } from "./buttons";
 // constants
@@ -62,7 +64,7 @@ export const DateDropdown = observer(function DateDropdown(props: Props) {
     maxDate,
     onChange,
     onClose,
-    placeholder = "Date",
+    placeholder: placeholderProp,
     placement,
     showTooltip = false,
     tabIndex,
@@ -76,8 +78,10 @@ export const DateDropdown = observer(function DateDropdown(props: Props) {
   // refs
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   // hooks
-  const { data } = useUserProfile();
-  const startOfWeek = data?.start_of_the_week;
+  const { startOfTheWeek: startOfWeek } = useUserProfile();
+  const calendarLocale = usePpmCalendarLocale();
+  const ppmText = usePpmText();
+  const placeholder = placeholderProp ?? ppmText("ui.date.placeholder", "Date");
   // popper-js refs
   const [referenceElement, setReferenceElement] = useState<HTMLButtonElement | null>(null);
   const [popperElement, setPopperElement] = useState<HTMLDivElement | null>(null);
@@ -139,7 +143,7 @@ export const DateDropdown = observer(function DateDropdown(props: Props) {
         className={buttonClassName}
         isActive={isOpen}
         tooltipHeading={placeholder}
-        tooltipContent={value ? renderFormattedDate(value, formatToken) : "None"}
+        tooltipContent={value ? renderFormattedDate(value, formatToken) : ppmText("ui.date.not_set", "None")}
         showTooltip={showTooltip}
         variant={buttonVariant}
         renderToolTipByDefault={renderByDefault}
@@ -205,6 +209,7 @@ export const DateDropdown = observer(function DateDropdown(props: Props) {
                 mode="single"
                 fixedWeeks
                 weekStartsOn={startOfWeek}
+                {...calendarLocale}
               />
             </div>
           </Combobox.Options>,

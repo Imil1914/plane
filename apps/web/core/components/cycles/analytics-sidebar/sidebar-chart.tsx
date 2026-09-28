@@ -80,6 +80,7 @@ export const SidebarChart = observer(function SidebarChart(props: ProgressChartP
                 distribution={completionChartDistributionData}
                 totalIssues={estimateType === "points" ? totalEstimatePoints : totalIssues}
                 plotTitle={estimateType === "points" ? t("points") : t("work_items")}
+                isCompleted={cycleDetails?.status?.toLowerCase() === "completed"}
                 currentLabel={
                   isPpmShell
                     ? ppmT(estimateType === "points" ? "cycle.chart_current_points" : "cycle.chart_current_work_items")

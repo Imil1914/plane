@@ -10,10 +10,13 @@ import { AlignLeft } from "lucide-react";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
 import { IssueActivityBlockComponent, IssueLink } from "./";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { PpmActivityPhrase } from "./helpers/ppm-activity";
 
 type TIssueDescriptionActivity = { activityId: string; showIssue?: boolean; ends: "top" | "bottom" | undefined };
 
 export const IssueDescriptionActivity = observer(function IssueDescriptionActivity(props: TIssueDescriptionActivity) {
+  const isPpmRu = usePpmRu();
   const { activityId, showIssue = true, ends } = props;
   // hooks
   const {
@@ -29,11 +32,18 @@ export const IssueDescriptionActivity = observer(function IssueDescriptionActivi
       activityId={activityId}
       ends={ends}
     >
-      <>
-        updated the description
-        {showIssue ? ` of ` : ``}
-        {showIssue && <IssueLink activityId={activityId} />}.
-      </>
+      {isPpmRu ? (
+        <PpmActivityPhrase
+          phrase="ui.activity.description"
+          issue={showIssue ? <IssueLink activityId={activityId} /> : undefined}
+        />
+      ) : (
+        <>
+          updated the description
+          {showIssue ? ` of ` : ``}
+          {showIssue && <IssueLink activityId={activityId} />}.
+        </>
+      )}
     </IssueActivityBlockComponent>
   );
 });

@@ -9,6 +9,7 @@ import Link from "next/link";
 import type { TPageNavigationTabs } from "@plane/types";
 // helpers
 import { cn } from "@plane/utils";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type TPageTabNavigation = {
   workspaceSlug: string;
@@ -32,8 +33,16 @@ const pageTabs: { key: TPageNavigationTabs; label: string }[] = [
   },
 ];
 
+// PPM names of the tabs (the labels above stay the upstream fallback).
+const PAGE_TAB_LABELS = {
+  public: "ui.page.tab_public",
+  private: "ui.page.tab_private",
+  archived: "ui.page.tab_archived",
+} as const;
+
 export function PageTabNavigation(props: TPageTabNavigation) {
   const { workspaceSlug, projectId, pageType } = props;
+  const ppmText = usePpmText();
 
   const handleTabClick = (e: React.MouseEvent<HTMLAnchorElement>, tabKey: TPageNavigationTabs) => {
     if (tabKey === pageType) e.preventDefault();
@@ -53,7 +62,7 @@ export function PageTabNavigation(props: TPageTabNavigation) {
               "text-accent-primary": tab.key === pageType,
             })}
           >
-            {tab.label}
+            {ppmText(PAGE_TAB_LABELS[tab.key], tab.label)}
           </div>
           <div
             className={cn(`w-full rounded-t border-t-2 border-transparent transition-all`, {

@@ -86,6 +86,7 @@ import {
   type TPpmWorkItemsViewQuery,
   type TPpmWorkItemsViewResponse,
 } from "@ppm/canvas";
+import { getCanvasGitProviderLabel } from "@/components/ppm-git/git-provider-labels";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { getPpmStateDisplayName } from "@/lib/ppm-design";
 import { useTranslation } from "@plane/i18n";
@@ -103,6 +104,9 @@ import {
   usePpmCanvasGrammarV2,
 } from "./canvas-grammar";
 import { citationParts, isCitationStale, isExternalHref } from "./citation-format";
+// ── G2.1 C: исполнители — аватарки и выпадающий список (живая карточка, карточка вида задач; инспектор — там же) ──
+import { PpmAssigneePicker, workItemsViewAnchorKey } from "./canvas-assignee-picker";
+// ── /G2.1 C ──
 import { LiveOpenLink, LiveSourceHeader, OwnNodeGlyph } from "./live-card";
 import { CodeBlockCard } from "./code-block";
 import { NoteCardV2 } from "./note-markdown";
@@ -1834,6 +1838,7 @@ function GitReferenceCard({
   shape: TPpmCanvasShape;
 }) {
   const ppmT = usePpmTranslation();
+  const { currentLocale } = useTranslation();
   const projectionContext = useContext(PpmWorkItemProjectionContext);
   const resolved = projectionContext.bindingsByShapeId.get(shape.id);
   const binding: TPpmCanvasGitBinding | undefined =
@@ -1895,7 +1900,8 @@ function GitReferenceCard({
       )}
       <strong className="ppm-canvas-node__vault-title">{display?.title ?? node.title}</strong>
       <span className="ppm-canvas-node__vault-meta">
-        {(display?.provider ?? node.provider).toUpperCase()} · {display?.repository_name ?? node.repository_name}
+        {getCanvasGitProviderLabel(display?.provider ?? node.provider, currentLocale)} ·{" "}
+        {display?.repository_name ?? node.repository_name}
       </span>
       {(workItems.length > 0 || node.work_item_key) && (
         <span className="ppm-canvas-node__vault-meta">
@@ -2373,6 +2379,7 @@ function WorkItemsViewNode({
           items={response?.results ?? []}
           onPatch={patchSource}
           options={response?.work_item_options ?? projectionContext.options}
+          viewId={shape.id}
         />
       ) : (
         <div className="ppm-work-items-view__groups" data-layout={node.layout}>
@@ -2425,6 +2432,7 @@ function WorkItemsViewNode({
                     }}
                     onPatch={patchSource}
                     options={response?.work_item_options ?? projectionContext.options}
+                    viewId={shape.id}
                   />
                 ))}
               </div>
@@ -2470,6 +2478,7 @@ function WorkItemsList({
   items,
   onPatch,
   options,
+  viewId,
 }: {
   busyIds: ReadonlySet<string>;
   canEdit: boolean;
@@ -2480,6 +2489,7 @@ function WorkItemsList({
     optimistic?: TPpmWorkItemProjection
   ) => Promise<void>;
   options: TPpmWorkItemEditOptions;
+  viewId: string;
 }) {
   return (
     <div className="ppm-work-items-view__list">
@@ -2494,6 +2504,7 @@ function WorkItemsList({
           onDragStart={() => undefined}
           onPatch={onPatch}
           options={options}
+          viewId={viewId}
         />
       ))}
     </div>
@@ -2509,6 +2520,7 @@ function WorkItemViewCard({
   onDragStart,
   onPatch,
   options,
+  viewId,
 }: {
   busy: boolean;
   canEdit: boolean;
@@ -2522,6 +2534,8 @@ function WorkItemViewCard({
     optimistic?: TPpmWorkItemProjection
   ) => Promise<void>;
   options: TPpmWorkItemEditOptions;
+  /** id узла «Доски задач» — в ключе кнопки исполнителей (передача фокуса только внутри своего узла). */
+  viewId: string;
 }) {
   const ppmT = usePpmTranslation();
   const editable = canEdit && item.capabilities.update && !busy && item.display.source_status === "active";
@@ -2578,23 +2592,19 @@ function WorkItemViewCard({
           value={item.display.due_date ?? ""}
           onChange={(event) => void onPatch(item, { due_date: event.currentTarget.value || null })}
         />
-        <select
-          multiple
-          aria-label={ppmT("canvas.work_item_assignees")}
-          disabled={!editable}
-          value={item.display.assignees.map((assignee) => assignee.id)}
-          onChange={(event) =>
-            void onPatch(item, {
-              assignee_ids: [...event.currentTarget.selectedOptions].map((option) => option.value),
-            })
-          }
-        >
-          {options.assignees.map((assignee) => (
-            <option key={assignee.id} value={assignee.id}>
-              {assignee.display_name}
-            </option>
-          ))}
-        </select>
+        {/* G2.1 C: аватарки и выпадающий список вместо раскрытого нативного множественного списка */}
+        <div className="ppm-work-items-view-card__assignees">
+          <PpmAssigneePicker
+            // Карточку пересоздают при переносе между колонками (группировка по исполнителю — после каждой правки
+            // исполнителей): фокус переходит к кнопке той же задачи в этом же узле на новом месте, а не в body.
+            anchorKey={workItemsViewAnchorKey(viewId, item.identity.entity_id)}
+            assignees={item.display.assignees}
+            busy={busy}
+            canEdit={canEdit && item.capabilities.update && item.display.source_status === "active"}
+            options={options.assignees}
+            onChange={(assignee_ids) => void onPatch(item, { assignee_ids })}
+          />
+        </div>
       </div>
     </div>
   );
@@ -2704,7 +2714,6 @@ function WorkItemProjectionCard({
     source.capabilities.update &&
     Boolean(source.source_version) &&
     !projectionContext.pendingWorkItemIds.has(binding.entity_id);
-  const assigneeIds = display.assignees.map((assignee) => assignee.id);
   // ── AF2.2 M: «Светофор» — выделение только под v2 и при включённом переключателе ──
   const traffic = grammarV2 && livingMap.trafficLight ? livingMap.facts.get(binding.entity_id) : undefined;
   const trafficState = traffic && traffic.traffic !== "none" ? traffic.traffic : undefined;
@@ -2799,27 +2808,17 @@ function WorkItemProjectionCard({
               onPointerDown={stopEventPropagation}
             />
           </label>
+          {/* G2.1 C: аватарки и выпадающий список вместо раскрытого нативного множественного списка (canvas-assignee-
+              picker.tsx); пока идёт сохранение, список открывается, флажки ждут ответа */}
           <label className="ppm-work-item-card__assignees">
             <span>{ppmT("canvas.work_item_assignees")}</span>
-            <select
-              multiple
-              aria-label={ppmT("canvas.work_item_assignees")}
-              disabled={!canUpdate}
-              value={assigneeIds}
-              onChange={(event) =>
-                projectionContext.onUpdate(shape.id, binding, {
-                  assignee_ids: [...event.currentTarget.selectedOptions].map((option) => option.value),
-                })
-              }
-              onKeyDown={stopEventPropagation}
-              onPointerDown={stopEventPropagation}
-            >
-              {projectionContext.options.assignees.map((assignee) => (
-                <option key={assignee.id} value={assignee.id}>
-                  {assignee.display_name}
-                </option>
-              ))}
-            </select>
+            <PpmAssigneePicker
+              assignees={display.assignees}
+              busy={projectionContext.pendingWorkItemIds.has(binding.entity_id)}
+              canEdit={projectionContext.canEdit && source.capabilities.update && Boolean(source.source_version)}
+              options={projectionContext.options.assignees}
+              onChange={(assignee_ids) => projectionContext.onUpdate(shape.id, binding, { assignee_ids })}
+            />
           </label>
         </div>
       ) : (

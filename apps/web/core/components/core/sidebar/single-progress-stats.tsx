@@ -5,6 +5,9 @@
  */
 
 import React from "react";
+import { isPpmShellEnabled } from "@ppm/brand";
+// hooks
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type TSingleProgressStatsProps = {
   title: any;
@@ -14,7 +17,11 @@ type TSingleProgressStatsProps = {
   selected?: boolean;
 };
 
+const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+
 export function SingleProgressStats({ title, completed, total, onClick, selected = false }: TSingleProgressStatsProps) {
+  // PPM line S4: «0% из 1» in the Russian interface (upstream "of N" without the PPM shell)
+  const ppmT = usePpmTranslation();
   return (
     <div
       className={`flex w-full items-center justify-between gap-4 rounded-xs p-1 text-11 ${
@@ -29,7 +36,7 @@ export function SingleProgressStats({ title, completed, total, onClick, selected
             {isNaN(Math.round((completed / total) * 100)) ? "0" : Math.round((completed / total) * 100)}%
           </span>
         </div>
-        <span>of {total}</span>
+        <span>{isPpmShell ? ppmT("stats.of_total").replace("{total}", String(total)) : `of ${total}`}</span>
       </div>
     </div>
   );

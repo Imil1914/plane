@@ -11,6 +11,7 @@ import { Controller } from "react-hook-form";
 import { ETabIndices, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { ParentPropertyIcon } from "@plane/propel/icons";
+import { Tooltip } from "@plane/propel/tooltip";
 // types
 import type { ISearchIssueResponse, TIssue } from "@plane/types";
 // ui
@@ -32,6 +33,8 @@ import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmCount, usePpmRu } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type TIssueDefaultPropertiesProps = {
   control: Control<TIssue>;
@@ -48,6 +51,7 @@ type TIssueDefaultPropertiesProps = {
 };
 
 export const IssueDefaultProperties = observer(function IssueDefaultProperties(props: TIssueDefaultPropertiesProps) {
+  const isPpmRu = usePpmRu();
   const {
     control,
     id,
@@ -65,6 +69,10 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
   const [parentIssueListModalOpen, setParentIssueListModalOpen] = useState(false);
   // store hooks
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
+  const ppmCount = usePpmCount();
+  // PPM: in the Russian interface every property button of the dialog explains itself on hover.
+  const showPropertyTooltip = isPpmRu;
   const { areEstimateEnabledByProjectId } = useProjectEstimates();
   const { getProjectById } = useProject();
   const { isMobile } = usePlatformOS();
@@ -100,6 +108,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
               buttonVariant="border-with-text"
               tabIndex={getIndex("state_id")}
               isForWorkItemCreation={!id}
+              showTooltip={showPropertyTooltip}
             />
           </div>
         )}
@@ -117,6 +126,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
               }}
               buttonVariant="border-with-text"
               tabIndex={getIndex("priority")}
+              showTooltip={showPropertyTooltip}
             />
           </div>
         )}
@@ -138,6 +148,14 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
               placeholder={t("assignees")}
               multiple
               tabIndex={getIndex("assignee_ids")}
+              showTooltip={showPropertyTooltip}
+              tooltipContent={
+                isPpmRu
+                  ? value?.length
+                    ? ppmCount("ui.count.assignees", value.length)
+                    : ppmT("ui.property.no_assignees")
+                  : undefined
+              }
             />
           </div>
         )}
@@ -175,6 +193,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
               maxDate={maxDate ?? undefined}
               placeholder={t("start_date")}
               tabIndex={getIndex("start_date")}
+              showTooltip={showPropertyTooltip}
             />
           </div>
         )}
@@ -194,6 +213,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
               minDate={minDate ?? undefined}
               placeholder={t("due_date")}
               tabIndex={getIndex("target_date")}
+              showTooltip={showPropertyTooltip}
             />
           </div>
         )}
@@ -214,6 +234,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
                 value={value}
                 buttonVariant="border-with-text"
                 tabIndex={getIndex("cycle_id")}
+                showTooltip={showPropertyTooltip}
               />
             </div>
           )}
@@ -237,6 +258,8 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
                 tabIndex={getIndex("module_ids")}
                 multiple
                 showCount
+                showTooltip={showPropertyTooltip}
+                tooltipContent={showPropertyTooltip ? ppmT("ui.property.module_hint") : undefined}
               />
             </div>
           )}
@@ -258,6 +281,7 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
                 buttonVariant="border-with-text"
                 tabIndex={getIndex("estimate_point")}
                 placeholder={t("estimate")}
+                showTooltip={showPropertyTooltip}
               />
             </div>
           )}
@@ -309,14 +333,21 @@ export const IssueDefaultProperties = observer(function IssueDefaultProperties(p
             </>
           </CustomMenu>
         ) : (
-          <button
-            type="button"
-            className="flex h-full cursor-pointer items-center justify-between gap-1 rounded-sm border-[0.5px] border-strong px-2 py-0.5 text-caption-sm-regular hover:bg-layer-1"
-            onClick={() => setParentIssueListModalOpen(true)}
+          <Tooltip
+            tooltipContent={ppmT("ui.property.parent_hint")}
+            disabled={!showPropertyTooltip}
+            isMobile={isMobile}
+            renderByDefault={false}
           >
-            <ParentPropertyIcon className="h-3 w-3 flex-shrink-0" />
-            <span className="whitespace-nowrap">{t("add_parent")}</span>
-          </button>
+            <button
+              type="button"
+              className="flex h-full cursor-pointer items-center justify-between gap-1 rounded-sm border-[0.5px] border-strong px-2 py-0.5 text-caption-sm-regular hover:bg-layer-1"
+              onClick={() => setParentIssueListModalOpen(true)}
+            >
+              <ParentPropertyIcon className="h-3 w-3 flex-shrink-0" />
+              <span className="whitespace-nowrap">{t("add_parent")}</span>
+            </button>
+          </Tooltip>
         )}
       </div>
       <Controller

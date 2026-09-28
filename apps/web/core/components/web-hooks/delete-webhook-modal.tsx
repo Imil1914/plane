@@ -12,6 +12,7 @@ import { AlertModalCore } from "@plane/ui";
 // hooks
 import { useWebhook } from "@/hooks/store/use-webhook";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 interface IDeleteWebhook {
   isOpen: boolean;
@@ -26,6 +27,7 @@ export function DeleteWebhookModal(props: IDeleteWebhook) {
   const router = useAppRouter();
   // store hooks
   const { removeWebhook } = useWebhook();
+  const ppmText = usePpmText();
 
   const { workspaceSlug, webhookId } = useParams();
 
@@ -41,14 +43,14 @@ export function DeleteWebhookModal(props: IDeleteWebhook) {
       router.replace(`/${workspaceSlug}/settings/webhooks/`);
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success!",
-        message: "Webhook deleted successfully.",
+        title: ppmText("ui.toast.success", "Success!"),
+        message: ppmText("ui.toast.webhook_deleted", "Webhook deleted successfully."),
       });
     } catch (_error) {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Webhook could not be deleted. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: ppmText("ui.toast.webhook_delete_failed", "Webhook could not be deleted. Please try again."),
       });
     }
     setIsDeleting(false);
@@ -60,13 +62,16 @@ export function DeleteWebhookModal(props: IDeleteWebhook) {
       handleSubmit={handleDelete}
       isSubmitting={isDeleting}
       isOpen={isOpen}
-      title="Delete webhook"
-      content={
-        <>
-          Are you sure you want to delete this webhook? Future events will not be delivered to this webhook. This action
-          cannot be undone.
-        </>
-      }
+      title={ppmText("ui.confirm.delete_webhook_title", "Delete webhook")}
+      content={ppmText(
+        "ui.confirm.delete_webhook_content",
+        "Are you sure you want to delete this webhook? Future events will not be delivered to this webhook. This action cannot be undone."
+      )}
+      primaryButtonText={{
+        loading: ppmText("ui.common.deleting", "Deleting"),
+        default: ppmText("ui.common.delete", "Delete"),
+      }}
+      secondaryButtonText={ppmText("ui.common.cancel", "Cancel")}
     />
   );
 }

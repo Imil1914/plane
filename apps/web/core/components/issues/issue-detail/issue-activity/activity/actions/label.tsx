@@ -11,10 +11,13 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useLabel } from "@/hooks/store/use-label";
 // components
 import { IssueActivityBlockComponent, IssueLink, LabelActivityChip } from "./";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { PpmActivityPhrase } from "./helpers/ppm-activity";
 
 type TIssueLabelActivity = { activityId: string; showIssue?: boolean; ends: "top" | "bottom" | undefined };
 
 export const IssueLabelActivity = observer(function IssueLabelActivity(props: TIssueLabelActivity) {
+  const isPpmRu = usePpmRu();
   const { activityId, showIssue = true, ends } = props;
   // hooks
   const {
@@ -33,15 +36,30 @@ export const IssueLabelActivity = observer(function IssueLabelActivity(props: TI
       activityId={activityId}
       ends={ends}
     >
-      <>
-        {activity.old_value === "" ? `added a new label ` : `removed the label `}
-        <LabelActivityChip
-          name={activity.old_value === "" ? activity.new_value : activity.old_value}
-          color={activity.old_value === "" ? newLabelColor : oldLabelColor}
+      {isPpmRu ? (
+        <PpmActivityPhrase
+          phrase={activity.old_value === "" ? "ui.activity.label_added" : "ui.activity.label_removed"}
+          values={{
+            value: (
+              <LabelActivityChip
+                name={activity.old_value === "" ? activity.new_value : activity.old_value}
+                color={activity.old_value === "" ? newLabelColor : oldLabelColor}
+              />
+            ),
+          }}
+          issue={showIssue ? <IssueLink activityId={activityId} /> : undefined}
         />
-        {showIssue && (activity.old_value === "" ? ` to ` : ` from `)}
-        {showIssue && <IssueLink activityId={activityId} />}
-      </>
+      ) : (
+        <>
+          {activity.old_value === "" ? `added a new label ` : `removed the label `}
+          <LabelActivityChip
+            name={activity.old_value === "" ? activity.new_value : activity.old_value}
+            color={activity.old_value === "" ? newLabelColor : oldLabelColor}
+          />
+          {showIssue && (activity.old_value === "" ? ` to ` : ` from `)}
+          {showIssue && <IssueLink activityId={activityId} />}
+        </>
+      )}
     </IssueActivityBlockComponent>
   );
 });

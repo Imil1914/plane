@@ -19,9 +19,12 @@ import { EUserProjectRoles } from "@plane/types";
 // helpers
 import { getTabIndex } from "@plane/utils";
 // hooks
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
 import { useLabel } from "@/hooks/store/use-label";
 import { useUserPermissions } from "@/hooks/store/user";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 //constants
 export interface IIssueLabelSelect {
   workspaceSlug: string;
@@ -33,8 +36,10 @@ export interface IIssueLabelSelect {
 }
 
 export const IssueLabelSelect = observer(function IssueLabelSelect(props: IIssueLabelSelect) {
+  const isPpmRu = usePpmRu();
   const { workspaceSlug, projectId, issueId, values, onSelect, onAddLabel } = props;
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
   // store hooks
   const { isMobile } = usePlatformOS();
   const { fetchProjectLabels, getProjectLabels } = useLabel();
@@ -200,10 +205,16 @@ export const IssueLabelSelect = observer(function IssueLabelSelect(props: IIssue
                   className={`text-left text-secondary ${query.length ? "cursor-pointer" : "cursor-default"}`}
                 >
                   {query.length ? (
-                    <>
-                      {/* TODO: Translate here */}+ Add <span className="text-primary">&quot;{query}&quot;</span> to
-                      labels
-                    </>
+                    isPpmRu ? (
+                      <PpmTemplateText
+                        template={ppmT("ui.label.add_query")}
+                        values={{ query: <span className="text-primary">{query}</span> }}
+                      />
+                    ) : (
+                      <>
+                        + Add <span className="text-primary">&quot;{query}&quot;</span> to labels
+                      </>
+                    )
                   ) : (
                     t("label.create.type")
                   )}

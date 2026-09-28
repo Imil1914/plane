@@ -13,6 +13,7 @@ import { StateGroupIcon } from "@plane/propel/icons";
 import { isPpmShellEnabled } from "@ppm/brand";
 // components
 import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/filters";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   appliedFilters: string[] | null;
@@ -22,6 +23,7 @@ type Props = {
 
 export const FilterStateGroup = observer(function FilterStateGroup(props: Props) {
   const { appliedFilters, handleUpdate, searchQuery } = props;
+  const ppmText = usePpmText();
   const { t } = useTranslation();
   const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
@@ -30,7 +32,12 @@ export const FilterStateGroup = observer(function FilterStateGroup(props: Props)
 
   const appliedFiltersCount = appliedFilters?.length ?? 0;
 
-  const filteredOptions = Object.values(STATE_GROUPS).filter((s) => s.key.includes(searchQuery.toLowerCase()));
+  // Options show the translated group name under the PPM shell: search by it as well as by the key.
+  const filteredOptions = Object.values(STATE_GROUPS).filter((s) =>
+    `${s.key} ${isPpmShell ? t(`workspace_projects.state.${s.key}`) : s.label}`
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase())
+  );
 
   const handleViewToggle = () => {
     if (!filteredOptions) return;
@@ -42,7 +49,7 @@ export const FilterStateGroup = observer(function FilterStateGroup(props: Props)
   return (
     <>
       <FilterHeader
-        title={`State group${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
+        title={`${ppmText("ui.filter.state_group_title", "State group")}${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
         isPreviewEnabled={previewEnabled}
         handleIsPreviewEnabled={() => setPreviewEnabled(!previewEnabled)}
       />
@@ -65,12 +72,14 @@ export const FilterStateGroup = observer(function FilterStateGroup(props: Props)
                   className="ml-8 text-11 font-medium text-accent-primary"
                   onClick={handleViewToggle}
                 >
-                  {itemsToRender === filteredOptions.length ? "View less" : "View all"}
+                  {itemsToRender === filteredOptions.length
+                    ? ppmText("ui.common.view_less", "View less")
+                    : ppmText("ui.common.view_all", "View all")}
                 </button>
               )}
             </>
           ) : (
-            <p className="text-11 text-placeholder italic">No matches found</p>
+            <p className="text-11 text-placeholder italic">{ppmText("ui.common.no_matches", "No matches found")}</p>
           )}
         </div>
       )}

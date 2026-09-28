@@ -10,6 +10,9 @@ import { Command } from "cmdk";
 import { START_OF_THE_WEEK_OPTIONS } from "@plane/constants";
 import type { EStartOfTheWeek } from "@plane/types";
 // local imports
+import { useTranslation } from "@plane/i18n";
+import { getPpmWeekdayName } from "@/components/ppm-shell/week-start";
+import { usePpmRu } from "@/hooks/use-ppm-text";
 import { PowerKModalCommandItem } from "../../modal/command-item";
 
 type Props = {
@@ -17,12 +20,18 @@ type Props = {
 };
 
 export function PowerKPreferencesStartOfWeekMenu(props: Props) {
+  const isPpmRu = usePpmRu();
   const { onSelect } = props;
+  const { currentLocale } = useTranslation();
 
   return (
     <Command.Group>
       {START_OF_THE_WEEK_OPTIONS.map((day) => (
-        <PowerKModalCommandItem key={day.value} onSelect={() => onSelect(day.value)} label={day.label} />
+        <PowerKModalCommandItem
+          key={day.value}
+          onSelect={() => onSelect(day.value)}
+          label={(isPpmRu && getPpmWeekdayName(day.value, currentLocale)) || day.label}
+        />
       ))}
     </Command.Group>
   );

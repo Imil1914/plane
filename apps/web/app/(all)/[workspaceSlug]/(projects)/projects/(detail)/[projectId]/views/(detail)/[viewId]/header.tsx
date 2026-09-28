@@ -39,8 +39,10 @@ import { useAppRouter } from "@/hooks/use-app-router";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export const ProjectViewIssuesHeader = observer(function ProjectViewIssuesHeader() {
+  const ppmText = usePpmText();
   // refs
   const parentRef = useRef(null);
   // router
@@ -161,7 +163,7 @@ export const ProjectViewIssuesHeader = observer(function ProjectViewIssuesHeader
 
         {viewDetails?.access === EViewAccess.PRIVATE ? (
           <div className="cursor-default text-tertiary">
-            <Tooltip tooltipContent={"Private"}>
+            <Tooltip tooltipContent={ppmText("ui.page.private", "Private")}>
               <LockIcon className="h-4 w-4" />
             </Tooltip>
           </div>
@@ -186,7 +188,7 @@ export const ProjectViewIssuesHeader = observer(function ProjectViewIssuesHeader
           )}
           {viewId && <WorkItemFiltersToggle entityType={EIssuesStoreType.PROJECT_VIEW} entityId={viewId} />}
           {!viewDetails.is_locked && (
-            <FiltersDropdown title="Display" placement="bottom-end">
+            <FiltersDropdown title={ppmText("ui.display.title", "Display")} placement="bottom-end">
               <DisplayFiltersSelection
                 layoutDisplayFiltersOptions={
                   activeLayout ? ISSUE_DISPLAY_FILTERS_BY_PAGE.issues.layoutOptions[activeLayout] : undefined
@@ -210,7 +212,7 @@ export const ProjectViewIssuesHeader = observer(function ProjectViewIssuesHeader
             }}
             data-ph-element={WORK_ITEM_TRACKER_ELEMENTS.HEADER_ADD_BUTTON.PROJECT_VIEW}
           >
-            Add work item
+            {ppmText("ui.display.add_task", "Add work item")}
           </Button>
         )}
         <div className="hidden md:block">

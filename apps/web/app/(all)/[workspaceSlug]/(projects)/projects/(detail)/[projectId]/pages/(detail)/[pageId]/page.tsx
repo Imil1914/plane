@@ -33,6 +33,7 @@ import { WorkspaceService } from "@/services/workspace.service";
 // services
 import { ProjectPageService, ProjectPageVersionService } from "@/services/page";
 import type { Route } from "./+types/page";
+import { usePpmText } from "@/hooks/use-ppm-text";
 const workspaceService = new WorkspaceService();
 const projectPageService = new ProjectPageService();
 const projectPageVersionService = new ProjectPageVersionService();
@@ -40,6 +41,7 @@ const projectPageVersionService = new ProjectPageVersionService();
 const storeType = EPageStoreType.PROJECT;
 
 function PageDetailsPage({ params }: Route.ComponentProps) {
+  const ppmText = usePpmText();
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId, pageId } = params;
@@ -161,15 +163,20 @@ function PageDetailsPage({ params }: Route.ComponentProps) {
   if (pageDetailsError || !canCurrentUserAccessPage)
     return (
       <div className="flex h-full w-full flex-col items-center justify-center">
-        <h3 className="text-center text-16 font-semibold">Page not found</h3>
+        <h3 className="text-center text-16 font-semibold">
+          {ppmText("ui.empty.page_missing_title", "Page not found")}
+        </h3>
         <p className="mt-3 text-center text-13 text-secondary">
-          The page you are trying to access doesn{"'"}t exist or you don{"'"}t have permission to view it.
+          {ppmText(
+            "ui.empty.page_missing",
+            "The page you are trying to access doesn't exist or you don't have permission to view it."
+          )}
         </p>
         <Link
           href={`/${workspaceSlug}/projects/${projectId}/pages`}
           className={cn(getButtonStyling("secondary", "base"), "mt-5")}
         >
-          View other Pages
+          {ppmText("ui.empty.page_missing_action", "View other Pages")}
         </Link>
       </div>
     );

@@ -13,8 +13,13 @@ import { Button } from "@plane/propel/button";
 import { AuthService } from "@plane/services";
 import { Input, Spinner, PasswordStrengthIndicator } from "@plane/ui";
 import { getPasswordStrength } from "@plane/utils";
+// helpers
+import { IS_PPM_SHELL_ENABLED, useAuthLanguage } from "@/helpers/ppm-auth-language";
 // types
 import { EAuthModes, EAuthSteps } from "@/types/auth";
+// local imports
+import { PasswordFieldHints, usePasswordFieldHints } from "./password-field-hints";
+import { PpmPasswordStrengthIndicator } from "./password-strength";
 
 type Props = {
   email: string;
@@ -53,6 +58,9 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPasswordInputFocused, setIsPasswordInputFocused] = useState(false);
   const [isRetryPasswordInputFocused, setIsRetryPasswordInputFocused] = useState(false);
+  // PPM line L: the interface language and the Caps Lock / Russian layout / edge-space hints
+  const { t } = useAuthLanguage();
+  const passwordHints = usePasswordFieldHints("space-password-hints", IS_PPM_SHELL_ENABLED);
 
   const handleShowPassword = (key: keyof typeof showPassword) =>
     setShowPassword((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -71,11 +79,15 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
     handleAuthStep(EAuthSteps.UNIQUE_CODE);
   };
 
-  const passwordSupport = passwordFormData.password.length > 0 &&
+  const passwordSupport =
+    passwordFormData.password.length > 0 &&
     mode === EAuthModes.SIGN_UP &&
-    getPasswordStrength(passwordFormData.password) != E_PASSWORD_STRENGTH.STRENGTH_VALID && (
+    getPasswordStrength(passwordFormData.password) != E_PASSWORD_STRENGTH.STRENGTH_VALID &&
+    (IS_PPM_SHELL_ENABLED ? (
+      <PpmPasswordStrengthIndicator password={passwordFormData.password} isFocused={isPasswordInputFocused} t={t} />
+    ) : (
       <PasswordStrengthIndicator password={passwordFormData.password} isFocused={isPasswordInputFocused} />
-    );
+    ));
 
   const isButtonDisabled = useMemo(
     () =>
@@ -123,7 +135,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
       <input type="hidden" value={nextPath} name="next_path" />
       <div className="space-y-1">
         <label className="text-13 font-medium text-tertiary" htmlFor="email">
-          Email
+          {IS_PPM_SHELL_ENABLED ? t("auth.email") : "Email"}
         </label>
         <div className={`relative flex items-center rounded-md border border-subtle bg-surface-1`}>
           <Input
@@ -132,7 +144,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
             type="email"
             value={passwordFormData.email}
             onChange={(e) => handleFormChange("email", e.target.value)}
-            placeholder="name@company.com"
+            placeholder={IS_PPM_SHELL_ENABLED ? t("auth.email_placeholder") : "name@company.com"}
             className={`h-10 w-full border-0 disable-autofill-style placeholder:text-placeholder`}
             disabled
           />
@@ -147,7 +159,11 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
 
       <div className="space-y-1">
         <label className="text-13 font-medium text-tertiary" htmlFor="password">
-          {mode === EAuthModes.SIGN_IN ? "Password" : "Set a password"}
+          {IS_PPM_SHELL_ENABLED
+            ? t(mode === EAuthModes.SIGN_IN ? "auth.password" : "auth.set_password")
+            : mode === EAuthModes.SIGN_IN
+              ? "Password"
+              : "Set a password"}
         </label>
         <div className="relative flex items-center rounded-md bg-surface-1">
           <Input
@@ -155,12 +171,16 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
             name="password"
             value={passwordFormData.password}
             onChange={(e) => handleFormChange("password", e.target.value)}
-            placeholder="Enter password"
+            placeholder={IS_PPM_SHELL_ENABLED ? t("auth.password_placeholder") : "Enter password"}
             className="h-10 w-full border border-subtle !bg-surface-1 pr-12 disable-autofill-style placeholder:text-placeholder"
             onFocus={() => setIsPasswordInputFocused(true)}
-            onBlur={() => setIsPasswordInputFocused(false)}
+            onBlur={() => {
+              setIsPasswordInputFocused(false);
+              passwordHints.resetCapsLock();
+            }}
             autoComplete="off"
             autoFocus
+            {...passwordHints.inputProps}
           />
           {showPassword?.password ? (
             <EyeOff
@@ -174,13 +194,21 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
             />
           )}
         </div>
+        {IS_PPM_SHELL_ENABLED && (
+          <PasswordFieldHints
+            id="space-password-hints"
+            value={passwordFormData.password}
+            isCapsLockOn={passwordHints.isCapsLockOn}
+            t={t}
+          />
+        )}
         {passwordSupport}
       </div>
 
       {mode === EAuthModes.SIGN_UP && (
         <div className="space-y-1">
           <label className="text-13 font-medium text-tertiary" htmlFor="confirm_password">
-            Confirm password
+            {IS_PPM_SHELL_ENABLED ? t("auth.confirm_password") : "Confirm password"}
           </label>
           <div className="relative flex items-center rounded-md bg-surface-1">
             <Input
@@ -188,7 +216,7 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
               name="confirm_password"
               value={passwordFormData.confirm_password}
               onChange={(e) => handleFormChange("confirm_password", e.target.value)}
-              placeholder="Confirm password"
+              placeholder={IS_PPM_SHELL_ENABLED ? t("auth.confirm_password_placeholder") : "Confirm password"}
               className="h-10 w-full border border-subtle !bg-surface-1 pr-12 disable-autofill-style placeholder:text-placeholder"
               onFocus={() => setIsRetryPasswordInputFocused(true)}
               onBlur={() => setIsRetryPasswordInputFocused(false)}
@@ -208,7 +236,11 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
           </div>
           {!!passwordFormData.confirm_password &&
             passwordFormData.password !== passwordFormData.confirm_password &&
-            renderPasswordMatchError && <span className="text-13 text-danger-primary">Passwords don{"'"}t match</span>}
+            renderPasswordMatchError && (
+              <span className="text-13 text-danger-primary">
+                {IS_PPM_SHELL_ENABLED ? t("auth.password_mismatch") : "Passwords don't match"}
+              </span>
+            )}
         </div>
       )}
 
@@ -219,7 +251,13 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
               {isSubmitting ? (
                 <Spinner height="20px" width="20px" />
               ) : isSMTPConfigured ? (
-                "Continue"
+                IS_PPM_SHELL_ENABLED ? (
+                  t("auth.continue")
+                ) : (
+                  "Continue"
+                )
+              ) : IS_PPM_SHELL_ENABLED ? (
+                t("auth.sign_in")
               ) : (
                 "Go to workspace"
               )}
@@ -232,13 +270,19 @@ export const AuthPasswordForm = observer(function AuthPasswordForm(props: Props)
                 className="w-full"
                 size="xl"
               >
-                Sign in with unique code
+                {IS_PPM_SHELL_ENABLED ? t("auth.sign_in_with_code") : "Sign in with unique code"}
               </Button>
             )}
           </>
         ) : (
           <Button type="submit" variant="primary" className="w-full" size="xl" disabled={isButtonDisabled}>
-            {isSubmitting ? <Spinner height="20px" width="20px" /> : "Create account"}
+            {isSubmitting ? (
+              <Spinner height="20px" width="20px" />
+            ) : IS_PPM_SHELL_ENABLED ? (
+              t("auth.create_account")
+            ) : (
+              "Create account"
+            )}
           </Button>
         )}
       </div>

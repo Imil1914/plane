@@ -14,6 +14,9 @@ import type { IState } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 // hooks
 import { useProjectState } from "@/hooks/store/use-project-state";
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type TStateDeleteModal = {
   isOpen: boolean;
@@ -22,12 +25,15 @@ type TStateDeleteModal = {
 };
 
 export const StateDeleteModal = observer(function StateDeleteModal(props: TStateDeleteModal) {
+  const isPpmRu = usePpmRu();
   const { isOpen, onClose, data } = props;
   // states
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   // router
   const { workspaceSlug } = useParams();
   const { deleteState } = useProjectState();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
 
   const handleClose = () => {
     onClose();
@@ -47,15 +53,17 @@ export const StateDeleteModal = observer(function StateDeleteModal(props: TState
         if (err.status === 400)
           setToast({
             type: TOAST_TYPE.ERROR,
-            title: "Error!",
-            message:
-              "This state contains some work items within it, please move them to some other state to delete this state.",
+            title: ppmText("ui.toast.error", "Error!"),
+            message: ppmText(
+              "ui.toast.state_has_work_items",
+              "This state contains some work items within it, please move them to some other state to delete this state."
+            ),
           });
         else
           setToast({
             type: TOAST_TYPE.ERROR,
-            title: "Error!",
-            message: "State could not be deleted. Please try again.",
+            title: ppmText("ui.toast.error", "Error!"),
+            message: ppmText("ui.toast.state_delete_failed", "State could not be deleted. Please try again."),
           });
       })
       .finally(() => {
@@ -69,13 +77,25 @@ export const StateDeleteModal = observer(function StateDeleteModal(props: TState
       handleSubmit={handleDeletion}
       isSubmitting={isDeleteLoading}
       isOpen={isOpen}
-      title="Delete State"
+      title={ppmText("ui.confirm.delete_state_title", "Delete State")}
       content={
-        <>
-          Are you sure you want to delete state- <span className="font-medium text-primary">{data?.name}</span>? All of
-          the data related to the state will be permanently removed. This action cannot be undone.
-        </>
+        isPpmRu ? (
+          <PpmTemplateText
+            template={ppmT("ui.confirm.delete_state_content")}
+            values={{ name: <span className="font-medium text-primary">{data?.name}</span> }}
+          />
+        ) : (
+          <>
+            Are you sure you want to delete state- <span className="font-medium text-primary">{data?.name}</span>? All
+            of the data related to the state will be permanently removed. This action cannot be undone.
+          </>
+        )
       }
+      primaryButtonText={{
+        loading: ppmText("ui.common.deleting", "Deleting"),
+        default: ppmText("ui.common.delete", "Delete"),
+      }}
+      secondaryButtonText={ppmText("ui.common.cancel", "Cancel")}
     />
   );
 });

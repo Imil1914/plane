@@ -12,12 +12,14 @@ import { EIssuesStoreType } from "@plane/types";
 // hooks
 import { useCommandPalette } from "@/hooks/store/use-command-palette";
 import { useUserPermissions } from "@/hooks/store/user";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export const ProjectViewEmptyState = observer(function ProjectViewEmptyState() {
   // store hooks
   const { toggleCreateIssueModal } = useCommandPalette();
   const { allowPermissions } = useUserPermissions();
 
+  const ppmText = usePpmText();
   // auth
   const isCreatingIssueAllowed = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
@@ -25,14 +27,16 @@ export const ProjectViewEmptyState = observer(function ProjectViewEmptyState() {
   );
 
   return (
-    // TODO: Add translation
     <EmptyStateDetailed
       assetKey="work-item"
-      title="View work items will appear here"
-      description="Work items help you track individual pieces of work. With work items, keep track of what's going on, who is working on it, and what's done."
+      title={ppmText("ui.empty.view_tasks_title", "View work items will appear here")}
+      description={ppmText(
+        "ui.empty.view_tasks_description",
+        "Work items help you track individual pieces of work. With work items, keep track of what's going on, who is working on it, and what's done."
+      )}
       actions={[
         {
-          label: "New work item",
+          label: ppmText("ui.empty.new_task", "New work item"),
           onClick: () => {
             toggleCreateIssueModal(true, EIssuesStoreType.PROJECT_VIEW);
           },

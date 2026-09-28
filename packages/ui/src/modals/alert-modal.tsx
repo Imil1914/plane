@@ -35,6 +35,11 @@ type Props = {
   variant?: TModalVariant;
   width?: EModalWidth;
   customIcon?: React.ReactNode;
+  /**
+   * PPM: which button gets the first focus. "primary" (default, as before) or "secondary" («Cancel») — for dialogs
+   * where an accidental Enter must not confirm, e.g. deleting many work items at once.
+   */
+  initialFocus?: "primary" | "secondary";
 };
 
 const VARIANT_ICONS: Record<TModalVariant, LucideIcon> = {
@@ -70,7 +75,10 @@ export function AlertModalCore(props: Props) {
     variant = "danger",
     width = EModalWidth.XL,
     customIcon,
+    initialFocus = "primary",
   } = props;
+  // Headless UI gives the first focus to the lowest positive tabIndex in the dialog.
+  const isSecondaryFocused = initialFocus === "secondary";
 
   const Icon = VARIANT_ICONS[variant];
 
@@ -93,10 +101,15 @@ export function AlertModalCore(props: Props) {
         </div>
       </div>
       <div className="flex flex-col-reverse gap-2 border-t-[0.5px] border-subtle px-5 py-4 sm:flex-row sm:justify-end">
-        <Button variant="secondary" onClick={handleClose}>
+        <Button variant="secondary" tabIndex={isSecondaryFocused ? 1 : undefined} onClick={handleClose}>
           {secondaryButtonText}
         </Button>
-        <Button variant={BUTTON_VARIANTS[variant]} tabIndex={1} onClick={handleSubmit} loading={isSubmitting}>
+        <Button
+          variant={BUTTON_VARIANTS[variant]}
+          tabIndex={isSecondaryFocused ? undefined : 1}
+          onClick={handleSubmit}
+          loading={isSubmitting}
+        >
           {isSubmitting ? primaryButtonText.loading : primaryButtonText.default}
         </Button>
       </div>

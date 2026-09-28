@@ -9,7 +9,7 @@ import { observer } from "mobx-react";
 import { DATE_AFTER_FILTER_OPTIONS } from "@plane/constants";
 import { CloseIcon } from "@plane/propel/icons";
 // helpers
-import { renderFormattedDate, capitalizeFirstLetter } from "@plane/utils";
+import { usePpmDateFilterName } from "@/components/ppm-shell/date-filter-name";
 // constants
 
 type Props = {
@@ -19,20 +19,21 @@ type Props = {
 
 export const AppliedDateFilters = observer(function AppliedDateFilters(props: Props) {
   const { handleRemove, values } = props;
+  const { presetName, customName } = usePpmDateFilterName();
 
   const getDateLabel = (value: string): string => {
     let dateLabel = "";
 
     const dateDetails = DATE_AFTER_FILTER_OPTIONS.find((d) => d.value === value);
 
-    if (dateDetails) dateLabel = dateDetails.name;
+    if (dateDetails) dateLabel = presetName(dateDetails.value, dateDetails.name);
     else {
       const dateParts = value.split(";");
 
       if (dateParts.length === 2) {
         const [date, time] = dateParts;
 
-        dateLabel = `${capitalizeFirstLetter(time)} ${renderFormattedDate(date)}`;
+        dateLabel = customName(`${date};${time}`);
       }
     }
 

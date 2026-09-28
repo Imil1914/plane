@@ -21,6 +21,7 @@ import { StateDropdown } from "@/components/dropdowns/state/dropdown";
 // hooks
 import { WithDisplayPropertiesHOC } from "@/components/issues/issue-layouts/properties/with-display-properties-HOC";
 import { useProjectState } from "@/hooks/store/use-project-state";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   workspaceSlug: string;
@@ -42,6 +43,7 @@ type Props = {
 export const SubIssuesListItemProperties = observer(function SubIssuesListItemProperties(props: Props) {
   const { workspaceSlug, parentIssueId, issueId, canEdit, updateSubIssue, displayProperties, issue } = props;
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   const { getStateById } = useProjectState();
 
   const handleEventPropagation = (e: SyntheticEvent<HTMLDivElement>) => {
@@ -153,7 +155,7 @@ export const SubIssuesListItemProperties = observer(function SubIssuesListItemPr
             buttonClassName={shouldHighlight ? "text-danger-primary" : ""}
             disabled={!canEdit}
             showTooltip
-            customTooltipHeading="Date Range"
+            customTooltipHeading={ppmText("ui.date.range", "Date Range")}
             renderPlaceholder={false}
             renderInPortal
           />

@@ -10,6 +10,7 @@ import { useOutsideClickDetector } from "@plane/hooks";
 import { IconButton } from "@plane/propel/icon-button";
 import { SearchIcon, CloseIcon } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   searchQuery: string;
@@ -18,6 +19,7 @@ type Props = {
 
 export function PageSearchInput(props: Props) {
   const { searchQuery, updateSearchQuery } = props;
+  const ppmText = usePpmText();
   // states
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   // refs
@@ -64,7 +66,7 @@ export function PageSearchInput(props: Props) {
         <input
           ref={inputRef}
           className="ml-2 w-full max-w-[234px] border-none bg-transparent text-13 text-primary placeholder:text-placeholder focus:outline-none"
-          placeholder="Search pages"
+          placeholder={ppmText("ui.page.search", "Search pages")}
           value={searchQuery}
           onChange={(e) => updateSearchQuery(e.target.value)}
           onKeyDown={handleInputKeyDown}

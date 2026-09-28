@@ -21,6 +21,7 @@ import { ArchiveModuleModal, CreateUpdateModuleModal, DeleteModuleModal } from "
 import { useModule } from "@/hooks/store/use-module";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmText } from "@/hooks/use-ppm-text";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type Props = {
@@ -45,6 +46,7 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
   const { allowPermissions } = useUserPermissions();
 
   const { getModuleById, restoreModule } = useModule();
+  const ppmText = usePpmText();
 
   // derived values
   const moduleDetails = getModuleById(moduleId);
@@ -61,8 +63,8 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
     copyUrlToClipboard(moduleLink).then(() => {
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Link Copied!",
-        message: "Module link copied to clipboard.",
+        title: ppmText("ui.toast.link_copied_title", "Link Copied!"),
+        message: ppmText("ui.module.link_copied", "Module link copied to clipboard."),
       });
     });
   const handleOpenInNewTab = () => window.open(`/${moduleLink}`, "_blank");
@@ -72,15 +74,15 @@ export const ModuleQuickActions = observer(function ModuleQuickActions(props: Pr
       await restoreModule(workspaceSlug, projectId, moduleId);
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Restore success",
-        message: "Your module can be found in project modules.",
+        title: ppmText("ui.toast.restored", "Restore success"),
+        message: ppmText("ui.module.restored", "Your module can be found in project modules."),
       });
       router.push(`/${workspaceSlug}/projects/${projectId}/archives/modules`);
     } catch (_error) {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Module could not be restored. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: ppmText("ui.module.restore_failed", "Module could not be restored. Please try again."),
       });
     }
   };

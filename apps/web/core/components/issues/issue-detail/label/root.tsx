@@ -18,6 +18,7 @@ import { useProjectInbox } from "@/hooks/store/use-project-inbox";
 // ui
 // types
 import { LabelList, IssueLabelSelectRoot } from "./";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // TODO: Fix this import statement, as core should not import from ee
 
 export type TIssueLabel = {
@@ -46,6 +47,7 @@ export const IssueLabel = observer(function IssueLabel(props: TIssueLabel) {
     issueServiceType = EIssueServiceType.ISSUES,
   } = props;
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // hooks
   const { updateIssue } = useIssueDetail(issueServiceType);
   const { createLabel } = useLabel();
@@ -66,7 +68,10 @@ export const IssueLabel = observer(function IssueLabel(props: TIssueLabel) {
           setToast({
             title: t("toast.error"),
             type: TOAST_TYPE.ERROR,
-            message: t("entity.update.failed", { entity: t("issue.label", { count: 1 }) }),
+            message: ppmText(
+              "ui.toast.task_update_failed",
+              t("entity.update.failed", { entity: t("issue.label", { count: 1 }) })
+            ),
           });
         }
       },

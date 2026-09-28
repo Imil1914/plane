@@ -25,6 +25,7 @@ import type { EPageStoreType } from "@/hooks/store";
 import { usePageFlag } from "@/hooks/use-page-flag";
 // store types
 import type { TPageInstance } from "@/store/pages/base-page";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export type TPageActions =
   | "full-screen"
@@ -77,6 +78,7 @@ export const PageActions = observer(function PageActions(props: Props) {
     canCurrentUserMovePage,
   } = page;
   // menu items
+  const ppmText = usePpmText();
   const MENU_ITEMS = useMemo(
     function MENU_ITEMS() {
       const menuItems: (TContextMenuItem & { key: TPageActions })[] = [
@@ -85,7 +87,7 @@ export const PageActions = observer(function PageActions(props: Props) {
           action: () => {
             pageOperations.toggleLock();
           },
-          title: is_locked ? "Unlock" : "Lock",
+          title: is_locked ? ppmText("ui.page.unlock", "Unlock") : ppmText("ui.page.lock", "Lock"),
           icon: is_locked ? LockKeyholeOpen : LockKeyhole,
           shouldRender: canCurrentUserLockPage,
         },
@@ -94,21 +96,24 @@ export const PageActions = observer(function PageActions(props: Props) {
           action: () => {
             pageOperations.toggleAccess();
           },
-          title: access === EPageAccess.PUBLIC ? "Make private" : "Make public",
+          title:
+            access === EPageAccess.PUBLIC
+              ? ppmText("ui.page.make_private", "Make private")
+              : ppmText("ui.page.make_public", "Make public"),
           icon: access === EPageAccess.PUBLIC ? LockIcon : GlobeIcon,
           shouldRender: canCurrentUserChangeAccess && !archived_at,
         },
         {
           key: "open-in-new-tab",
           action: pageOperations.openInNewTab,
-          title: "Open in new tab",
+          title: ppmText("ui.page.open_in_new_tab", "Open in new tab"),
           icon: NewTabIcon,
           shouldRender: true,
         },
         {
           key: "copy-link",
           action: pageOperations.copyLink,
-          title: "Copy link",
+          title: ppmText("ui.page.copy_link", "Copy link"),
           icon: LinkIcon,
           shouldRender: true,
         },
@@ -117,7 +122,7 @@ export const PageActions = observer(function PageActions(props: Props) {
           action: () => {
             pageOperations.duplicate();
           },
-          title: "Make a copy",
+          title: ppmText("ui.page.make_copy", "Make a copy"),
           icon: CopyIcon,
           shouldRender: canCurrentUserDuplicatePage,
         },
@@ -126,7 +131,7 @@ export const PageActions = observer(function PageActions(props: Props) {
           action: () => {
             pageOperations.toggleArchive();
           },
-          title: archived_at ? "Restore" : "Archive",
+          title: archived_at ? ppmText("ui.common.restore", "Restore") : ppmText("ui.common.archive", "Archive"),
           icon: archived_at ? ArchiveRestoreIcon : ArchiveIcon,
           shouldRender: canCurrentUserArchivePage,
         },
@@ -135,14 +140,14 @@ export const PageActions = observer(function PageActions(props: Props) {
           action: () => {
             setDeletePageModal(true);
           },
-          title: "Delete",
+          title: ppmText("ui.common.delete", "Delete"),
           icon: TrashIcon,
           shouldRender: canCurrentUserDeletePage && !!archived_at,
         },
         {
           key: "move",
           action: () => setMovePageModal(true),
-          title: "Move",
+          title: ppmText("ui.page.move", "Move"),
           icon: FileOutput,
           shouldRender: canCurrentUserMovePage && isMovePageEnabled,
         },
@@ -165,6 +170,7 @@ export const PageActions = observer(function PageActions(props: Props) {
       canCurrentUserMovePage,
       isMovePageEnabled,
       pageOperations,
+      ppmText,
     ]
   );
   // arrange options

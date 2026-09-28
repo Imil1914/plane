@@ -11,6 +11,7 @@ import { useTranslation } from "@plane/i18n";
 import type { IIssueDisplayFilterOptions, TIssueGroupByOptions } from "@plane/types";
 // components
 import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/filters";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // constants
 
 type Props = {
@@ -25,6 +26,7 @@ export const FilterSubGroupBy = observer(function FilterSubGroupBy(props: Props)
   const { t } = useTranslation();
 
   const { displayFilters, handleUpdate, subGroupByOptions, ignoreGroupedFilters } = props;
+  const ppmText = usePpmText();
 
   const [previewEnabled, setPreviewEnabled] = useState(true);
 
@@ -34,7 +36,7 @@ export const FilterSubGroupBy = observer(function FilterSubGroupBy(props: Props)
   return (
     <>
       <FilterHeader
-        title="Sub-group by"
+        title={ppmText("ui.display.sub_group_by", "Sub-group by")}
         isPreviewEnabled={previewEnabled}
         handleIsPreviewEnabled={() => setPreviewEnabled(!previewEnabled)}
       />

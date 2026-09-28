@@ -18,6 +18,7 @@ import { CreateUpdateLabelInline } from "./create-update-label-inline";
 import type { ICustomMenuItem } from "./label-block/label-item-block";
 import { LabelItemBlock } from "./label-block/label-item-block";
 import { LabelDndHOC } from "./label-drag-n-drop-HOC";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   label: IIssueLabel;
@@ -48,6 +49,7 @@ export function ProjectSettingLabelItem(props: Props) {
     labelOperationsCallbacks,
     isEditable = false,
   } = props;
+  const ppmText = usePpmText();
   // states
   const [isEditLabelForm, setEditLabelForm] = useState(false);
   // router
@@ -68,7 +70,7 @@ export function ProjectSettingLabelItem(props: Props) {
       CustomIcon: CloseIcon,
       onClick: removeFromGroup,
       isVisible: !!label.parent,
-      text: "Remove from group",
+      text: ppmText("ui.label.remove_from_group", "Remove from group"),
       key: "remove_from_group",
     },
     {
@@ -78,7 +80,7 @@ export function ProjectSettingLabelItem(props: Props) {
         setIsUpdating(true);
       },
       isVisible: true,
-      text: "Edit label",
+      text: ppmText("ui.label.edit", "Edit label"),
       key: "edit_label",
     },
   ];

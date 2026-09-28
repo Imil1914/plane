@@ -13,6 +13,8 @@ import { EIssueServiceType } from "@plane/types";
 import { copyUrlToClipboard } from "@plane/utils";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 export type TRelationIssueOperations = {
   copyLink: (path: string) => void;
@@ -23,10 +25,13 @@ export type TRelationIssueOperations = {
 export const useRelationOperations = (
   issueServiceType: TIssueServiceType = EIssueServiceType.ISSUES
 ): TRelationIssueOperations => {
+  const isPpmRu = usePpmRu();
   const { updateIssue, removeIssue } = useIssueDetail(issueServiceType);
   const { t } = useTranslation();
+  const ppmT = usePpmTranslation();
   // derived values
   const entityName = issueServiceType === EIssueServiceType.ISSUES ? "Work item" : "Epic";
+  const isEpic = issueServiceType !== EIssueServiceType.ISSUES;
 
   const issueOperations: TRelationIssueOperations = useMemo(
     () => ({
@@ -35,7 +40,9 @@ export const useRelationOperations = (
         setToast({
           type: TOAST_TYPE.SUCCESS,
           title: t("common.link_copied"),
-          message: t("entity.link_copied_to_clipboard", { entity: entityName }),
+          message: isPpmRu
+            ? ppmT(isEpic ? "ui.toast.epic_link_copied" : "ui.toast.task_link_copied")
+            : t("entity.link_copied_to_clipboard", { entity: entityName }),
         });
       },
       update: async (workspaceSlug, projectId, issueId, data) => {
@@ -44,13 +51,17 @@ export const useRelationOperations = (
           setToast({
             title: t("toast.success"),
             type: TOAST_TYPE.SUCCESS,
-            message: t("entity.update.success", { entity: entityName }),
+            message: isPpmRu
+              ? ppmT(isEpic ? "ui.toast.epic_updated" : "ui.toast.task_updated")
+              : t("entity.update.success", { entity: entityName }),
           });
         } catch (_error) {
           setToast({
             title: t("toast.error"),
             type: TOAST_TYPE.ERROR,
-            message: t("entity.update.failed", { entity: entityName }),
+            message: isPpmRu
+              ? ppmT(isEpic ? "ui.toast.epic_update_failed" : "ui.toast.task_update_failed")
+              : t("entity.update.failed", { entity: entityName }),
           });
         }
       },
@@ -58,7 +69,7 @@ export const useRelationOperations = (
         return removeIssue(workspaceSlug, projectId, issueId);
       },
     }),
-    [entityName, removeIssue, t, updateIssue]
+    [entityName, isEpic, isPpmRu, ppmT, removeIssue, t, updateIssue]
   );
 
   return issueOperations;

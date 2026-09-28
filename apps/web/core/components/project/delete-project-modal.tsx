@@ -14,7 +14,10 @@ import type { IProject } from "@plane/types";
 import { Input, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type DeleteProjectModal = {
   isOpen: boolean;
@@ -28,9 +31,14 @@ const defaultValues = {
 };
 
 export function DeleteProjectModal(props: DeleteProjectModal) {
+  const isPpmRu = usePpmRu();
   const { isOpen, project, onClose } = props;
   // store hooks
   const { deleteProject } = useProject();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
+  // The typed confirmation follows the interface language («удалить мой проект» in the Russian PPM UI).
+  const confirmPhrase = ppmText("ui.confirm.delete_project_phrase", "delete my project");
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId } = useParams();
@@ -43,7 +51,7 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
     watch,
   } = useForm({ defaultValues });
 
-  const canDelete = watch("projectName") === project?.name && watch("confirmDelete") === "delete my project";
+  const canDelete = watch("projectName") === project?.name && watch("confirmDelete") === confirmPhrase;
 
   const handleClose = () => {
     const timer = setTimeout(() => {
@@ -63,14 +71,14 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
       handleClose();
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success!",
-        message: "Project deleted successfully.",
+        title: ppmText("ui.toast.success", "Success!"),
+        message: ppmText("ui.toast.project_deleted", "Project deleted successfully."),
       });
     } catch (_error) {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Something went wrong. Please try again later.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: ppmText("ui.toast.try_again", "Something went wrong. Please try again later."),
       });
     }
   };
@@ -83,18 +91,39 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
             <AlertTriangle className="h-6 w-6 text-danger-primary" aria-hidden="true" />
           </span>
           <span className="flex items-center justify-start">
-            <h3 className="text-18 font-medium 2xl:text-20">Delete project</h3>
+            <h3 className="text-18 font-medium 2xl:text-20">
+              {ppmText("ui.confirm.delete_project_title", "Delete project")}
+            </h3>
           </span>
         </div>
         <span>
           <p className="text-13 leading-7 text-secondary">
-            Are you sure you want to delete project <span className="font-semibold break-words">{project?.name}</span>?
-            All of the data related to the project will be permanently removed. This action cannot be undone
+            {isPpmRu ? (
+              <PpmTemplateText
+                template={ppmT("ui.confirm.delete_project_content")}
+                values={{ name: <span className="font-semibold break-words">{project?.name}</span> }}
+              />
+            ) : (
+              <>
+                Are you sure you want to delete project{" "}
+                <span className="font-semibold break-words">{project?.name}</span>? All of the data related to the
+                project will be permanently removed. This action cannot be undone
+              </>
+            )}
           </p>
         </span>
         <div className="text-secondary">
           <p className="text-13 break-words">
-            Enter the project name <span className="font-medium text-primary">{project?.name}</span> to continue:
+            {isPpmRu ? (
+              <PpmTemplateText
+                template={ppmT("ui.confirm.delete_project_name_prompt")}
+                values={{ name: <span className="font-medium text-primary">{project?.name}</span> }}
+              />
+            ) : (
+              <>
+                Enter the project name <span className="font-medium text-primary">{project?.name}</span> to continue:
+              </>
+            )}
           </p>
           <Controller
             control={control}
@@ -108,7 +137,7 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
                 onChange={onChange}
                 ref={ref}
                 hasError={Boolean(errors.projectName)}
-                placeholder="Project name"
+                placeholder={ppmText("ui.confirm.delete_project_name_placeholder", "Project name")}
                 className="mt-2 w-full"
                 autoComplete="off"
               />
@@ -117,7 +146,16 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
         </div>
         <div className="text-secondary">
           <p className="text-13">
-            To confirm, type <span className="font-medium text-primary">delete my project</span> below:
+            {isPpmRu ? (
+              <PpmTemplateText
+                template={ppmT("ui.confirm.delete_project_phrase_prompt")}
+                values={{ phrase: <span className="font-medium text-primary">{confirmPhrase}</span> }}
+              />
+            ) : (
+              <>
+                To confirm, type <span className="font-medium text-primary">delete my project</span> below:
+              </>
+            )}
           </p>
           <Controller
             control={control}
@@ -131,7 +169,7 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
                 onChange={onChange}
                 ref={ref}
                 hasError={Boolean(errors.confirmDelete)}
-                placeholder="Enter 'delete my project'"
+                placeholder={ppmText("ui.confirm.delete_project_phrase_placeholder", "Enter 'delete my project'")}
                 className="mt-2 w-full"
                 autoComplete="off"
               />
@@ -140,10 +178,12 @@ export function DeleteProjectModal(props: DeleteProjectModal) {
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" size="lg" onClick={handleClose}>
-            Cancel
+            {ppmText("ui.common.cancel", "Cancel")}
           </Button>
           <Button variant="error-fill" size="lg" type="submit" disabled={!canDelete} loading={isSubmitting}>
-            {isSubmitting ? "Deleting" : "Delete project"}
+            {isSubmitting
+              ? ppmText("ui.common.deleting", "Deleting")
+              : ppmText("ui.confirm.delete_project_action", "Delete project")}
           </Button>
         </div>
       </form>

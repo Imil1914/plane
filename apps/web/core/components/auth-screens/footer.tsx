@@ -7,6 +7,8 @@
 import React from "react";
 import { AccentureLogo, DolbyLogo, SonyLogo, ZerodhaLogo } from "@plane/propel/icons";
 import { isPpmBrandEnabled } from "@ppm/brand";
+// hooks
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 const IS_PPM_BRAND_ENABLED = isPpmBrandEnabled(process.env.PPM_BRAND_ENABLED);
 
@@ -33,12 +35,10 @@ const BRAND_LOGOS: {
 ];
 
 export function AuthFooter() {
+  const ppmT = usePpmTranslation();
+
   if (IS_PPM_BRAND_ENABLED)
-    return (
-      <p className="max-w-xl text-center text-body-sm-regular text-tertiary">
-        PPM соединяет проекты, знания и решения команды в одном рабочем пространстве.
-      </p>
-    );
+    return <p className="max-w-xl text-center text-body-sm-regular text-tertiary">{ppmT("auth.footer_tagline")}</p>;
 
   return (
     <div className="flex flex-col items-center gap-6">

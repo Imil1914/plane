@@ -21,12 +21,14 @@ import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 type TAuthEmailForm = {
   defaultEmail: string;
   onSubmit: (data: IEmailCheckData) => Promise<void>;
+  // The address was edited after a check: the parent drops what it said about the previous address.
+  onEmailChange?: () => void;
 };
 
 const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
 
 export const AuthEmailForm = observer(function AuthEmailForm(props: TAuthEmailForm) {
-  const { onSubmit, defaultEmail } = props;
+  const { onSubmit, defaultEmail, onEmailChange } = props;
   // states
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [email, setEmail] = useState(defaultEmail);
@@ -76,7 +78,10 @@ export const AuthEmailForm = observer(function AuthEmailForm(props: TAuthEmailFo
             name="email"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              onEmailChange?.();
+            }}
             placeholder={IS_PPM_SHELL_ENABLED ? ppmT("auth.email_placeholder") : t("auth.common.email.placeholder")}
             className={`h-10 w-full border-0 disable-autofill-style placeholder:text-placeholder autofill:bg-danger-primary focus:bg-none active:bg-transparent`}
             autoComplete="off"
@@ -87,6 +92,7 @@ export const AuthEmailForm = observer(function AuthEmailForm(props: TAuthEmailFo
               type="button"
               onClick={() => {
                 setEmail("");
+                onEmailChange?.();
                 inputRef.current?.focus();
               }}
               className="absolute right-3 grid size-5 place-items-center"

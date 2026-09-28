@@ -24,6 +24,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 // local imports
 import { WorkItemDetailQuickActions } from "../issue-layouts/quick-action-dropdowns";
 import { IssueSubscription } from "./subscription";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   workspaceSlug: string;
@@ -34,6 +35,7 @@ type Props = {
 export const IssueDetailQuickActions = observer(function IssueDetailQuickActions(props: Props) {
   const { workspaceSlug, projectId, issueId } = props;
   const { t } = useTranslation();
+  const ppmText = usePpmText();
 
   // ref
   const parentRef = useRef<HTMLDivElement>(null);
@@ -102,7 +104,10 @@ export const IssueDetailQuickActions = observer(function IssueDetailQuickActions
       setToast({
         title: t("toast.error"),
         type: TOAST_TYPE.ERROR,
-        message: t("entity.delete.failed", { entity: t("issue.label", { count: 1 }) }),
+        message: ppmText(
+          "ui.toast.task_delete_failed",
+          t("entity.delete.failed", { entity: t("issue.label", { count: 1 }) })
+        ),
       });
     }
   };

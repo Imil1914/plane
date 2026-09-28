@@ -14,6 +14,7 @@ import type { TIssue } from "@plane/types";
 import { ModuleDropdown } from "@/components/dropdowns/module/dropdown";
 // hooks
 import { useIssuesStore } from "@/hooks/use-issue-layout-store";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   issue: TIssue;
@@ -23,6 +24,7 @@ type Props = {
 
 export const SpreadsheetModuleColumn = observer(function SpreadsheetModuleColumn(props: Props) {
   const { issue, disabled, onClose } = props;
+  const ppmText = usePpmText();
   // router
   const { workspaceSlug } = useParams();
   // hooks
@@ -53,7 +55,7 @@ export const SpreadsheetModuleColumn = observer(function SpreadsheetModuleColumn
         value={issue?.module_ids ?? []}
         onChange={handleModule}
         disabled={disabled}
-        placeholder="Select modules"
+        placeholder={ppmText("ui.property.select_modules", "Select modules")}
         buttonVariant="transparent-with-text"
         buttonContainerClassName="w-full relative flex items-center p-2 group-[.selected-issue-row]:bg-accent-primary/5 group-[.selected-issue-row]:hover:bg-accent-primary/10 px-page-x"
         buttonClassName="relative leading-4 h-4.5 bg-transparent hover:bg-transparent !px-0"

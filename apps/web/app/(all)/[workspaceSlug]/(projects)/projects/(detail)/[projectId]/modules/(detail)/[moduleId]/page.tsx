@@ -21,8 +21,10 @@ import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
 import useLocalStorage from "@/hooks/use-local-storage";
 import type { Route } from "./+types/page";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 function ModuleIssuesPage({ params }: Route.ComponentProps) {
+  const ppmText = usePpmText();
   // router
   const router = useAppRouter();
   const { workspaceSlug, projectId, moduleId } = params;
@@ -53,10 +55,13 @@ function ModuleIssuesPage({ params }: Route.ComponentProps) {
       {error ? (
         <EmptyState
           image={emptyModule}
-          title="Module does not exist"
-          description="The module you are looking for does not exist or has been deleted."
+          title={ppmText("ui.empty.module_missing_title", "Module does not exist")}
+          description={ppmText(
+            "ui.empty.module_missing",
+            "The module you are looking for does not exist or has been deleted."
+          )}
           primaryButton={{
-            text: "View other modules",
+            text: ppmText("ui.empty.module_missing_action", "View other modules"),
             onClick: () => router.push(`/${workspaceSlug}/projects/${projectId}/modules`),
           }}
         />

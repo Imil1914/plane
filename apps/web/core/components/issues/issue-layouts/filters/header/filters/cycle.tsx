@@ -14,6 +14,7 @@ import type { TCycleGroups } from "@plane/types";
 import { Loader } from "@plane/ui";
 import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/filters";
 import { useCycle } from "@/hooks/store/use-cycle";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // ui
 // types
 
@@ -25,6 +26,7 @@ type Props = {
 
 export const FilterCycle = observer(function FilterCycle(props: Props) {
   const { appliedFilters, handleUpdate, searchQuery } = props;
+  const ppmText = usePpmText();
 
   // hooks
   const { projectId } = useParams();
@@ -63,7 +65,7 @@ export const FilterCycle = observer(function FilterCycle(props: Props) {
   return (
     <>
       <FilterHeader
-        title={`Cycle ${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
+        title={`${ppmText("ui.filter.cycle", "Cycle")} ${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
         isPreviewEnabled={previewEnabled}
         handleIsPreviewEnabled={() => setPreviewEnabled(!previewEnabled)}
       />
@@ -90,12 +92,14 @@ export const FilterCycle = observer(function FilterCycle(props: Props) {
                     className="ml-8 text-11 font-medium text-accent-primary"
                     onClick={handleViewToggle}
                   >
-                    {itemsToRender === sortedOptions.length ? "View less" : "View all"}
+                    {itemsToRender === sortedOptions.length
+                      ? ppmText("ui.common.view_less", "View less")
+                      : ppmText("ui.common.view_all", "View all")}
                   </button>
                 )}
               </>
             ) : (
-              <p className="text-11 text-placeholder italic">No matches found</p>
+              <p className="text-11 text-placeholder italic">{ppmText("ui.common.no_matches", "No matches found")}</p>
             )
           ) : (
             <Loader className="space-y-2">

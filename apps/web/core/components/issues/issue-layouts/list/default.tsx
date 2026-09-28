@@ -22,10 +22,13 @@ import type {
   IGroupByColumn,
   TIssueKanbanFilters,
 } from "@plane/types";
+import { EIssueLayoutTypes } from "@plane/types";
 // components
-import { MultipleSelectGroup } from "@/components/core/multiple-select";
+import { PpmMultipleSelectGroup } from "@/components/issues/bulk-operations/selection-group";
 // hooks
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
+import type { TEntityDetails } from "@/hooks/use-multiple-select";
+import { getPpmSelectableEntities } from "@/hooks/use-multiple-select-helpers";
 // plane web components
 import { IssueBulkOperationsRoot } from "@/components/issues/bulk-operations";
 // plane web hooks
@@ -33,9 +36,16 @@ import { useBulkOperationStatus } from "@/hooks/use-bulk-operation-status";
 import { usePpmLocalizedGroupColumns } from "@/components/ppm-tasks/use-localized-groups";
 // utils
 import type { GroupDropLocation } from "../utils";
-import { getGroupByColumns, isWorkspaceLevel, isSubGrouped } from "../utils";
+import { getGroupByColumns, getIssueBlockId, isWorkspaceLevel, isSubGrouped } from "../utils";
 import { ListGroup } from "./list-group";
 import type { TRenderQuickActions } from "./list-view-types";
+
+/**
+ * PPM (линия B): строка свёрнутой группы (в том числе «Отменена» облика v2) не отрисована — обёртки строки из block-root
+ * с id getIssueBlockId нет. Такие строки не входят в Shift-диапазон и в переходы стрелками; проверка — в момент нажатия.
+ */
+const isPpmListRowHidden = (entity: TEntityDetails) =>
+  typeof document !== "undefined" && !document.getElementById(getIssueBlockId(entity.entityID, entity.groupID));
 
 export interface IList {
   groupedIssueIds: TGroupedIssues;
@@ -84,7 +94,7 @@ export const List = observer(function List(props: IList) {
 
   const storeType = useIssueStoreType();
   // plane web hooks
-  const isBulkOperationsEnabled = useBulkOperationStatus();
+  const isBulkOperationsEnabled = useBulkOperationStatus(EIssueLayoutTypes.LIST, storeType);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -125,21 +135,30 @@ export const List = observer(function List(props: IList) {
     orderedGroups[gID] = [];
   });
   let entities: Record<string, string[]> = {};
+  // PPM (линия B): только задачи с флажком — те, что пользователь может менять (в «Моих задачах» бывают и чужие).
+  const isSelectableIssue = (issueId: string) => {
+    const issue = issuesMap[issueId];
+    return !!issue && !issue.tempId && canEditProperties(issue.project_id ?? undefined);
+  };
 
   if (is_list) {
-    entities = Object.assign(orderedGroups, { [groupIds[0]]: groupedIssueIds[ALL_ISSUES] ?? [] });
+    entities = Object.assign(
+      orderedGroups,
+      getPpmSelectableEntities({ [groupIds[0]]: groupedIssueIds[ALL_ISSUES] ?? [] }, isSelectableIssue)
+    );
   } else if (!isSubGrouped(groupedIssueIds)) {
-    entities = Object.assign(orderedGroups, { ...groupedIssueIds });
+    entities = Object.assign(orderedGroups, getPpmSelectableEntities(groupedIssueIds, isSelectableIssue));
   } else {
     entities = orderedGroups;
   }
   return (
     <div className="relative flex size-full flex-col">
       {groups && (
-        <MultipleSelectGroup
+        <PpmMultipleSelectGroup
           containerRef={containerRef}
           entities={entities}
           disabled={!isBulkOperationsEnabled || isEpic}
+          isEntityHidden={isPpmListRowHidden}
         >
           {(helpers) => (
             <>
@@ -180,7 +199,7 @@ export const List = observer(function List(props: IList) {
               <IssueBulkOperationsRoot selectionHelpers={helpers} />
             </>
           )}
-        </MultipleSelectGroup>
+        </PpmMultipleSelectGroup>
       )}
     </div>
   );

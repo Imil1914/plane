@@ -18,6 +18,7 @@ import type { EditorRefApi } from "@plane/editor";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import { Tooltip } from "@plane/propel/tooltip";
 import type { TIssue, TWorkspaceDraftIssue } from "@plane/types";
 // hooks
 import { ToggleSwitch } from "@plane/ui";
@@ -44,6 +45,8 @@ import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
 import { useWorkspaceDraftIssues } from "@/hooks/store/workspace-draft";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { useProjectIssueProperties } from "@/hooks/use-project-issue-properties";
 
 export interface IssueFormProps {
@@ -72,7 +75,12 @@ export interface IssueFormProps {
 }
 
 export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormProps) {
+  const isPpmRu = usePpmRu();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
+  // PPM: editing reads «Редактировать задачу» / «Сохранить» instead of the bare upstream «Update».
+  const isPpmEdit = isPpmRu && !!props.data?.id;
   const {
     data,
     issueTitleRef,
@@ -85,11 +93,15 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
     onCreateMoreToggleChange,
     isDraft,
     moveToIssue = false,
-    modalTitle = `${data?.id ? t("update") : isDraft ? t("create_a_draft") : t("create_new_issue")}`,
-    primaryButtonText = {
-      default: `${data?.id ? t("update") : isDraft ? t("save_to_drafts") : t("save")}`,
-      loading: `${data?.id ? t("updating") : t("saving")}`,
-    },
+    modalTitle = isPpmEdit
+      ? ppmT("ui.issue.edit_title")
+      : `${data?.id ? t("update") : isDraft ? t("create_a_draft") : t("create_new_issue")}`,
+    primaryButtonText = isPpmEdit
+      ? { default: ppmT("ui.issue.save"), loading: ppmT("ui.issue.saving") }
+      : {
+          default: `${data?.id ? t("update") : isDraft ? t("save_to_drafts") : t("save")}`,
+          loading: `${data?.id ? t("updating") : t("saving")}`,
+        },
     isProjectSelectionDisabled = false,
     showActionButtons = true,
     dataResetProperties = [],
@@ -286,8 +298,8 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Failed to move work item to project. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: ppmText("ui.toast.task_move_failed", "Failed to move work item to project. Please try again."),
       });
     } finally {
       setIsMoving(false);
@@ -455,7 +467,15 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                       role="button"
                     >
                       <ToggleSwitch value={isCreateMoreToggleEnabled} onChange={() => {}} size="sm" />
-                      <span className="text-caption-sm-regular">{t("create_more")}</span>
+                      <Tooltip
+                        tooltipContent={ppmT("ui.issue.create_more_hint")}
+                        disabled={!isPpmRu}
+                        isMobile={isMobile}
+                      >
+                        <span className="text-caption-sm-regular">
+                          {isPpmRu ? ppmT("ui.issue.create_more") : t("create_more")}
+                        </span>
+                      </Tooltip>
                     </div>
                   )}
                   <div className="flex items-center gap-2">
@@ -469,8 +489,11 @@ export const IssueFormRoot = observer(function IssueFormRoot(props: IssueFormPro
                           } else {
                             setToast({
                               type: TOAST_TYPE.ERROR,
-                              title: "Error!",
-                              message: "Editor is still processing changes. Please wait before proceeding.",
+                              title: ppmText("ui.toast.error", "Error!"),
+                              message: ppmText(
+                                "ui.toast.editor_busy",
+                                "Editor is still processing changes. Please wait before proceeding."
+                              ),
                             });
                           }
                         }}

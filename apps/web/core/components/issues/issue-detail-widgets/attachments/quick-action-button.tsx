@@ -18,6 +18,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useFileSize } from "@/hooks/use-file-size";
 // local imports
 import { useAttachmentOperations } from "./helper";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   workspaceSlug: string;
@@ -36,6 +37,7 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
   const { setLastWidgetAction, fetchActivities } = useIssueDetail(issueServiceType);
   // file size
   const { maxFileSize } = useFileSize();
+  const ppmText = usePpmText();
   // operations
   const { operations: attachmentOperations } = useAttachmentOperations(
     workspaceSlug,
@@ -62,8 +64,8 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
           .catch(() => {
             setToast({
               type: TOAST_TYPE.ERROR,
-              title: "Error!",
-              message: "File could not be attached. Try uploading again.",
+              title: ppmText("ui.toast.error", "Error!"),
+              message: ppmText("ui.toast.attachment_attach_failed", "File could not be attached. Try uploading again."),
             });
           })
           .finally(() => {
@@ -76,15 +78,21 @@ export const IssueAttachmentActionButton = observer(function IssueAttachmentActi
 
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
+        title: ppmText("ui.toast.error", "Error!"),
         message:
           totalAttachedFiles > 1
-            ? "Only one file can be uploaded at a time."
-            : `File must be of ${maxFileSize / 1024 / 1024}MB or less in size.`,
+            ? ppmText("ui.toast.attachment_one_at_a_time", "Only one file can be uploaded at a time.")
+            : ppmText(
+                "ui.toast.attachment_too_large",
+                `File must be of ${maxFileSize / 1024 / 1024}MB or less in size.`,
+                {
+                  size: maxFileSize / 1024 / 1024,
+                }
+              ),
       });
       return;
     },
-    [attachmentOperations, maxFileSize, workspaceSlug, handleFetchPropertyActivities, setLastWidgetAction]
+    [attachmentOperations, maxFileSize, workspaceSlug, handleFetchPropertyActivities, setLastWidgetAction, ppmText]
   );
 
   const { getRootProps, getInputProps } = useDropzone({

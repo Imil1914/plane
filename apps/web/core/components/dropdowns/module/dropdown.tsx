@@ -23,6 +23,8 @@ type TModuleDropdownProps = TDropdownProps & {
   onClose?: () => void;
   renderByDefault?: boolean;
   itemClassName?: string;
+  /** Replaces the default tooltip (the selected module names), e.g. with a hint about what a module is. */
+  tooltipContent?: ReactNode;
 } & (
     | {
         multiple: false;

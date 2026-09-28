@@ -25,6 +25,8 @@ import { ModuleStatusDropdown } from "@/components/modules/module-status-dropdow
 import { useMember } from "@/hooks/store/use-member";
 import { useModule } from "@/hooks/store/use-module";
 import { useUserPermissions } from "@/hooks/store/user";
+import { usePpmServerError } from "@/hooks/use-ppm-server-error";
+import { usePpmText } from "@/hooks/use-ppm-text";
 import { ButtonAvatars } from "../dropdowns/member/avatar";
 
 type Props = {
@@ -43,6 +45,8 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
   const { getUserDetails } = useMember();
 
   const { t } = useTranslation();
+  const ppmText = usePpmText();
+  const ppmServerError = usePpmServerError();
 
   // local storage
   const { setValue: toggleFavoriteMenu, storedValue } = useLocalStorage<boolean>(IS_FAVORITE_MENU_OPEN, false);
@@ -70,14 +74,15 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
     );
 
     setPromiseToast(addToFavoritePromise, {
-      loading: "Adding module to favorites...",
+      loading: ppmText("ui.module.favorite_adding", "Adding module to favorites..."),
       success: {
-        title: "Success!",
-        message: () => "Module added to favorites.",
+        title: ppmText("ui.toast.success", "Success!"),
+        message: () => ppmText("ui.module.favorite_added", "Module added to favorites."),
       },
       error: {
-        title: "Error!",
-        message: () => "Couldn't add the module to favorites. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: () =>
+          ppmText("ui.module.favorite_add_failed", "Couldn't add the module to favorites. Please try again."),
       },
     });
   };
@@ -94,14 +99,15 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
     );
 
     setPromiseToast(removeFromFavoritePromise, {
-      loading: "Removing module from favorites...",
+      loading: ppmText("ui.module.favorite_removing", "Removing module from favorites..."),
       success: {
-        title: "Success!",
-        message: () => "Module removed from favorites.",
+        title: ppmText("ui.toast.success", "Success!"),
+        message: () => ppmText("ui.module.favorite_removed", "Module removed from favorites."),
       },
       error: {
-        title: "Error!",
-        message: () => "Couldn't remove the module from favorites. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: () =>
+          ppmText("ui.module.favorite_remove_failed", "Couldn't remove the module from favorites. Please try again."),
       },
     });
   };
@@ -113,15 +119,18 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
       .then(() => {
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Success!",
-          message: "Module updated successfully.",
+          title: ppmText("ui.toast.success", "Success!"),
+          message: ppmText("ui.module.updated", "Module updated successfully."),
         });
       })
       .catch((err) => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.detail ?? "Module could not be updated. Please try again.",
+          ...ppmServerError(
+            err,
+            { title: "ui.module.update_failed_title", message: "ui.module.update_failed" },
+            { title: "Error!", message: err?.detail ?? "Module could not be updated. Please try again." }
+          ),
         });
       });
   };
@@ -166,7 +175,7 @@ export const ModuleListItemAction = observer(function ModuleListItemAction(props
           <ButtonAvatars showTooltip={false} userIds={moduleLeadDetails?.id} />
         </span>
       ) : (
-        <Tooltip tooltipContent="No lead">
+        <Tooltip tooltipContent={ppmText("ui.module.no_lead", "No lead")}>
           <SquareUser className="h-4 w-4 text-tertiary" />
         </Tooltip>
       )}

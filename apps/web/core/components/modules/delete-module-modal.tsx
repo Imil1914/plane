@@ -18,6 +18,9 @@ import { AlertModalCore } from "@plane/ui";
 // hooks
 import { useModule } from "@/hooks/store/use-module";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type Props = {
   data: IModule;
@@ -26,6 +29,7 @@ type Props = {
 };
 
 export const DeleteModuleModal = observer(function DeleteModuleModal(props: Props) {
+  const isPpmRu = usePpmRu();
   const { data, isOpen, onClose } = props;
   // states
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
@@ -35,6 +39,8 @@ export const DeleteModuleModal = observer(function DeleteModuleModal(props: Prop
   // store hooks
   const { deleteModule } = useModule();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
 
   const handleClose = () => {
     onClose();
@@ -52,8 +58,8 @@ export const DeleteModuleModal = observer(function DeleteModuleModal(props: Prop
         handleClose();
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Success!",
-          message: "Module deleted successfully.",
+          title: ppmText("ui.toast.success", "Success!"),
+          message: ppmText("ui.toast.module_deleted", "Module deleted successfully."),
         });
       })
       .catch((errors) => {
@@ -76,14 +82,26 @@ export const DeleteModuleModal = observer(function DeleteModuleModal(props: Prop
       handleSubmit={handleDeletion}
       isSubmitting={isDeleteLoading}
       isOpen={isOpen}
-      title="Delete module"
+      title={ppmText("ui.confirm.delete_module_title", "Delete module")}
       content={
-        <>
-          Are you sure you want to delete module-{" "}
-          <span className="font-medium break-all text-primary">{data?.name}</span>? All of the data related to the
-          module will be permanently removed. This action cannot be undone.
-        </>
+        isPpmRu ? (
+          <PpmTemplateText
+            template={ppmT("ui.confirm.delete_module_content")}
+            values={{ name: <span className="font-medium break-all text-primary">{data?.name}</span> }}
+          />
+        ) : (
+          <>
+            Are you sure you want to delete module-{" "}
+            <span className="font-medium break-all text-primary">{data?.name}</span>? All of the data related to the
+            module will be permanently removed. This action cannot be undone.
+          </>
+        )
       }
+      primaryButtonText={{
+        loading: ppmText("ui.common.deleting", "Deleting"),
+        default: ppmText("ui.common.delete", "Delete"),
+      }}
+      secondaryButtonText={ppmText("ui.common.cancel", "Cancel")}
     />
   );
 });

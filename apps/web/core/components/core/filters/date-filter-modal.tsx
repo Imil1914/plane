@@ -4,12 +4,16 @@
  * See the LICENSE file for details.
  */
 
+import { observer } from "mobx-react";
 import { Controller, useForm } from "react-hook-form";
 import { Button } from "@plane/propel/button";
 import { Calendar } from "@plane/propel/calendar";
 import { CloseIcon } from "@plane/propel/icons";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { renderFormattedPayloadDate, renderFormattedDate, getDate } from "@plane/utils";
+import { useUserProfile } from "@/hooks/store/user";
+import { usePpmCalendarLocale } from "@/hooks/use-ppm-calendar-locale";
+import { usePpmText } from "@/hooks/use-ppm-text";
 import { DateFilterSelect } from "./date-filter-select";
 type Props = {
   title: string;
@@ -30,10 +34,14 @@ const defaultValues: TFormValues = {
   date2: new Date(new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate()),
 };
 
-export function DateFilterModal({ title, handleClose, isOpen, onSelect }: Props) {
+export const DateFilterModal = observer(function DateFilterModal({ title, handleClose, isOpen, onSelect }: Props) {
   const { handleSubmit, watch, control } = useForm<TFormValues>({
     defaultValues,
   });
+  // The same calendar as the date pickers: Russian names and the first day of the week of the profile.
+  const { startOfTheWeek } = useUserProfile();
+  const calendarLocale = usePpmCalendarLocale();
+  const ppmText = usePpmText();
 
   const handleFormSubmit = (formData: TFormValues) => {
     const { filterType, date1, date2 } = formData;
@@ -82,6 +90,8 @@ export function DateFilterModal({ title, handleClose, isOpen, onSelect }: Props)
                   }}
                   mode="single"
                   disabled={date2Value ? [{ after: date2Value }] : undefined}
+                  weekStartsOn={startOfTheWeek}
+                  {...calendarLocale}
                 />
               );
             }}
@@ -105,6 +115,8 @@ export function DateFilterModal({ title, handleClose, isOpen, onSelect }: Props)
                     }}
                     mode="single"
                     disabled={date1Value ? [{ before: date1Value }] : undefined}
+                    weekStartsOn={startOfTheWeek}
+                    {...calendarLocale}
                   />
                 );
               }}
@@ -113,15 +125,15 @@ export function DateFilterModal({ title, handleClose, isOpen, onSelect }: Props)
         </div>
         {watch("filterType") === "range" && (
           <h6 className="flex items-center gap-1 text-11">
-            <span className="text-secondary">After:</span>
+            <span className="text-secondary">{ppmText("ui.date_filter.after_label", "After:")}</span>
             <span>{renderFormattedDate(watch("date1"))}</span>
-            <span className="ml-1 text-secondary">Before:</span>
+            <span className="ml-1 text-secondary">{ppmText("ui.date_filter.before_label", "Before:")}</span>
             {!isInvalid && <span>{renderFormattedDate(watch("date2"))}</span>}
           </h6>
         )}
         <div className="flex justify-end gap-4">
           <Button variant="secondary" size="lg" onClick={handleClose}>
-            Cancel
+            {ppmText("ui.common.cancel", "Cancel")}
           </Button>
           <Button
             variant="primary"
@@ -130,10 +142,10 @@ export function DateFilterModal({ title, handleClose, isOpen, onSelect }: Props)
             onClick={handleSubmit(handleFormSubmit)}
             disabled={isInvalid}
           >
-            Apply
+            {ppmText("ui.common.apply", "Apply")}
           </Button>
         </div>
       </form>
     </ModalCore>
   );
-}
+});

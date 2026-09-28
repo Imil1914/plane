@@ -14,6 +14,16 @@ import { EIssuesStoreType } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useIssues } from "@/hooks/store/use-issues";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+
+// Sprint status chips in the transfer list (the API sends CURRENT / UPCOMING / COMPLETED / DRAFT).
+const PPM_CYCLE_STATUS_KEYS = {
+  current: "ui.cycle.status_current",
+  upcoming: "ui.cycle.status_upcoming",
+  completed: "ui.cycle.status_completed",
+  draft: "ui.cycle.status_draft",
+} as const;
 
 type Props = {
   isOpen: boolean;
@@ -22,6 +32,7 @@ type Props = {
 };
 
 export const TransferIssuesModal = observer(function TransferIssuesModal(props: Props) {
+  const isPpmRu = usePpmRu();
   const { isOpen, handleClose, cycleId } = props;
   // states
   const [query, setQuery] = useState("");
@@ -33,6 +44,8 @@ export const TransferIssuesModal = observer(function TransferIssuesModal(props: 
   } = useIssues(EIssuesStoreType.CYCLE);
 
   const { workspaceSlug, projectId } = useParams();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
 
   const transferIssue = async (payload: { new_cycle_id: string }) => {
     if (!workspaceSlug || !projectId || !cycleId) return;
@@ -41,16 +54,16 @@ export const TransferIssuesModal = observer(function TransferIssuesModal(props: 
       .then(async () => {
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Success!",
-          message: "Work items have been transferred successfully",
+          title: ppmText("ui.toast.success", "Success!"),
+          message: ppmText("ui.cycle.transfer_done", "Work items have been transferred successfully"),
         });
         await getCycleDetails(payload.new_cycle_id);
       })
       .catch(() => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "Unable to transfer work items. Please try again.",
+          title: ppmText("ui.toast.error", "Error!"),
+          message: ppmText("ui.cycle.transfer_failed", "Unable to transfer work items. Please try again."),
         });
       });
   };
@@ -64,8 +77,8 @@ export const TransferIssuesModal = observer(function TransferIssuesModal(props: 
     await Promise.all(cyclesFetch).catch((error) => {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error",
-        message: error.error || "Unable to fetch cycle details",
+        title: ppmText("ui.toast.error_plain", "Error"),
+        message: error.error || ppmText("ui.cycle.fetch_failed", "Unable to fetch cycle details"),
       });
     });
   };
@@ -82,7 +95,9 @@ export const TransferIssuesModal = observer(function TransferIssuesModal(props: 
         <div className="flex items-center justify-between px-5">
           <div className="flex items-center gap-1">
             <TransferIcon className="w-5 fill-primary" />
-            <h4 className="text-18 font-medium text-primary">Transfer work items</h4>
+            <h4 className="text-18 font-medium text-primary">
+              {ppmText("ui.cycle.transfer_title", "Transfer work items")}
+            </h4>
           </div>
           <button onClick={handleClose}>
             <CloseIcon className="h-4 w-4" />
@@ -92,7 +107,7 @@ export const TransferIssuesModal = observer(function TransferIssuesModal(props: 
           <SearchIcon className="h-4 w-4 text-secondary" />
           <input
             className="text-13 outline-none"
-            placeholder="Search for a cycle..."
+            placeholder={ppmText("ui.cycle.transfer_search", "Search for a cycle...")}
             onChange={(e) => setQuery(e.target.value)}
             value={query}
           />
@@ -121,7 +136,13 @@ export const TransferIssuesModal = observer(function TransferIssuesModal(props: 
                       <span className="truncate">{cycleDetails?.name}</span>
                       {cycleDetails.status && (
                         <span className="flex flex-shrink-0 items-center rounded-full bg-layer-1 px-2 capitalize">
-                          {cycleDetails.status.toLocaleLowerCase()}
+                          {isPpmRu && cycleDetails.status.toLowerCase() in PPM_CYCLE_STATUS_KEYS
+                            ? ppmT(
+                                PPM_CYCLE_STATUS_KEYS[
+                                  cycleDetails.status.toLowerCase() as keyof typeof PPM_CYCLE_STATUS_KEYS
+                                ]
+                              )
+                            : cycleDetails.status.toLocaleLowerCase()}
                         </span>
                       )}
                     </div>
@@ -132,12 +153,15 @@ export const TransferIssuesModal = observer(function TransferIssuesModal(props: 
               <div className="flex w-full items-center justify-center gap-4 p-5 text-13">
                 <AlertCircle className="h-3.5 w-3.5 text-secondary" />
                 <span className="text-center text-secondary">
-                  You don’t have any current cycle. Please create one to transfer the work items.
+                  {ppmText(
+                    "ui.cycle.transfer_empty",
+                    "You don’t have any current cycle. Please create one to transfer the work items."
+                  )}
                 </span>
               </div>
             )
           ) : (
-            <p className="text-center text-secondary">Loading...</p>
+            <p className="text-center text-secondary">{ppmText("ui.common.loading", "Loading...")}</p>
           )}
         </div>
       </div>

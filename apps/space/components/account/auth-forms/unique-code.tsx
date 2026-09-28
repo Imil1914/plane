@@ -12,6 +12,7 @@ import { Button } from "@plane/propel/button";
 import { AuthService } from "@plane/services";
 import { Input, Spinner } from "@plane/ui";
 // hooks
+import { IS_PPM_SHELL_ENABLED, useAuthLanguage } from "@/helpers/ppm-auth-language";
 import useTimer from "@/hooks/use-timer";
 // types
 import { EAuthModes } from "@/types/auth";
@@ -48,6 +49,8 @@ export function AuthUniqueCodeForm(props: TAuthUniqueCodeForm) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   // timer
   const { timer: resendTimerCode, setTimer: setResendCodeTimer } = useTimer(0);
+  // PPM line L: the interface language of the sign-in screens
+  const { t } = useAuthLanguage();
 
   const handleFormChange = (key: keyof TUniqueCodeFormValues, value: string) =>
     setUniqueCodeFormData((prev) => ({ ...prev, [key]: value }));
@@ -87,7 +90,7 @@ export function AuthUniqueCodeForm(props: TAuthUniqueCodeForm) {
       <input type="hidden" value={nextPath} name="next_path" />
       <div className="space-y-1">
         <label className="text-13 font-medium text-tertiary" htmlFor="email">
-          Email
+          {IS_PPM_SHELL_ENABLED ? t("auth.email") : "Email"}
         </label>
         <div className={`relative flex items-center rounded-md border border-subtle bg-surface-1`}>
           <Input
@@ -96,7 +99,7 @@ export function AuthUniqueCodeForm(props: TAuthUniqueCodeForm) {
             type="email"
             value={uniqueCodeFormData.email}
             onChange={(e) => handleFormChange("email", e.target.value)}
-            placeholder="name@company.com"
+            placeholder={IS_PPM_SHELL_ENABLED ? t("auth.email_placeholder") : "name@company.com"}
             className={`h-10 w-full border-0 disable-autofill-style placeholder:text-placeholder`}
             autoComplete="off"
             disabled
@@ -112,7 +115,7 @@ export function AuthUniqueCodeForm(props: TAuthUniqueCodeForm) {
 
       <div className="space-y-1">
         <label className="text-13 font-medium text-tertiary" htmlFor="code">
-          Unique code
+          {IS_PPM_SHELL_ENABLED ? t("auth.code_label") : "Unique code"}
         </label>
         <Input
           name="code"
@@ -126,7 +129,7 @@ export function AuthUniqueCodeForm(props: TAuthUniqueCodeForm) {
         <div className="flex w-full items-center justify-between px-1 pt-1 text-11">
           <p className="flex items-center gap-1 font-medium text-success-primary">
             <CircleCheck height={12} width={12} />
-            Paste the code sent to your email
+            {IS_PPM_SHELL_ENABLED ? t("auth.paste_code") : "Paste the code sent to your email"}
           </p>
           <button
             type="button"
@@ -138,18 +141,34 @@ export function AuthUniqueCodeForm(props: TAuthUniqueCodeForm) {
             }`}
             disabled={isRequestNewCodeDisabled}
           >
-            {resendTimerCode > 0
-              ? `Resend in ${resendTimerCode}s`
-              : isRequestingNewCode
-                ? "Requesting new code"
-                : "Resend"}
+            {IS_PPM_SHELL_ENABLED
+              ? resendTimerCode > 0
+                ? t("auth.resend_code_in").replace("{seconds}", String(resendTimerCode))
+                : t(isRequestingNewCode ? "auth.requesting_code" : "auth.resend_code")
+              : resendTimerCode > 0
+                ? `Resend in ${resendTimerCode}s`
+                : isRequestingNewCode
+                  ? "Requesting new code"
+                  : "Resend"}
           </button>
         </div>
       </div>
 
       <div className="space-y-2.5">
         <Button type="submit" variant="primary" className="w-full" size="xl" disabled={isButtonDisabled}>
-          {isRequestingNewCode ? "Sending code" : isSubmitting ? <Spinner height="20px" width="20px" /> : "Continue"}
+          {isRequestingNewCode ? (
+            IS_PPM_SHELL_ENABLED ? (
+              t("auth.sending_code")
+            ) : (
+              "Sending code"
+            )
+          ) : isSubmitting ? (
+            <Spinner height="20px" width="20px" />
+          ) : IS_PPM_SHELL_ENABLED ? (
+            t("auth.continue")
+          ) : (
+            "Continue"
+          )}
         </Button>
       </div>
     </form>

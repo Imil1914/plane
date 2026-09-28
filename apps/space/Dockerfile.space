@@ -62,6 +62,12 @@ ENV VITE_WEBSITE_URL=$VITE_WEBSITE_URL
 ARG VITE_SUPPORT_EMAIL="support@plane.so"
 ENV VITE_SUPPORT_EMAIL=$VITE_SUPPORT_EMAIL
 
+# PPM: build-time rollback flags read by apps/space/vite.config.ts (defaults = the same values as there).
+ARG PPM_BRAND_ENABLED="1"
+ENV PPM_BRAND_ENABLED=$PPM_BRAND_ENABLED
+ARG PPM_SHELL_ENABLED="1"
+ENV PPM_SHELL_ENABLED=$PPM_SHELL_ENABLED
+
 COPY .gitignore .gitignore
 COPY --from=builder /app/out/json/ .
 COPY --from=builder /app/out/pnpm-lock.yaml ./pnpm-lock.yaml

@@ -13,6 +13,7 @@ import { useLayoutMenuItems } from "@/components/common/quick-actions-helper";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { Ellipsis } from "lucide-react";
 import { getIconButtonStyling } from "@plane/propel/icon-button";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   workspaceSlug: string;
@@ -23,6 +24,7 @@ type Props = {
 export const LayoutQuickActions = observer(function LayoutQuickActions(props: Props) {
   const { workspaceSlug, projectId, storeType } = props;
   const ppmT = usePpmTranslation();
+  const ppmText = usePpmText();
 
   const layoutLink = `${workspaceSlug}/projects/${projectId}/${storeType === "EPIC" ? "epics" : "issues"}`;
 
@@ -30,8 +32,11 @@ export const LayoutQuickActions = observer(function LayoutQuickActions(props: Pr
     copyUrlToClipboard(layoutLink).then(() => {
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Link copied",
-        message: `${storeType === "EPIC" ? "Epics" : "Work items"} link copied to clipboard.`,
+        title: ppmText("ui.toast.link_copied", "Link copied"),
+        message: ppmText(
+          storeType === "EPIC" ? "ui.toast.epics_link_copied" : "ui.toast.tasks_link_copied",
+          `${storeType === "EPIC" ? "Epics" : "Work items"} link copied to clipboard.`
+        ),
       });
     });
 

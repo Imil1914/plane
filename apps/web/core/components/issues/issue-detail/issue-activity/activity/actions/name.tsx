@@ -10,10 +10,13 @@ import { Type } from "lucide-react";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
 import { IssueActivityBlockComponent } from "./";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { PpmActivityPhrase } from "./helpers/ppm-activity";
 
 type TIssueNameActivity = { activityId: string; ends: "top" | "bottom" | undefined };
 
 export const IssueNameActivity = observer(function IssueNameActivity(props: TIssueNameActivity) {
+  const isPpmRu = usePpmRu();
   const { activityId, ends } = props;
   // hooks
   const {
@@ -29,7 +32,11 @@ export const IssueNameActivity = observer(function IssueNameActivity(props: TIss
       activityId={activityId}
       ends={ends}
     >
-      <>set the name to {activity.new_value}.</>
+      {isPpmRu ? (
+        <PpmActivityPhrase phrase="ui.activity.name" values={{ value: activity.new_value }} />
+      ) : (
+        <>set the name to {activity.new_value}.</>
+      )}
     </IssueActivityBlockComponent>
   );
 });

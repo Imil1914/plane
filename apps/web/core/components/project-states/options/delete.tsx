@@ -15,7 +15,10 @@ import type { IState, TStateOperationsCallbacks } from "@plane/types";
 import { AlertModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 // hooks
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type TStateDelete = {
   totalStates: number;
@@ -25,9 +28,12 @@ type TStateDelete = {
 };
 
 export const StateDelete = observer(function StateDelete(props: TStateDelete) {
+  const isPpmRu = usePpmRu();
   const { totalStates, state, deleteStateCallback } = props;
   // hooks
   const { isMobile } = usePlatformOS();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
   // states
   const [isDeleteModal, setIsDeleteModal] = useState(false);
   const [isDelete, setIsDelete] = useState(false);
@@ -47,15 +53,17 @@ export const StateDelete = observer(function StateDelete(props: TStateDelete) {
       if (errorStatus.status === 400) {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message:
-            "This state contains some work items within it, please move them to some other state to delete this state.",
+          title: ppmText("ui.toast.error", "Error!"),
+          message: ppmText(
+            "ui.toast.state_has_work_items",
+            "This state contains some work items within it, please move them to some other state to delete this state."
+          ),
         });
       } else {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: "State could not be deleted. Please try again.",
+          title: ppmText("ui.toast.error", "Error!"),
+          message: ppmText("ui.toast.state_delete_failed", "State could not be deleted. Please try again."),
         });
       }
       setIsDelete(false);
@@ -69,13 +77,25 @@ export const StateDelete = observer(function StateDelete(props: TStateDelete) {
         handleSubmit={handleDeleteState}
         isSubmitting={isDelete}
         isOpen={isDeleteModal}
-        title="Delete State"
+        title={ppmText("ui.confirm.delete_state_title", "Delete State")}
         content={
-          <>
-            Are you sure you want to delete state- <span className="font-medium text-primary">{state?.name}</span>? All
-            of the data related to the state will be permanently removed. This action cannot be undone.
-          </>
+          isPpmRu ? (
+            <PpmTemplateText
+              template={ppmT("ui.confirm.delete_state_content")}
+              values={{ name: <span className="font-medium text-primary">{state?.name}</span> }}
+            />
+          ) : (
+            <>
+              Are you sure you want to delete state- <span className="font-medium text-primary">{state?.name}</span>?
+              All of the data related to the state will be permanently removed. This action cannot be undone.
+            </>
+          )
         }
+        primaryButtonText={{
+          loading: ppmText("ui.common.deleting", "Deleting"),
+          default: ppmText("ui.common.delete", "Delete"),
+        }}
+        secondaryButtonText={ppmText("ui.common.cancel", "Cancel")}
       />
 
       <button
@@ -89,7 +109,11 @@ export const StateDelete = observer(function StateDelete(props: TStateDelete) {
       >
         <Tooltip
           tooltipContent={
-            state.default ? "Cannot delete the default state." : totalStates === 1 ? `Cannot have an empty group.` : ``
+            state.default
+              ? ppmText("ui.state.cannot_delete_default", "Cannot delete the default state.")
+              : totalStates === 1
+                ? ppmText("ui.state.cannot_empty_group", "Cannot have an empty group.")
+                : ``
           }
           isMobile={isMobile}
           disabled={!isDeleteDisabled}

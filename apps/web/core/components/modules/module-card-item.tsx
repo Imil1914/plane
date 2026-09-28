@@ -36,12 +36,17 @@ import { useModule } from "@/hooks/store/use-module";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmServerError } from "@/hooks/use-ppm-server-error";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { formatPpmTemplate } from "@/components/ppm-tasks/format";
 
 type Props = {
   moduleId: string;
 };
 
 export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
+  const isPpmRu = usePpmRu();
   const { moduleId } = props;
   // refs
   const parentRef = useRef(null);
@@ -54,6 +59,9 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
   const { allowPermissions } = useUserPermissions();
   const { getModuleById, addModuleToFavorites, removeModuleFromFavorites, updateModuleDetails } = useModule();
   const { getUserDetails } = useMember();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
+  const ppmServerError = usePpmServerError();
   // local storage
   const { setValue: toggleFavoriteMenu, storedValue } = useLocalStorage<boolean>(IS_FAVORITE_MENU_OPEN, false);
   // derived values
@@ -78,14 +86,15 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
     );
 
     setPromiseToast(addToFavoritePromise, {
-      loading: "Adding module to favorites...",
+      loading: ppmText("ui.module.favorite_adding", "Adding module to favorites..."),
       success: {
-        title: "Success!",
-        message: () => "Module added to favorites.",
+        title: ppmText("ui.toast.success", "Success!"),
+        message: () => ppmText("ui.module.favorite_added", "Module added to favorites."),
       },
       error: {
-        title: "Error!",
-        message: () => "Couldn't add the module to favorites. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: () =>
+          ppmText("ui.module.favorite_add_failed", "Couldn't add the module to favorites. Please try again."),
       },
     });
   };
@@ -102,14 +111,15 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
     );
 
     setPromiseToast(removeFromFavoritePromise, {
-      loading: "Removing module from favorites...",
+      loading: ppmText("ui.module.favorite_removing", "Removing module from favorites..."),
       success: {
-        title: "Success!",
-        message: () => "Module removed from favorites.",
+        title: ppmText("ui.toast.success", "Success!"),
+        message: () => ppmText("ui.module.favorite_removed", "Module removed from favorites."),
       },
       error: {
-        title: "Error!",
-        message: () => "Couldn't remove the module from favorites. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: () =>
+          ppmText("ui.module.favorite_remove_failed", "Couldn't remove the module from favorites. Please try again."),
       },
     });
   };
@@ -126,15 +136,18 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
       .then(() => {
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Success!",
-          message: "Module updated successfully.",
+          title: ppmText("ui.toast.success", "Success!"),
+          message: ppmText("ui.module.updated", "Module updated successfully."),
         });
       })
       .catch((err) => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.detail ?? "Module could not be updated. Please try again.",
+          ...ppmServerError(
+            err,
+            { title: "ui.module.update_failed_title", message: "ui.module.update_failed" },
+            { title: "Error!", message: err?.detail ?? "Module could not be updated. Please try again." }
+          ),
         });
       });
   };
@@ -166,13 +179,19 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
 
   const moduleStatus = MODULE_STATUS.find((status) => status.value === moduleDetails.status);
 
-  const issueCount = moduleDetails
-    ? !moduleTotalIssues || moduleTotalIssues === 0
-      ? `0 work items`
+  const issueCount = isPpmRu
+    ? !moduleTotalIssues
+      ? ppmT("ui.module.no_tasks")
       : moduleTotalIssues === moduleCompletedIssues
-        ? `${moduleTotalIssues} Work item${moduleTotalIssues > 1 ? `s` : ``}`
-        : `${moduleCompletedIssues}/${moduleTotalIssues} Work items`
-    : `0 work items`;
+        ? formatPpmTemplate(ppmT("cycle.work_items_count"), { count: moduleTotalIssues })
+        : formatPpmTemplate(ppmT("cycle.work_items_closed"), { done: moduleCompletedIssues, total: moduleTotalIssues })
+    : moduleDetails
+      ? !moduleTotalIssues || moduleTotalIssues === 0
+        ? `0 work items`
+        : moduleTotalIssues === moduleCompletedIssues
+          ? `${moduleTotalIssues} Work item${moduleTotalIssues > 1 ? `s` : ``}`
+          : `${moduleCompletedIssues}/${moduleTotalIssues} Work items`
+      : `0 work items`;
 
   const moduleLeadDetails = moduleDetails.lead_id ? getUserDetails(moduleDetails.lead_id) : undefined;
 
@@ -210,14 +229,16 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-secondary">
                 <WorkItemsIcon className="h-4 w-4 text-tertiary" />
-                <span className="text-11 text-tertiary">{issueCount ?? "0 Work item"}</span>
+                <span className="text-11 text-tertiary">
+                  {issueCount ?? ppmText("ui.module.no_tasks_fallback", "0 Work item")}
+                </span>
               </div>
               {moduleLeadDetails ? (
                 <span className="cursor-default">
                   <ButtonAvatars showTooltip={false} userIds={moduleLeadDetails?.id} />
                 </span>
               ) : (
-                <Tooltip tooltipContent="No lead">
+                <Tooltip tooltipContent={ppmText("ui.module.no_lead", "No lead")}>
                   <SquareUser className="mx-1 h-4 w-4 text-tertiary" />
                 </Tooltip>
               )}
@@ -239,8 +260,8 @@ export const ModuleCardItem = observer(function ModuleCardItem(props: Props) {
                   });
                 }}
                 placeholder={{
-                  from: "Start date",
-                  to: "End date",
+                  from: ppmText("ui.date.start", "Start date"),
+                  to: ppmText("ui.date.end", "End date"),
                 }}
                 disabled={isDisabled}
                 hideIcon={{ from: renderIcon ?? true, to: renderIcon }}

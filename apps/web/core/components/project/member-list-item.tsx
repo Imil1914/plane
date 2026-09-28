@@ -18,6 +18,7 @@ import { useProjectColumns } from "@/components/projects/settings/useProjectColu
 import type { IProjectMemberDetails } from "@/store/member/project/base-project-member.store";
 // local imports
 import { ConfirmProjectMemberRemove } from "./confirm-project-member-remove";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   memberDetails: (IProjectMemberDetails | null)[];
@@ -27,6 +28,7 @@ type Props = {
 
 export const ProjectMemberListItem = observer(function ProjectMemberListItem(props: Props) {
   const { memberDetails, projectId, workspaceSlug } = props;
+  const ppmText = usePpmText();
   // router
   const router = useAppRouter();
   // store hooks
@@ -53,16 +55,16 @@ export const ProjectMemberListItem = observer(function ProjectMemberListItem(pro
         .catch((err) => {
           setToast({
             type: TOAST_TYPE.ERROR,
-            title: "You can’t leave this project yet.",
-            message: err?.error || "Something went wrong. Please try again.",
+            title: ppmText("ui.project.cannot_leave", "You can’t leave this project yet."),
+            message: err?.error || ppmText("ui.toast.try_again_now", "Something went wrong. Please try again."),
           });
         });
     } else
       await removeMemberFromProject(workspaceSlug.toString(), projectId.toString(), memberId).catch((err) =>
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "You can't remove the member from this project yet.",
-          message: err?.error || "Something went wrong. Please try again.",
+          title: ppmText("ui.project.cannot_remove_member", "You can't remove the member from this project yet."),
+          message: err?.error || ppmText("ui.toast.try_again_now", "Something went wrong. Please try again."),
         })
       );
   };

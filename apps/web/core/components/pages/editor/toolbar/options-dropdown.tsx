@@ -23,6 +23,7 @@ import type { TPageInstance } from "@/store/pages/base-page";
 import { PageActions } from "../../dropdowns";
 import { ExportPageModal } from "../../modals/export-page-modal";
 import { PAGE_NAVIGATION_PANE_TABS_QUERY_PARAM } from "../../navigation-pane";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   page: TPageInstance;
@@ -31,6 +32,7 @@ type Props = {
 
 export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: Props) {
   const { page, storeType } = props;
+  const ppmText = usePpmText();
   // states
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   // navigation
@@ -54,7 +56,7 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
           action: () => handleFullWidth(!isFullWidth),
           customContent: (
             <>
-              Full width
+              {ppmText("ui.page.full_width", "Full width")}
               <ToggleSwitch value={isFullWidth} onChange={() => {}} />
             </>
           ),
@@ -65,7 +67,7 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
           action: () => handleStickyToolbar(!isStickyToolbarEnabled),
           customContent: (
             <>
-              Sticky toolbar
+              {ppmText("ui.page.sticky_toolbar", "Sticky toolbar")}
               <ToggleSwitch value={isStickyToolbarEnabled} onChange={() => {}} />
             </>
           ),
@@ -79,11 +81,11 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
             editorRef.copyMarkdownToClipboard();
             setToast({
               type: TOAST_TYPE.SUCCESS,
-              title: "Success!",
-              message: "Markdown copied to clipboard.",
+              title: ppmText("ui.toast.success", "Success!"),
+              message: ppmText("ui.page.markdown_copied", "Markdown copied to clipboard."),
             });
           },
-          title: "Copy markdown",
+          title: ppmText("ui.page.copy_markdown", "Copy markdown"),
           icon: Clipboard,
           shouldRender: true,
         },
@@ -98,14 +100,14 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
             });
             router.push(updatedRoute);
           },
-          title: "Version history",
+          title: ppmText("ui.page.version_history", "Version history"),
           icon: History,
           shouldRender: true,
         },
         {
           key: "export",
           action: () => setIsExportModalOpen(true),
-          title: "Export",
+          title: ppmText("ui.page.export", "Export"),
           icon: ArrowUpToLine,
           shouldRender: true,
         },
@@ -121,6 +123,7 @@ export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: 
       updateQueryParams,
       router,
       setIsExportModalOpen,
+      ppmText,
     ]
   );
 

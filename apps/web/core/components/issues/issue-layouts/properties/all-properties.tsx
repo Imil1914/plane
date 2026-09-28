@@ -45,6 +45,7 @@ import { usePlatformOS } from "@/hooks/use-platform-os";
 // local components
 import { IssuePropertyLabels } from "./labels";
 import { WithDisplayPropertiesHOC } from "./with-display-properties-HOC";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export interface IIssueProperties {
   issue: TIssue;
@@ -60,6 +61,7 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
   const { issue, updateIssue, displayProperties, isReadOnly, className, isEpic = false } = props;
   // i18n
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // store hooks
   const { getProjectById } = useProject();
   const { labelMap } = useLabel();
@@ -260,7 +262,7 @@ export const IssueProperties = observer(function IssueProperties(props: IIssuePr
             renderByDefault={isMobile}
             showTooltip
             renderPlaceholder={false}
-            customTooltipHeading="Date Range"
+            customTooltipHeading={ppmText("ui.date.range", "Date Range")}
           />
         </div>
       </WithDisplayPropertiesHOC>

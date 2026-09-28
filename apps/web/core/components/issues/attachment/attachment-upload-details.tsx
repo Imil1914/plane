@@ -16,6 +16,7 @@ import { getFileIcon } from "@/components/icons";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // types
 import type { TAttachmentUploadStatus } from "@/store/issue/issue-details/attachment.store";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   uploadStatus: TAttachmentUploadStatus;
@@ -24,6 +25,7 @@ type Props = {
 export const IssueAttachmentsUploadDetails = observer(function IssueAttachmentsUploadDetails(props: Props) {
   // props
   const { uploadStatus } = props;
+  const ppmText = usePpmText();
   // derived values
   const fileName = uploadStatus.name;
   const fileExtension = getFileExtension(uploadStatus.name ?? "");
@@ -51,7 +53,9 @@ export const IssueAttachmentsUploadDetails = observer(function IssueAttachmentsU
         <span className="flex-shrink-0">
           <CircularProgressIndicator size={20} strokeWidth={3} percentage={uploadStatus.progress} />
         </span>
-        <div className="flex-shrink-0 text-13 font-medium">{uploadStatus.progress}% done</div>
+        <div className="flex-shrink-0 text-13 font-medium">
+          {ppmText("ui.attachment.progress", `${uploadStatus.progress}% done`, { progress: uploadStatus.progress })}
+        </div>
       </div>
     </div>
   );

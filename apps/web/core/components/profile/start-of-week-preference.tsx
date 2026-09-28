@@ -16,17 +16,23 @@ import { SettingsControlItem } from "@/components/settings/control-item";
 // hooks
 import { useUserProfile } from "@/hooks/store/user";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { useTranslation } from "@plane/i18n";
+import { getPpmWeekdayName } from "@/components/ppm-shell/week-start";
 
-const getStartOfWeekLabel = (startOfWeek: EStartOfTheWeek) =>
+const getStartOfWeekLabel = (startOfWeek: EStartOfTheWeek, language?: string) =>
+  getPpmWeekdayName(startOfWeek, language) ??
   START_OF_THE_WEEK_OPTIONS.find((option) => option.value === startOfWeek)?.label;
 
 export const StartOfWeekPreference = observer(function StartOfWeekPreference(props: {
   option: { title: string; description: string };
 }) {
   // hooks
-  const { data: userProfile, updateUserProfile } = useUserProfile();
+  const { updateUserProfile, startOfTheWeek } = useUserProfile();
   const ppmT = usePpmTranslation();
   const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+  const { currentLocale } = useTranslation();
+  // Russian weekday names only under the PPM shell (upstream keeps its English labels).
+  const weekdayLanguage = isPpmShell ? currentLocale : undefined;
 
   const handleStartOfWeekChange = async (val: number) => {
     try {
@@ -53,8 +59,8 @@ export const StartOfWeekPreference = observer(function StartOfWeekPreference(pro
       description={props.option.description}
       control={
         <CustomSelect
-          value={userProfile.start_of_the_week}
-          label={getStartOfWeekLabel(userProfile.start_of_the_week)}
+          value={startOfTheWeek}
+          label={getStartOfWeekLabel(startOfTheWeek, weekdayLanguage)}
           onChange={handleStartOfWeekChange}
           buttonClassName="border border-subtle-1"
           input
@@ -64,7 +70,7 @@ export const StartOfWeekPreference = observer(function StartOfWeekPreference(pro
           <>
             {START_OF_THE_WEEK_OPTIONS.map((day) => (
               <CustomSelect.Option key={day.value} value={day.value}>
-                {day.label}
+                {getStartOfWeekLabel(day.value, weekdayLanguage)}
               </CustomSelect.Option>
             ))}
           </>

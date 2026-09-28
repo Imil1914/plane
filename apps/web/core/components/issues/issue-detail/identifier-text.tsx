@@ -8,6 +8,7 @@ import { setToast, TOAST_TYPE } from "@plane/propel/toast";
 import { Tooltip } from "@plane/propel/tooltip";
 import type { TIdentifierTextProps, TIdentifierTextVariant, TIssueIdentifierSize } from "@plane/types";
 import { cn } from "@plane/utils";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 const SIZE_MAP: Record<TIssueIdentifierSize, string> = {
   xs: "text-caption-sm-regular",
@@ -27,6 +28,7 @@ const VARIANT_MAP: Record<TIdentifierTextVariant, string> = {
 
 export function IdentifierText(props: TIdentifierTextProps) {
   const { identifier, enableClickToCopyIdentifier = false, size = "lg", variant = "default" } = props;
+  const ppmText = usePpmText();
   // handlers
   const handleCopyIssueIdentifier = () => {
     if (enableClickToCopyIdentifier) {
@@ -35,7 +37,7 @@ export function IdentifierText(props: TIdentifierTextProps) {
         .then(() => {
           setToast({
             type: TOAST_TYPE.SUCCESS,
-            title: "Work item ID copied to clipboard",
+            title: ppmText("ui.issue.id_copied", "Work item ID copied to clipboard"),
           });
           return;
         })
@@ -49,7 +51,11 @@ export function IdentifierText(props: TIdentifierTextProps) {
   const variantClassName = VARIANT_MAP[variant];
 
   return (
-    <Tooltip tooltipContent="Click to copy" disabled={!enableClickToCopyIdentifier} position="top">
+    <Tooltip
+      tooltipContent={ppmText("ui.common.click_to_copy", "Click to copy")}
+      disabled={!enableClickToCopyIdentifier}
+      position="top"
+    >
       <button
         type="button"
         className={cn("text-12 font-medium whitespace-nowrap text-tertiary", textSizeClassName, variantClassName, {

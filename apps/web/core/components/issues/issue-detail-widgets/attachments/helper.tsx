@@ -12,6 +12,7 @@ import { EIssueServiceType } from "@plane/types";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // types
 import type { TAttachmentUploadStatus } from "@/store/issue/issue-details/attachment.store";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export type TAttachmentOperations = {
   create: (file: File) => Promise<void>;
@@ -37,20 +38,22 @@ export const useAttachmentOperations = (
     attachment: { createAttachment, removeAttachment, getAttachmentsUploadStatusByIssueId },
   } = useIssueDetail(issueServiceType);
 
+  const ppmText = usePpmText();
   const attachmentOperations: TAttachmentOperations = useMemo(
     () => ({
       create: async (file) => {
         if (!workspaceSlug || !projectId || !issueId) throw new Error("Missing required fields");
         const attachmentUploadPromise = createAttachment(workspaceSlug, projectId, issueId, file);
         setPromiseToast(attachmentUploadPromise, {
-          loading: "Uploading attachment...",
+          loading: ppmText("ui.toast.attachment_uploading", "Uploading attachment..."),
           success: {
-            title: "Attachment uploaded",
-            message: () => "The attachment has been successfully uploaded",
+            title: ppmText("ui.toast.attachment_uploaded", "Attachment uploaded"),
+            message: () =>
+              ppmText("ui.toast.attachment_uploaded_message", "The attachment has been successfully uploaded"),
           },
           error: {
-            title: "Attachment not uploaded",
-            message: () => "The attachment could not be uploaded",
+            title: ppmText("ui.toast.attachment_upload_failed", "Attachment not uploaded"),
+            message: () => ppmText("ui.toast.attachment_upload_failed_message", "The attachment could not be uploaded"),
           },
         });
 
@@ -61,20 +64,20 @@ export const useAttachmentOperations = (
           if (!workspaceSlug || !projectId || !issueId) throw new Error("Missing required fields");
           await removeAttachment(workspaceSlug, projectId, issueId, attachmentId);
           setToast({
-            message: "The attachment has been successfully removed",
+            message: ppmText("ui.toast.attachment_removed_message", "The attachment has been successfully removed"),
             type: TOAST_TYPE.SUCCESS,
-            title: "Attachment removed",
+            title: ppmText("ui.toast.attachment_removed", "Attachment removed"),
           });
         } catch (_error) {
           setToast({
-            message: "The Attachment could not be removed",
+            message: ppmText("ui.toast.attachment_remove_failed_message", "The Attachment could not be removed"),
             type: TOAST_TYPE.ERROR,
-            title: "Attachment not removed",
+            title: ppmText("ui.toast.attachment_remove_failed", "Attachment not removed"),
           });
         }
       },
     }),
-    [workspaceSlug, projectId, issueId, createAttachment, removeAttachment]
+    [workspaceSlug, projectId, issueId, createAttachment, removeAttachment, ppmText]
   );
   const attachmentsUploadStatus = getAttachmentsUploadStatusByIssueId(issueId);
 

@@ -14,10 +14,14 @@ import { useTimeLineRelationOptions } from "@/components/relations";
 // local helpers
 import { IssueActivityBlockComponent } from "./";
 import { getRelationActivityContent } from "./helpers/activity";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { getPpmRelationActivityPhrase } from "./helpers/activity";
+import { PpmActivityPhrase } from "./helpers/ppm-activity";
 
 type TIssueRelationActivity = { activityId: string; ends: "top" | "bottom" | undefined };
 
 export const IssueRelationActivity = observer(function IssueRelationActivity(props: TIssueRelationActivity) {
+  const isPpmRu = usePpmRu();
   const { activityId, ends } = props;
   // hooks
   const {
@@ -27,6 +31,7 @@ export const IssueRelationActivity = observer(function IssueRelationActivity(pro
   const activity = getActivityById(activityId);
   const ISSUE_RELATION_OPTIONS = useTimeLineRelationOptions();
   const activityContent = getRelationActivityContent(activity);
+  const ppmRelationPhrase = getPpmRelationActivityPhrase(activity);
 
   if (!activity) return <></>;
   return (
@@ -35,11 +40,26 @@ export const IssueRelationActivity = observer(function IssueRelationActivity(pro
       activityId={activityId}
       ends={ends}
     >
-      {activityContent}
-      {activity.old_value === "" ? (
-        <span className="font-medium text-primary">{activity.new_value}.</span>
+      {isPpmRu && ppmRelationPhrase ? (
+        <PpmActivityPhrase
+          phrase={ppmRelationPhrase}
+          values={{
+            value: (
+              <span className="font-medium text-primary">
+                {activity.old_value === "" ? activity.new_value : activity.old_value}
+              </span>
+            ),
+          }}
+        />
       ) : (
-        <span className="font-medium text-primary">{activity.old_value}.</span>
+        <>
+          {activityContent}
+          {activity.old_value === "" ? (
+            <span className="font-medium text-primary">{activity.new_value}.</span>
+          ) : (
+            <span className="font-medium text-primary">{activity.old_value}.</span>
+          )}
+        </>
       )}
     </IssueActivityBlockComponent>
   );

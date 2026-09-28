@@ -20,6 +20,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 // plane web hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   children: React.ReactNode;
@@ -29,6 +30,7 @@ type Props = {
 
 export const PagesListMainContent = observer(function PagesListMainContent(props: Props) {
   const { children, pageType, storeType } = props;
+  const ppmText = usePpmText();
   // plane hooks
   const { t } = useTranslation();
   // store hooks
@@ -66,8 +68,8 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
       .catch((err) => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.data?.error || "Page could not be created. Please try again.",
+          title: ppmText("ui.toast.error", "Error!"),
+          message: err?.data?.error || ppmText("ui.page.create_failed", "Page could not be created. Please try again."),
         });
       })
       .finally(() => setIsCreatingPage(false));

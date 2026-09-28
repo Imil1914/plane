@@ -11,11 +11,15 @@ import { ArchiveIcon } from "@plane/propel/icons";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 // components
 import { IssueActivityBlockComponent } from "./";
+import { PPM_BRAND } from "@ppm/brand";
+import { IS_PPM_SHELL_TEXT, usePpmRu } from "@/hooks/use-ppm-text";
+import { PpmActivityPhrase } from "./helpers/ppm-activity";
 // ui
 
 type TIssueArchivedAtActivity = { activityId: string; ends: "top" | "bottom" | undefined };
 
 export const IssueArchivedAtActivity = observer(function IssueArchivedAtActivity(props: TIssueArchivedAtActivity) {
+  const isPpmRu = usePpmRu();
   const { activityId, ends } = props;
   // hooks
   const {
@@ -37,9 +41,15 @@ export const IssueArchivedAtActivity = observer(function IssueArchivedAtActivity
       }
       activityId={activityId}
       ends={ends}
-      customUserName={activity.new_value === "archive" ? "Plane" : undefined}
+      customUserName={activity.new_value === "archive" ? (IS_PPM_SHELL_TEXT ? PPM_BRAND.name : "Plane") : undefined}
     >
-      {activity.new_value === "restore" ? "restored the work item" : "archived the work item"}.
+      {isPpmRu ? (
+        <PpmActivityPhrase
+          phrase={activity.new_value === "restore" ? "ui.activity.restored" : "ui.activity.archived"}
+        />
+      ) : (
+        <>{activity.new_value === "restore" ? "restored the work item" : "archived the work item"}.</>
+      )}
     </IssueActivityBlockComponent>
   );
 });

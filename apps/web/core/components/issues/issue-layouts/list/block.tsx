@@ -218,7 +218,7 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
           <div className="flex flex-grow items-center gap-0.5 truncate">
             <div className="flex items-center gap-1" style={isSubIssue ? { marginLeft } : {}}>
               {/* select checkbox */}
-              {projectId && canSelectIssues && !isEpic && (
+              {canSelectIssues && !isEpic && !isSubIssue && (
                 <Tooltip
                   tooltipContent={
                     <>
@@ -227,20 +227,20 @@ export const IssueBlock = observer(function IssueBlock(props: IssueBlockProps) {
                       project can be selected.
                     </>
                   }
-                  disabled={issue.project_id === projectId}
+                  disabled={!projectId || issue.project_id === projectId}
                 >
                   <div className="absolute left-1 grid w-3.5 flex-shrink-0 place-items-center">
                     <MultipleSelectEntityAction
                       className={cn(
-                        "pointer-events-none opacity-0 transition-opacity group-hover/list-block:pointer-events-auto group-hover/list-block:opacity-100",
+                        "pointer-events-none opacity-0 transition-opacity group-hover/list-block:pointer-events-auto group-hover/list-block:opacity-100 focus-visible:opacity-100",
                         {
-                          "pointer-events-auto opacity-100": isIssueSelected,
+                          "pointer-events-auto opacity-100": isIssueSelected || selectionHelpers.isSelectionActive,
                         }
                       )}
                       groupId={groupId}
                       id={issue.id}
                       selectionHelpers={selectionHelpers}
-                      disabled={issue.project_id !== projectId}
+                      disabled={!!projectId && issue.project_id !== projectId}
                     />
                   </div>
                 </Tooltip>

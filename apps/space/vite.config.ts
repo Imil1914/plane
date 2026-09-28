@@ -15,6 +15,10 @@ const viteEnv = Object.keys(process.env)
     return a;
   }, {});
 
+// PPM: the non-secret rollback flags of the PPM brand and shell (sign-in screens), as in apps/web/vite.config.ts.
+viteEnv.PPM_BRAND_ENABLED = process.env.PPM_BRAND_ENABLED ?? "1";
+viteEnv.PPM_SHELL_ENABLED = process.env.PPM_SHELL_ENABLED ?? "1";
+
 const basePath = joinUrlPath(process.env.VITE_SPACE_BASE_PATH ?? "", "/") ?? "/";
 
 export default defineConfig(() => ({

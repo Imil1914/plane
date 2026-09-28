@@ -23,6 +23,7 @@ import { useIssuesActions } from "@/hooks/use-issues-actions";
 import type { IQuickActionProps } from "../list/list-view-types";
 import { CalendarChart } from "./calendar";
 import { handleDragDrop } from "./utils";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export type CalendarStoreType =
   | EIssuesStoreType.PROJECT
@@ -59,6 +60,7 @@ export const BaseCalendarRoot = observer(function BaseCalendarRoot(props: IBaseC
   const fallbackStoreType = useIssueStoreType() as CalendarStoreType;
   const storeType = isEpic ? EIssuesStoreType.EPIC : fallbackStoreType;
   const { allowPermissions } = useUserPermissions();
+  const ppmText = usePpmText();
   const { issues, issuesFilter, issueMap } = useIssues(storeType);
   const {
     fetchIssues,
@@ -121,7 +123,7 @@ export const BaseCalendarRoot = observer(function BaseCalendarRoot(props: IBaseC
       updateIssue
     ).catch((err) => {
       setToast({
-        title: "Error!",
+        title: ppmText("ui.toast.error", "Error!"),
         type: TOAST_TYPE.ERROR,
         message: err?.detail ?? "Failed to perform this action",
       });

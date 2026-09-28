@@ -14,6 +14,7 @@ import { useMember } from "@/hooks/store/use-member";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 // types
 import type { TLinkOperationsModal } from "./create-update-link-modal";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 export type TIssueLinkDetail = {
   linkId: string;
@@ -32,6 +33,7 @@ export function IssueLinkDetail(props: TIssueLinkDetail) {
   } = useIssueDetail();
   const { getUserDetails } = useMember();
   const { isMobile } = usePlatformOS();
+  const ppmText = usePpmText();
   const linkDetail = getLinkById(linkId);
   if (!linkDetail) return <></>;
 
@@ -53,8 +55,8 @@ export function IssueLinkDetail(props: TIssueLinkDetail) {
             copyTextToClipboard(linkDetail.url);
             setToast({
               type: TOAST_TYPE.SUCCESS,
-              title: "Link copied!",
-              message: "Link copied to clipboard",
+              title: ppmText("ui.toast.link_copied_bang", "Link copied!"),
+              message: ppmText("ui.toast.link_copied_message", "Link copied to clipboard"),
             });
           }}
         >

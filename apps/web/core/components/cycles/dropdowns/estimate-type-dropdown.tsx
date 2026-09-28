@@ -13,6 +13,13 @@ import { useProjectEstimates } from "@/hooks/store/estimates";
 import { useCycle } from "@/hooks/store/use-cycle";
 // local imports
 import { cycleEstimateOptions } from "../analytics-sidebar/issue-progress";
+import { usePpmText } from "@/hooks/use-ppm-text";
+
+// PPM names of the burndown basis (the options live in the analytics sidebar, owned by lane S).
+const PPM_ESTIMATE_TYPE_KEYS = {
+  issues: "ui.cycle.estimate_type_tasks",
+  points: "ui.cycle.estimate_type_points",
+} as const;
 
 type TProps = {
   value: TCycleEstimateType;
@@ -25,6 +32,11 @@ type TProps = {
 export const EstimateTypeDropdown = observer(function EstimateTypeDropdown(props: TProps) {
   const { value, onChange, projectId, cycleId, showDefault = false } = props;
   const { getIsPointsDataAvailable } = useCycle();
+  const ppmText = usePpmText();
+  const optionLabel = (option: { value: string; label: string } | undefined) =>
+    option && option.value in PPM_ESTIMATE_TYPE_KEYS
+      ? ppmText(PPM_ESTIMATE_TYPE_KEYS[option.value as keyof typeof PPM_ESTIMATE_TYPE_KEYS], option.label)
+      : option?.label;
   const { areEstimateEnabledByProjectId, currentProjectEstimateType } = useProjectEstimates();
   const isCurrentProjectEstimateEnabled = projectId && areEstimateEnabledByProjectId(projectId) ? true : false;
   return (getIsPointsDataAvailable(cycleId) || isCurrentProjectEstimateEnabled) &&
@@ -32,19 +44,23 @@ export const EstimateTypeDropdown = observer(function EstimateTypeDropdown(props
     <div className="relative flex items-center gap-2">
       <CustomSelect
         value={value}
-        label={<span>{cycleEstimateOptions.find((v) => v.value === value)?.label ?? "None"}</span>}
+        label={
+          <span>
+            {optionLabel(cycleEstimateOptions.find((v) => v.value === value)) ?? ppmText("ui.common.none", "None")}
+          </span>
+        }
         onChange={onChange}
         maxHeight="lg"
         buttonClassName="bg-surface-2 border-none rounded-sm text-13 font-medium "
       >
         {cycleEstimateOptions.map((item) => (
           <CustomSelect.Option key={item.value} value={item.value}>
-            {item.label}
+            {optionLabel(item)}
           </CustomSelect.Option>
         ))}
       </CustomSelect>
     </div>
   ) : showDefault ? (
-    <span className="capitalize">{cycleEstimateOptions.find((v) => v.value === value)?.label ?? value}</span>
+    <span className="capitalize">{optionLabel(cycleEstimateOptions.find((v) => v.value === value)) ?? value}</span>
   ) : null;
 });

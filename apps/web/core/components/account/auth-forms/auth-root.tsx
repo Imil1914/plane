@@ -8,8 +8,11 @@ import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useSearchParams } from "next/navigation";
 // plane imports
+import { useTranslation } from "@plane/i18n";
 import { OAuthOptions } from "@plane/ui";
-import { isPpmShellEnabled } from "@ppm/brand";
+import { getOAuthButtonText } from "@plane/utils";
+import { getPpmTranslation, isPpmShellEnabled } from "@ppm/brand";
+import type { TPpmTranslationKey } from "@ppm/brand";
 // helpers
 import type { TAuthErrorInfo } from "@/helpers/authentication.helper";
 import {
@@ -37,6 +40,8 @@ const IS_PPM_SHELL_ENABLED = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, pr
 
 export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
   const ppmT = usePpmTranslation();
+  // PPM line L: errors in the interface language
+  const { currentLocale } = useTranslation();
   //router
   const searchParams = useSearchParams();
   // query params
@@ -59,7 +64,17 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
     : authMode === EAuthModes.SIGN_UP
       ? "Sign up"
       : "Sign in";
-  const { isOAuthEnabled, oAuthOptions } = useOAuthConfig(oAuthActionText);
+  const { isOAuthEnabled, oAuthOptions: upstreamOAuthOptions } = useOAuthConfig(oAuthActionText);
+  // PPM line L: «Войти через Google» instead of the upstream "<action> with Google" glued to a translated action.
+  const oAuthOptions = IS_PPM_SHELL_ENABLED
+    ? upstreamOAuthOptions.map((option) => ({
+        ...option,
+        text:
+          getOAuthButtonText(option.id, authMode === EAuthModes.SIGN_UP ? "sign_up" : "sign_in", (key) =>
+            getPpmTranslation(currentLocale, key as TPpmTranslationKey)
+          ) ?? option.text,
+      }))
+    : upstreamOAuthOptions;
   const isEmailBasedAuthEnabled = config?.is_email_password_enabled || config?.is_magic_login_enabled;
   const noAuthMethodsAvailable = !isOAuthEnabled && !isEmailBasedAuthEnabled;
 
@@ -69,7 +84,11 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
 
   useEffect(() => {
     if (error_code && authMode) {
-      const errorhandler = authErrorHandler(error_code?.toString() as EAuthenticationErrorCodes);
+      const errorhandler = authErrorHandler(
+        error_code?.toString() as EAuthenticationErrorCodes,
+        undefined,
+        currentLocale
+      );
       if (errorhandler) {
         // password error handler
         if ([EAuthenticationErrorCodes.AUTHENTICATION_FAILED_SIGN_UP].includes(errorhandler.code)) {
@@ -107,7 +126,7 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
         setErrorInfo(errorhandler);
       }
     }
-  }, [error_code, authMode]);
+  }, [error_code, authMode, currentLocale]);
 
   if (!authMode) return <></>;
 
@@ -143,6 +162,7 @@ export const AuthRoot = observer(function AuthRoot(props: TAuthRoot) {
           options={oAuthOptions}
           compact={authStep === EAuthSteps.PASSWORD}
           showDivider={isEmailBasedAuthEnabled}
+          dividerText={IS_PPM_SHELL_ENABLED ? ppmT("auth.or") : undefined}
         />
       )}
       {isEmailBasedAuthEnabled && (
