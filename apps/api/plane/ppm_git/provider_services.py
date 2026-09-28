@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone as datetime_timezone
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from rest_framework import status as http_status
 
 from plane.db.models import Issue, Project, User
 from plane.ppm_core.permissions import PpmProjectAccess
@@ -31,13 +32,25 @@ from .models import (
     PpmGitRepositoryStatus,
 )
 from .permissions import get_ppm_git_capabilities
-from .providers import GitHubAppClient, github_app_is_configured
-from .providers.base import PpmGitProviderError, PpmGitProviderRateLimited
+from .providers import (
+    FORGEJO_INSTALLATION_ID,
+    GitHubAppClient,
+    forgejo_is_configured,
+    forgejo_public_url,
+    forgejo_ssh_enabled,
+    forgejo_trusted_origin,
+    get_provider_client,
+    github_app_is_configured,
+)
+from .providers.base import REPOSITORY_MOVED_CODES, PpmGitProviderError, PpmGitProviderRateLimited
 from .services import (
     PpmGitError,
     create_repository,
+    ensure_clone_scope,
     normalize_git_object_url,
     normalize_name,
+    normalize_ssh_url,
+    restore_repository,
     update_repository,
 )
 
@@ -50,6 +63,59 @@ ACTIVE_CONNECTION_STATUSES = {
     PpmGitConnectionStatus.PERMISSION_DRIFT,
 }
 REQUIRED_PERMISSIONS = {"contents": "read", "pull_requests": "read"}
+# G2.1: machine code of a repository-level error a provider's normalized delivery may report
+# (providers.base.ConnectionErrorDirective).
+CONNECTION_ERROR_CODE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+# G2.1: a directive with `halt_sync` (for example «repository deleted») stops synchronization of the connection until an
+# administrator presses «Обновить». The marker {"code": …, "at": ISO 8601} lives in `sync_cursor` next to the commit
+# cursor: scheduled reconciliation, retries and deliveries skip the connection, `resume_connection_sync` lifts it.
+SYNC_HALT_KEY = "halted"
+# G2.1 A2: pushes the provider delivered only in part (`providers.base.CatchUpRange`), kept until a synchronization read
+# them (at most CATCH_UP_LIMIT, the newest win).
+CATCH_UP_KEY = "catch_up"
+CATCH_UP_LIMIT = 20
+CATCH_UP_SHA = re.compile(r"^[0-9a-f]{40,64}$")
+# G2.1 A2: the Forgejo «installation» of a project — the read-only service account ppm-bot, one row per project.
+FORGEJO_PERMISSIONS = {"metadata": "read", "contents": "read", "pull_requests": "read"}
+FORGEJO_EVENTS = ["push", "pull_request", "create", "delete", "repository"]
+FORGEJO_SEARCH_MAX_LENGTH = 100
+FORGEJO_MAX_PAGE = 1000
+# G2.1 A2 fix round 1: a receipt is proof of receipt, not an archive. A handled one (processed or ignored) is removed
+# this long after it was handled (round 2: `processed_at`, not `received_at` — a delivery that failed for weeks and then
+# succeeded still guards against its next redelivery) — for every provider (nothing cleaned GitHub receipts before);
+# failed and pending ones stay, the scheduled job still retries them. At most DELIVERY_PURGE_BATCH per run of the
+# 15-minute reconciliation.
+DELIVERY_RETENTION = timedelta(days=30)
+DELIVERY_PURGE_BATCH = 1000
+# What a receipt of a repository PPM does not follow keeps (fix round 1): the system webhook of the Git server sends
+# every repository of the server, and PPM stores none of their content.
+UNFOLLOWED_DELIVERY_KEYS = ("event", "action", "installation_id", "repository_id")
+
+
+def sync_halted(connection):
+    return isinstance(connection.sync_cursor, dict) and SYNC_HALT_KEY in connection.sync_cursor
+
+
+def resume_connection_sync(*, connection, user_id):
+    """«Обновить»: lifts a provider halt, so the queued synchronization reaches the provider again (for example
+    after the repository was restored). The commit cursor stays.
+
+    Returns the lifted marker, or None when the connection was not halted. The halt is looked up only on the locked row
+    (A2, item 0): the caller's ``connection`` was read earlier, and a halt that landed since then must still be lifted —
+    otherwise the queued synchronization would see it and do nothing.
+    """
+    with transaction.atomic():
+        locked = PpmGitConnection.objects.select_for_update().get(id=connection.id)
+        cursor = dict(locked.sync_cursor) if isinstance(locked.sync_cursor, dict) else {}
+        halt = cursor.pop(SYNC_HALT_KEY, None)
+        if halt is None:
+            connection.sync_cursor = locked.sync_cursor
+            return None
+        locked.sync_cursor = cursor
+        locked.updated_by = user_id
+        locked.save(update_fields=["sync_cursor", "updated_by", "updated_at"])
+    connection.sync_cursor = cursor
+    return halt if isinstance(halt, dict) else {}
 
 
 def provider_summary():
@@ -60,6 +126,264 @@ def provider_summary():
         "permissions": {"metadata": "read", **REQUIRED_PERMISSIONS},
         "events": ["installation", "installation_repositories", "push", "pull_request"],
     }
+
+
+def providers_summary():
+    """G2.1 R9: which Git providers this PPM is set up for — never a secret (the token and the webhook secret stay)."""
+    return {
+        "github": {"configured": github_app_is_configured()},
+        "forgejo": {"configured": forgejo_is_configured(), "public_url": forgejo_public_url() or None},
+    }
+
+
+# --- Forgejo: PPM's own Git server (G2.1 A2) -------------------------------------------------------------------------
+
+
+def list_forgejo_repositories(*, workspace_id, project_id, search="", page=1, client=None):
+    """One page of the Git server's repositories for the connect dialog, each marked when already connected here."""
+    _require_forgejo_configured()
+    query = search.strip()[:FORGEJO_SEARCH_MAX_LENGTH] if isinstance(search, str) else ""
+    page_number = _page_number(page)
+    try:
+        answer = (client or get_provider_client(PpmGitProvider.FORGEJO)).search_repositories(
+            query=query,
+            page=page_number,
+        )
+    except PpmGitProviderError as exc:
+        raise _provider_error(exc) from exc
+    connections = {
+        connection.provider_repository_id: connection
+        for connection in PpmGitConnection.objects.select_related("repository").filter(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            installation__provider=PpmGitProvider.FORGEJO,
+        )
+    }
+    return {
+        "results": [
+            {
+                "provider_repository_id": item["provider_repository_id"],
+                "full_name": item["full_name"],
+                "name": item["name"],
+                "owner": item["owner"],
+                "description": item["description"],
+                "private": item["private"],
+                "archived": item["archived"],
+                "default_branch": item["default_branch"],
+                "html_url": item["canonical_url"],
+                "clone_https": item["clone_https"],
+                "clone_ssh": item["clone_ssh"],
+                "updated_at": item["updated_at"].isoformat() if item["updated_at"] else None,
+                # Exactly the «already connected» 409 of connecting: a row that is not connected can be connected.
+                "connected": forgejo_connection_is_current(
+                    connections.get(item["provider_repository_id"]),
+                    full_name=item["full_name"],
+                ),
+            }
+            for item in answer["items"]
+        ],
+        "page": answer["page"],
+        "has_next": answer["has_next"],
+    }
+
+
+def forgejo_connection_is_current(connection, *, full_name):
+    """G2.1 A2 fix round 1 — the one «already connected» rule: the 409 of connecting and `connected` in the list.
+
+    The project's Forgejo connection of a repository is current while it is in an active state, is not halted, its
+    record is active and it carries the repository's current full name. Anything else — renamed or moved
+    (``GIT_REPOSITORY_MOVED``), halted, disconnected, or left on an archived record — is connected again, in place.
+    """
+    return (
+        connection is not None
+        and connection.status in ACTIVE_CONNECTION_STATUSES
+        and not sync_halted(connection)
+        and connection.repository.status == PpmGitRepositoryStatus.ACTIVE
+        and connection.provider_full_name == full_name
+    )
+
+
+def connect_forgejo_repository(*, workspace_id, project_id, provider_repository_id, user_id, client=None):
+    """G2.1 R7: connect a repository of PPM's Git server to the project (the view checks ``manage_git_server``).
+
+    The project's Forgejo installation row (ppm-bot, installation id 1), the repository — matched with a manual G0.1
+    record by its canonical URL, as GitHub does — and the active connection. A connection that is not current
+    (``forgejo_connection_is_current``) is connected again in place; one left on an archived record brings that record
+    back with its history (fix round 1). Returns ``(repository, connection)``.
+    """
+    _require_forgejo_configured()
+    try:
+        provider_repository_id = int(provider_repository_id)
+    except (TypeError, ValueError) as exc:
+        raise PpmGitError("GIT_REPOSITORY_INVALID", "Выберите репозиторий Git-сервера.") from exc
+    if provider_repository_id <= 0:
+        raise PpmGitError("GIT_REPOSITORY_INVALID", "Выберите репозиторий Git-сервера.")
+    client = client or get_provider_client(PpmGitProvider.FORGEJO)
+    try:
+        provider_data = client.get_repository(FORGEJO_INSTALLATION_ID, provider_repository_id)
+        bot = client.get_current_user()
+    except PpmGitProviderError as exc:
+        raise _provider_error(exc) from exc
+    if provider_data["archived"]:
+        raise PpmGitError("GIT_REPOSITORY_ARCHIVED", "Архивный репозиторий нельзя подключить к проекту.")
+
+    payload = {
+        "name": provider_data["name"],
+        "provider": PpmGitProvider.FORGEJO,
+        "canonical_url": provider_data["canonical_url"],
+        "clone_https": provider_data["clone_https"],
+        "clone_ssh": provider_data["clone_ssh"],
+        "default_branch": provider_data["default_branch"],
+        "visibility": provider_data["visibility"],
+        "is_default": False,
+    }
+    trusted_origin = forgejo_trusted_origin()
+    with transaction.atomic():
+        installation, created = PpmGitInstallation.objects.select_for_update().get_or_create(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            provider=PpmGitProvider.FORGEJO,
+            provider_installation_id=FORGEJO_INSTALLATION_ID,
+            defaults={
+                "provider_account_id": bot["id"],
+                "account_login": bot["login"],
+                "account_type": "User",
+                "repository_selection": "all",
+                "permissions": dict(FORGEJO_PERMISSIONS),
+                "events": list(FORGEJO_EVENTS),
+                "status": PpmGitInstallationStatus.ACTIVE,
+                "created_by": user_id,
+                "updated_by": user_id,
+            },
+        )
+        if not created:
+            installation.provider_account_id = bot["id"]
+            installation.account_login = bot["login"]
+            installation.permissions = dict(FORGEJO_PERMISSIONS)
+            installation.events = list(FORGEJO_EVENTS)
+            installation.status = PpmGitInstallationStatus.ACTIVE
+            installation.revoked_at = None
+            installation.updated_by = user_id
+            installation.save()
+        # The project's Forgejo connection of this repository, whatever the state of its record — at most one (unique
+        # per project, installation and repository id).
+        previous = (
+            PpmGitConnection.objects.select_for_update(of=("self",))
+            .select_related("repository")
+            .filter(installation=installation, provider_repository_id=provider_repository_id)
+            .first()
+        )
+        if forgejo_connection_is_current(previous, full_name=provider_data["full_name"]):
+            raise PpmGitError("GIT_REPOSITORY_CONFLICT", "Репозиторий уже подключён к проекту.")
+        repository = (
+            PpmGitRepository.objects.select_for_update()
+            .filter(
+                workspace_id=workspace_id,
+                project_id=project_id,
+                status=PpmGitRepositoryStatus.ACTIVE,
+                provider=PpmGitProvider.FORGEJO,
+                provider_repository_id=provider_repository_id,
+            )
+            .first()
+        )
+        if repository is None:
+            repository = (
+                PpmGitRepository.objects.select_for_update()
+                .filter(
+                    workspace_id=workspace_id,
+                    project_id=project_id,
+                    status=PpmGitRepositoryStatus.ACTIVE,
+                    canonical_url=provider_data["canonical_url"],
+                )
+                .first()
+            )
+        restored = previous is not None and previous.repository.status != PpmGitRepositoryStatus.ACTIVE
+        if restored:
+            # The repository was removed from the project (its record archived): the same record comes back with its
+            # history. Another active record of it (a manual one, by address) is not merged into it silently.
+            if repository is not None:
+                raise PpmGitError(
+                    "GIT_REPOSITORY_RECORD_CONFLICT",
+                    "В проекте есть ручная запись этого репозитория. Уберите её в разделе «Код» и подключите "
+                    "репозиторий снова — вернётся прежняя запись с историей.",
+                )
+            repository = restore_repository(
+                repository=previous.repository,
+                payload=payload,
+                user_id=user_id,
+                trusted_origin=trusted_origin,
+            )
+            existing = previous
+        else:
+            existing = (
+                PpmGitConnection.objects.select_for_update()
+                .select_related("installation")
+                .filter(repository=repository)
+                .first()
+                if repository is not None
+                else None
+            )
+            if existing is not None and existing.installation.provider != PpmGitProvider.FORGEJO:
+                # The record is connected through another provider: never re-point that connection.
+                raise PpmGitError("GIT_REPOSITORY_CONFLICT", "Этот репозиторий уже подключён через другого провайдера.")
+        if repository is None:
+            repository = create_repository(
+                workspace_id=workspace_id,
+                project_id=project_id,
+                payload=payload,
+                user_id=user_id,
+                trusted_origin=trusted_origin,
+            )
+        elif not restored:
+            payload["is_default"] = repository.is_default
+            repository = update_repository(
+                repository=repository,
+                payload=payload,
+                user_id=user_id,
+                trusted_origin=trusted_origin,
+            )
+        repository.provider_repository_id = provider_repository_id
+        repository.provider_full_name = provider_data["full_name"]
+        repository.updated_by = user_id
+        repository.save(update_fields=["provider_repository_id", "provider_full_name", "updated_by", "updated_at"])
+        if existing is None:
+            try:
+                with transaction.atomic():
+                    connection = PpmGitConnection.objects.create(
+                        workspace_id=workspace_id,
+                        project_id=project_id,
+                        installation=installation,
+                        repository=repository,
+                        provider_repository_id=provider_repository_id,
+                        provider_full_name=provider_data["full_name"],
+                        permissions=dict(FORGEJO_PERMISSIONS),
+                        events=list(FORGEJO_EVENTS),
+                        status=PpmGitConnectionStatus.ACTIVE,
+                        created_by=user_id,
+                        updated_by=user_id,
+                    )
+            except IntegrityError as exc:
+                # The project keeps a connection of this repository on an archived record.
+                raise PpmGitError("GIT_REPOSITORY_CONFLICT", "Репозиторий уже подключён к проекту.") from exc
+        else:
+            connection = existing
+            cursor = dict(connection.sync_cursor) if isinstance(connection.sync_cursor, dict) else {}
+            # A new connection starts synchronizing: a halt (for example «repository deleted») does not carry over.
+            cursor.pop(SYNC_HALT_KEY, None)
+            connection.installation = installation
+            connection.provider_repository_id = provider_repository_id
+            connection.provider_full_name = provider_data["full_name"]
+            connection.permissions = dict(FORGEJO_PERMISSIONS)
+            connection.events = list(FORGEJO_EVENTS)
+            connection.status = PpmGitConnectionStatus.ACTIVE
+            connection.sync_cursor = cursor
+            connection.last_error_code = ""
+            connection.last_error_message = ""
+            connection.retry_after = None
+            connection.disconnected_at = None
+            connection.updated_by = user_id
+            connection.save()
+    return repository, connection
 
 
 def start_github_connect(*, workspace_id, project_id, user_id, client=None):
@@ -189,6 +513,7 @@ def complete_github_connect(*, raw_state, code, client=None):
 
 
 def list_github_repositories(*, installation, client=None):
+    _require_github_installation(installation)
     if installation.status != PpmGitInstallationStatus.ACTIVE:
         raise PpmGitError("GITHUB_INSTALLATION_INACTIVE", "Подключение GitHub App больше не активно.")
     _ensure_required_permissions(installation.permissions)
@@ -199,6 +524,7 @@ def list_github_repositories(*, installation, client=None):
 
 
 def refresh_github_installation(*, installation, user_id, client=None):
+    _require_github_installation(installation)
     if installation.status != PpmGitInstallationStatus.ACTIVE:
         raise PpmGitError("GITHUB_INSTALLATION_INACTIVE", "Подключение GitHub App больше не активно.")
     _require_github_configured()
@@ -257,6 +583,7 @@ def connect_github_repository(
 ):
     if installation.workspace_id != workspace_id or installation.status != PpmGitInstallationStatus.ACTIVE:
         raise PpmGitError("GITHUB_INSTALLATION_NOT_FOUND", "Установка GitHub App не найдена.")
+    _require_github_installation(installation)
     _ensure_required_permissions(installation.permissions)
     try:
         provider_repository_id = int(provider_repository_id)
@@ -387,28 +714,40 @@ def synchronize_connection(connection_id, *, client=None):
     connection = PpmGitConnection.objects.select_related("installation", "repository").get(id=connection_id)
     if connection.status not in ACTIVE_CONNECTION_STATUSES:
         return connection
-    connection.status = PpmGitConnectionStatus.SYNCING
-    connection.last_error_code = ""
-    connection.last_error_message = ""
-    connection.save(update_fields=["status", "last_error_code", "last_error_message", "updated_at"])
+    # G2.1: a halted connection is never synchronized by schedule or retry — only after «Обновить» lifted the halt.
+    if sync_halted(connection) or not _mark_syncing(connection):
+        return connection
     since = connection.sync_cursor.get("commits_since") if isinstance(connection.sync_cursor, dict) else None
+    provider = connection.installation.provider
+    # G2.1 A2: pushes the provider delivered only in part are read now; GitHub never has any.
+    catch_up = _pending_catch_up(connection)
+    options = {"since": since, "catch_up": catch_up} if catch_up else {"since": since}
     try:
-        values = (client or GitHubAppClient()).sync_repository(
+        # G2.1: the client of the connection's provider (registry); `client=` stays for tests. Inside `try`: a provider
+        # without a usable client (unknown, not configured) is recorded on the connection, never left «syncing».
+        provider_client = client or get_provider_client(provider)
+        values = provider_client.sync_repository(
             connection.installation.provider_installation_id,
             connection.provider_repository_id,
             connection.provider_full_name,
-            since=since,
+            **options,
         )
     except PpmGitProviderRateLimited as exc:
         _record_sync_error(connection, exc, rate_limited=True)
         raise
     except PpmGitProviderError as exc:
         _record_sync_error(connection, exc)
+        if exc.code in REPOSITORY_MOVED_CODES:
+            # G2.1 A2 fix round 1: another repository may carry the old name now — the indexed code leaves search.
+            _purge_code_for_repositories([connection.repository_id])
         raise
 
     now = timezone.now()
     with transaction.atomic():
         connection = PpmGitConnection.objects.select_for_update().select_related("repository").get(id=connection.id)
+        if sync_halted(connection):
+            # G2.1: the provider halted the connection while this sync was reading it: its state wins, nothing stored.
+            return connection
         active_branch_ids = []
         for object_type in ("branches", "commits", "pull_requests"):
             for payload in values.get(object_type, []):
@@ -426,7 +765,12 @@ def synchronize_connection(connection_id, *, client=None):
         stale_branches.update(is_active=False, state="deleted")
         connection.status = PpmGitConnectionStatus.ACTIVE
         connection.last_sync_at = now
-        connection.sync_cursor = {"commits_since": (now - timedelta(minutes=5)).isoformat()}
+        cursor = {"commits_since": (now - timedelta(minutes=5)).isoformat()}
+        # Ranges a delivery added while this synchronization was reading stay for the next one.
+        remaining = [entry for entry in _pending_catch_up(connection) if entry not in catch_up]
+        if remaining:
+            cursor[CATCH_UP_KEY] = remaining
+        connection.sync_cursor = cursor
         connection.last_error_code = ""
         connection.last_error_message = ""
         connection.retry_after = None
@@ -442,13 +786,106 @@ def synchronize_connection(connection_id, *, client=None):
             ]
         )
     _request_code_sync(connection.repository_id)
+    refresh = PROVIDER_REPOSITORY_REFRESHERS.get(provider)
+    if refresh is not None:
+        refresh(connection, provider_client)
     return connection
+
+
+def _pending_catch_up(connection):
+    """The valid ``CatchUpRange`` entries kept in the connection's cursor (anything else is dropped)."""
+    cursor = connection.sync_cursor if isinstance(connection.sync_cursor, dict) else {}
+    entries = cursor.get(CATCH_UP_KEY)
+    if not isinstance(entries, list):
+        return []
+    return [entry for entry in (_catch_up_range(item) for item in entries) if entry is not None][-CATCH_UP_LIMIT:]
+
+
+def _catch_up_range(value):
+    if not isinstance(value, dict):
+        return None
+    ref, before, after, base = (value.get(key) for key in ("ref", "before", "after", "base"))
+    if not isinstance(ref, str) or not ref.startswith("refs/heads/") or len(ref) > 512:
+        return None
+    if not isinstance(after, str) or not CATCH_UP_SHA.fullmatch(after):
+        return None
+    if not isinstance(before, str) or (before and not CATCH_UP_SHA.fullmatch(before)):
+        return None
+    if not isinstance(base, str) or len(base) > 255:
+        return None
+    return {"ref": ref, "before": before, "after": after, "base": base}
+
+
+def _request_catch_up(connection, entry):
+    """Keeps the range on the connection and queues its synchronization (once the delivery's writes are committed)."""
+    from .tasks import reconcile_git_connection_task
+
+    with transaction.atomic():
+        locked = PpmGitConnection.objects.select_for_update().get(id=connection.id)
+        cursor = dict(locked.sync_cursor) if isinstance(locked.sync_cursor, dict) else {}
+        pending = [item for item in _pending_catch_up(locked) if item != entry]
+        cursor[CATCH_UP_KEY] = [*pending, entry][-CATCH_UP_LIMIT:]
+        locked.sync_cursor = cursor
+        locked.save(update_fields=["sync_cursor", "updated_at"])
+    connection.sync_cursor = cursor
+    connection_id = str(connection.id)
+    transaction.on_commit(lambda: reconcile_git_connection_task.delay(connection_id))
+
+
+def _refresh_forgejo_clone_ssh(connection, client):
+    """G2.1 A2 (controller ruling): with ``PPM_FORGEJO_SSH_ENABLED=0`` a Forgejo repository keeps no SSH address;
+    switched back on, the address Forgejo reports returns. Best effort: the synchronization itself already succeeded."""
+    repository = connection.repository
+    if forgejo_ssh_enabled() == bool(repository.clone_ssh):
+        return
+    value = ""
+    if forgejo_ssh_enabled():
+        try:
+            value = client.get_repository(FORGEJO_INSTALLATION_ID, connection.provider_repository_id)["clone_ssh"]
+            trusted_origin = forgejo_trusted_origin()
+            value = normalize_ssh_url(value, trusted_origin=trusted_origin)
+            ensure_clone_scope(
+                canonical_url=repository.canonical_url,
+                clone_https=repository.clone_https,
+                clone_ssh=value,
+                trusted_origin=trusted_origin,
+            )
+        except (PpmGitProviderError, PpmGitError, AttributeError, KeyError, TypeError):
+            return
+        if not value:
+            return
+    PpmGitRepository.objects.filter(id=repository.id).update(clone_ssh=value, updated_at=timezone.now())
+    repository.clone_ssh = value
+
+
+# Provider-specific upkeep of the repository record after a successful synchronization.
+PROVIDER_REPOSITORY_REFRESHERS = {
+    PpmGitProvider.FORGEJO.value: _refresh_forgejo_clone_ssh,
+}
+
+
+def _mark_syncing(connection):
+    """Marks the start of a sync unless a halt landed since the connection was read (one conditional UPDATE)."""
+    now = timezone.now()
+    marked = (
+        PpmGitConnection.objects.filter(id=connection.id)
+        .exclude(sync_cursor__has_key=SYNC_HALT_KEY)
+        .update(status=PpmGitConnectionStatus.SYNCING, last_error_code="", last_error_message="", updated_at=now)
+    )
+    if marked:
+        connection.status = PpmGitConnectionStatus.SYNCING
+        connection.last_error_code = ""
+        connection.last_error_message = ""
+        connection.updated_at = now
+    return bool(marked)
 
 
 def upsert_git_object(*, connection, payload):
     object_type = payload.get("object_type")
     if object_type not in PpmGitObjectType.values:
-        raise PpmGitError("GITHUB_OBJECT_INVALID", "GitHub вернул неизвестный тип объекта.")
+        if connection.installation.provider == PpmGitProvider.GITHUB:
+            raise PpmGitError("GITHUB_OBJECT_INVALID", "GitHub вернул неизвестный тип объекта.")
+        raise PpmGitError("GIT_OBJECT_INVALID", "Git-сервер вернул неизвестный тип объекта.")
     provider_object_id = normalize_name(payload.get("provider_object_id"), maximum=255)
     title = normalize_name(payload.get("title"), maximum=500)
     canonical_url = normalize_git_object_url(payload.get("canonical_url"), repository=connection.repository)
@@ -540,11 +977,12 @@ def auto_link_git_object(*, git_object, actor_id):
     return links
 
 
-def create_delivery(*, delivery_id, event_name, raw_body_hash, normalized_payload):
+def create_delivery(*, delivery_id, event_name, raw_body_hash, normalized_payload, provider=PpmGitProvider.GITHUB):
+    """Idempotent receipt of one delivery; delivery ids are unique per provider (G2.1)."""
     try:
         with transaction.atomic():
             delivery = PpmGitDelivery.objects.create(
-                provider=PpmGitProvider.GITHUB,
+                provider=provider,
                 provider_delivery_id=delivery_id,
                 event_name=event_name,
                 action=normalized_payload.get("action", ""),
@@ -556,11 +994,17 @@ def create_delivery(*, delivery_id, event_name, raw_body_hash, normalized_payloa
         return delivery, False
     except IntegrityError:
         delivery = PpmGitDelivery.objects.get(
-            provider=PpmGitProvider.GITHUB,
+            provider=provider,
             provider_delivery_id=delivery_id,
         )
         if delivery.body_sha256 != raw_body_hash:
-            raise PpmGitError("GITHUB_DELIVERY_CONFLICT", "Повторный webhook имеет другое содержимое.")
+            if provider == PpmGitProvider.GITHUB:
+                raise PpmGitError("GITHUB_DELIVERY_CONFLICT", "Повторный webhook имеет другое содержимое.")
+            raise PpmGitError(
+                "GIT_DELIVERY_CONFLICT",
+                "Повторное событие Git-сервера имеет другое содержимое.",
+                status_code=http_status.HTTP_409_CONFLICT,
+            )
         return delivery, True
 
 
@@ -575,9 +1019,10 @@ def process_delivery(delivery_id):
     try:
         processed = _apply_delivery(delivery)
     except Exception as exc:
+        failure_code, failure_message = _delivery_failure(delivery.provider)
         delivery.status = PpmGitDeliveryStatus.FAILED
-        delivery.last_error_code = getattr(exc, "code", "GITHUB_DELIVERY_FAILED")
-        delivery.last_error_message = str(getattr(exc, "message", "Не удалось обработать событие GitHub."))[:500]
+        delivery.last_error_code = getattr(exc, "code", failure_code)
+        delivery.last_error_message = str(getattr(exc, "message", failure_message))[:500]
         delivery.next_retry_at = timezone.now() + timedelta(minutes=min(2**delivery.attempts, 60))
         delivery.save(update_fields=["status", "last_error_code", "last_error_message", "next_retry_at"])
         raise
@@ -599,35 +1044,113 @@ def process_delivery(delivery_id):
 
 
 def _apply_delivery(delivery):
+    """G2.1 R1e: a provider's normalizer (``webhooks.py``) decided what the delivery means; applying it is neutral.
+
+    Installation-wide lifecycle events are provider-specific (GitHub App: ``LIFECYCLE_EVENT_APPLIERS``); everything else
+    is a normalized repository event (``providers.base.NormalizedDelivery``) applied the same way for every provider.
+    """
     payload = delivery.payload
     event_name = delivery.event_name
     if event_name == "ping" or payload.get("ignored"):
         return False
-    if event_name == "installation":
-        return _apply_installation_event(payload)
-    if event_name == "installation_repositories":
-        return _apply_installation_repositories_event(payload)
-    connections = PpmGitConnection.objects.select_related("repository").filter(
-        provider_repository_id=delivery.provider_repository_id,
-        status__in=ACTIVE_CONNECTION_STATUSES,
+    lifecycle = LIFECYCLE_EVENT_APPLIERS.get((delivery.provider, event_name))
+    if lifecycle is not None:
+        return lifecycle(delivery, payload)
+    directive = _connection_error_directive(payload)
+    if directive is not None:
+        return _apply_connection_error(delivery, directive)
+    return _apply_repository_event(delivery, payload)
+
+
+def _delivery_connections(delivery):
+    """Active connections of exactly this delivery's provider and repository (R1d): the numeric ids of different
+    providers may coincide, so the provider is always part of the match. A halted connection takes no events until
+    «Обновить»; the synchronization after it recovers what was missed."""
+    return _followed_connections(
+        provider=delivery.provider,
+        repository_id=delivery.provider_repository_id,
+        installation_id=delivery.provider_installation_id,
     )
-    if delivery.provider_installation_id is not None:
-        connections = connections.filter(
-            installation__provider_installation_id=delivery.provider_installation_id,
+
+
+def _followed_connections(*, provider, repository_id, installation_id):
+    connections = (
+        PpmGitConnection.objects.select_related("repository")
+        .filter(
+            installation__provider=provider,
+            provider_repository_id=repository_id,
+            status__in=ACTIVE_CONNECTION_STATUSES,
         )
-    else:
-        # Repository webhooks are a supported fallback for local/self-hosted PPM
-        # installations. Their payloads contain the repository id, but unlike a
-        # GitHub App webhook they do not include an installation object.
-        connections = connections.filter(installation__provider=PpmGitProvider.GITHUB)
+        .exclude(sync_cursor__has_key=SYNC_HALT_KEY)
+    )
+    if installation_id is not None:
+        connections = connections.filter(installation__provider_installation_id=installation_id)
+    # Without an installation id — GitHub repository webhooks, a supported fallback for local/self-hosted PPM whose
+    # payloads carry the repository id but no installation object — the provider and the repository id decide.
+    return connections
+
+
+def unfollowed_delivery_payload(*, provider, normalized):
+    """G2.1 A2 fix round 1: what the receipt of a delivery keeps. A repository no connection follows (the system webhook
+    of the Git server sends every repository of the server; a halted connection takes no events either) keeps only the
+    event, the action and the ids — no commit messages, titles, branches or authors; it is ignored when processed. The
+    connections are matched exactly as processing matches them (``_delivery_connections``)."""
+    if normalized.get("ignored") is True:
+        return normalized
+    repository_id = normalized.get("repository_id")
+    if (
+        repository_id is not None
+        and _followed_connections(
+            provider=provider,
+            repository_id=repository_id,
+            installation_id=normalized.get("installation_id"),
+        ).exists()
+    ):
+        return normalized
+    return {**{key: normalized[key] for key in UNFOLLOWED_DELIVERY_KEYS if key in normalized}, "ignored": True}
+
+
+def purge_old_deliveries(*, now=None):
+    """Removes handled receipts (processed or ignored) handled more than ``DELIVERY_RETENTION`` ago — of every provider;
+    returns how many. The period counts from ``processed_at``, set exactly when a receipt turns processed or ignored.
+    Failed and pending receipts stay: the scheduled job still retries them."""
+    cutoff = (now or timezone.now()) - DELIVERY_RETENTION
+    ids = list(
+        PpmGitDelivery.objects.filter(
+            status__in=[PpmGitDeliveryStatus.PROCESSED, PpmGitDeliveryStatus.IGNORED],
+            processed_at__isnull=False,
+            processed_at__lt=cutoff,
+        ).values_list("id", flat=True)[:DELIVERY_PURGE_BATCH]
+    )
+    if ids:
+        PpmGitDelivery.objects.filter(id__in=ids).delete()
+    return len(ids)
+
+
+def _repository_event_kind(payload):
+    if "branch" in payload or "commits" in payload:
+        return "ref_update"  # push, branch created or deleted
+    if "pull_request" in payload:
+        return "pull_request"
+    return None
+
+
+def _repository_event_objects(kind, payload):
+    if kind == "ref_update":
+        return [payload.get("branch"), *payload.get("commits", [])]
+    return [payload.get("pull_request")]
+
+
+def _apply_repository_event(delivery, payload):
+    kind = _repository_event_kind(payload)
+    if kind is None:
+        # Nothing PPM stores (an event a normalizer kept without content): accepted, no connection is touched.
+        return False
     processed = False
-    for connection in connections:
-        objects = []
-        if event_name == "push":
-            objects = [payload.get("branch"), *payload.get("commits", [])]
-        elif event_name == "pull_request":
-            objects = [payload.get("pull_request")]
-        for object_payload in objects:
+    # G2.1 A2: the provider cut this push — a synchronization reads the rest (`providers.base.CatchUpRange`).
+    catch_up = _catch_up_range(payload.get("catch_up")) if kind == "ref_update" else None
+    for connection in _delivery_connections(delivery):
+        for object_payload in _repository_event_objects(kind, payload):
             if not isinstance(object_payload, dict):
                 continue
             git_object = upsert_git_object(connection=connection, payload=object_payload)
@@ -640,16 +1163,64 @@ def _apply_delivery(delivery):
         connection.save(
             update_fields=["last_event_at", "status", "last_error_code", "last_error_message", "updated_at"]
         )
-        if event_name == "push":
+        if kind == "ref_update":
             _handle_code_push(connection=connection, payload=payload)
+        if catch_up is not None:
+            _request_catch_up(connection, catch_up)
     return processed
 
 
-def _apply_installation_event(payload):
+def _connection_error_directive(payload):
+    directive = payload.get("connection_error")
+    if not isinstance(directive, dict):
+        return None
+    code = directive.get("code")
+    message = directive.get("message")
+    if not isinstance(code, str) or not CONNECTION_ERROR_CODE.fullmatch(code):
+        return None
+    if not isinstance(message, str) or not message.strip():
+        return None
+    return {
+        "code": code,
+        "message": message.strip()[:500],
+        "purge_code": directive.get("purge_code") is True,
+        "halt_sync": directive.get("halt_sync") is True,
+    }
+
+
+def _apply_connection_error(delivery, directive):
+    """The provider reports that the repository can no longer be synchronized (for example it was deleted): the
+    connection shows the error, the Git history (objects, links) stays, the code index is dropped only on request.
+
+    Without ``halt_sync`` the state is temporary: the next successful synchronization (scheduled or manual) clears it.
+    With ``halt_sync`` the connection also gets the halt marker and waits for «Обновить» (``resume_connection_sync``).
+    The rows are locked, so a synchronization running right now either finishes first or sees the halt."""
+    now = timezone.now()
+    with transaction.atomic():
+        connections = list(_delivery_connections(delivery).select_for_update(of=("self",)))
+        for connection in connections:
+            connection.status = PpmGitConnectionStatus.ERROR
+            connection.last_error_code = directive["code"]
+            connection.last_error_message = directive["message"]
+            connection.retry_after = None
+            connection.last_event_at = now
+            update_fields = ["status", "last_error_code", "last_error_message", "retry_after", "last_event_at"]
+            if directive["halt_sync"]:
+                cursor = dict(connection.sync_cursor) if isinstance(connection.sync_cursor, dict) else {}
+                cursor[SYNC_HALT_KEY] = {"code": directive["code"], "at": now.isoformat()}
+                connection.sync_cursor = cursor
+                update_fields.append("sync_cursor")
+            connection.save(update_fields=[*update_fields, "updated_at"])
+    if directive["purge_code"]:
+        _purge_code_for_repositories([connection.repository_id for connection in connections])
+    return bool(connections)
+
+
+def _apply_installation_event(delivery, payload):
     action = payload.get("action")
     installation_id = payload.get("installation_id")
     installations = PpmGitInstallation.objects.filter(
-        provider=PpmGitProvider.GITHUB,
+        provider=delivery.provider,
         provider_installation_id=installation_id,
     )
     if action == "deleted":
@@ -700,11 +1271,12 @@ def _apply_installation_event(payload):
     return False
 
 
-def _apply_installation_repositories_event(payload):
+def _apply_installation_repositories_event(delivery, payload):
     removed = payload.get("repositories_removed", [])
     if not removed:
         return False
     connections = PpmGitConnection.objects.filter(
+        installation__provider=delivery.provider,
         installation__provider_installation_id=payload.get("installation_id"),
         provider_repository_id__in=removed,
     )
@@ -718,6 +1290,14 @@ def _apply_installation_repositories_event(payload):
     )
     _purge_code_for_repositories(repository_ids)
     return changed
+
+
+# GitHub App lifecycle (G1.1): installation-wide events only GitHub sends. Repository-level states of any provider come
+# as normalized content (``NormalizedDelivery.connection_error``), not as appliers here.
+LIFECYCLE_EVENT_APPLIERS = {
+    (PpmGitProvider.GITHUB.value, "installation"): _apply_installation_event,
+    (PpmGitProvider.GITHUB.value, "installation_repositories"): _apply_installation_repositories_event,
+}
 
 
 def _purge_code_for_repositories(repository_ids):
@@ -756,14 +1336,14 @@ def _record_sync_error(connection, error, *, rate_limited=False):
     connection.retry_after = (
         timezone.now() + timedelta(seconds=error.retry_after_seconds or 60) if rate_limited else None
     )
-    connection.save(
-        update_fields=[
-            "status",
-            "last_error_code",
-            "last_error_message",
-            "retry_after",
-            "updated_at",
-        ]
+    connection.updated_at = timezone.now()
+    # G2.1: a halt that landed during this sync keeps the directive's own code and text (one conditional UPDATE).
+    PpmGitConnection.objects.filter(id=connection.id).exclude(sync_cursor__has_key=SYNC_HALT_KEY).update(
+        status=connection.status,
+        last_error_code=connection.last_error_code,
+        last_error_message=connection.last_error_message,
+        retry_after=connection.retry_after,
+        updated_at=connection.updated_at,
     )
 
 
@@ -782,12 +1362,40 @@ def _ensure_required_permissions(permissions):
         )
 
 
+def _delivery_failure(provider):
+    if provider == PpmGitProvider.GITHUB:
+        return "GITHUB_DELIVERY_FAILED", "Не удалось обработать событие GitHub."
+    return "GIT_DELIVERY_FAILED", "Не удалось обработать событие Git-сервера."
+
+
+def _require_github_installation(installation):
+    """GitHub App flows accept only GitHub installations: another provider's installation lives in the same table
+    (G2.1) and must never reach the GitHub API."""
+    if installation.provider != PpmGitProvider.GITHUB:
+        raise PpmGitError("GITHUB_INSTALLATION_NOT_FOUND", "Установка GitHub App не найдена.")
+
+
 def _require_github_configured():
     if not github_app_is_configured():
         raise PpmGitError(
             "GITHUB_APP_NOT_CONFIGURED",
             "GitHub App ещё не настроен администратором PPM.",
         )
+
+
+def _require_forgejo_configured():
+    if not forgejo_is_configured():
+        raise PpmGitError("FORGEJO_NOT_CONFIGURED", "Git-сервер PPM ещё не настроен администратором сервера.")
+
+
+def _page_number(value):
+    try:
+        page = int(value)
+    except (TypeError, ValueError) as exc:
+        raise PpmGitError("GIT_INVALID_FIELD", "Номер страницы некорректен.", {"field": "page"}) from exc
+    if not 1 <= page <= FORGEJO_MAX_PAGE:
+        raise PpmGitError("GIT_INVALID_FIELD", "Номер страницы некорректен.", {"field": "page"})
+    return page
 
 
 def _validate_connect_state_token(raw_state):

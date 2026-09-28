@@ -30,6 +30,7 @@ from .models import (
     PpmGitLinkStatus,
     PpmGitObject,
     PpmGitObjectType,
+    PpmGitProvider,
     PpmGitRepository,
     PpmGitRepositoryStatus,
     PpmGitWriteAction,
@@ -194,6 +195,9 @@ def _outcome_unknown(action):
 def serialize_git_write_readiness(connections):
     values = []
     for connection in connections:
+        # G1.3 writes are GitHub-only (G2.1): another provider's repository is not a write target.
+        if connection.installation.provider != PpmGitProvider.GITHUB:
+            continue
         current_permissions = connection.permissions if isinstance(connection.permissions, dict) else {}
         missing_permissions = _missing_permissions(connection, WRITE_REQUIRED_PERMISSIONS)
         values.append(
@@ -252,6 +256,8 @@ def _get_sources(*, workspace_id, project_id, repository_id, work_item_id, lock=
         project_id=project_id,
         status__in=WRITE_CONNECTION_STATUSES,
         installation__status=PpmGitInstallationStatus.ACTIVE,
+        # G1.3 writes are GitHub-only (G2.1): another provider's repository never reaches the GitHub API.
+        installation__provider=PpmGitProvider.GITHUB,
     ).first()
     if connection is None:
         raise PpmGitError(

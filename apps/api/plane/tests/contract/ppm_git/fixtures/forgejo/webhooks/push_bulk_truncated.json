@@ -1,0 +1,512 @@
+{
+  "ref": "refs/heads/KEY-5/bulk",
+  "before": "605e512f1a59749c195663d2ff266d8e4d422097",
+  "after": "c7eb742b6962b2d76a17746ffcf154f3a03dd423",
+  "compare_url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/compare/605e512f1a59749c195663d2ff266d8e4d422097...c7eb742b6962b2d76a17746ffcf154f3a03dd423",
+  "commits": [
+    {
+      "id": "c7eb742b6962b2d76a17746ffcf154f3a03dd423",
+      "message": "KEY-5: bulk step 40\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/c7eb742b6962b2d76a17746ffcf154f3a03dd423",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T10:00:00+03:00",
+      "added": [
+        "src/bulk_40.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "3804d89124b0b55ad1fde39240c927b8b449eeb6",
+      "message": "KEY-5: bulk step 39\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/3804d89124b0b55ad1fde39240c927b8b449eeb6",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T19:00:00+03:00",
+      "added": [
+        "src/bulk_39.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "53ae968363a1f4e9dd173f5af363307edac8aae5",
+      "message": "KEY-5: bulk step 38\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/53ae968363a1f4e9dd173f5af363307edac8aae5",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T18:00:00+03:00",
+      "added": [
+        "src/bulk_38.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "82a67e0e7fb9c78ad056c47436103304b357975d",
+      "message": "KEY-5: bulk step 37\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/82a67e0e7fb9c78ad056c47436103304b357975d",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T17:00:00+03:00",
+      "added": [
+        "src/bulk_37.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "e72e36e860e848ba4747b161c0abb50e9f1ccac1",
+      "message": "KEY-5: bulk step 36\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/e72e36e860e848ba4747b161c0abb50e9f1ccac1",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T16:00:00+03:00",
+      "added": [
+        "src/bulk_36.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "59fce5a7ef1c174a686f358c8b9a75fbbfeccce1",
+      "message": "KEY-5: bulk step 35\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/59fce5a7ef1c174a686f358c8b9a75fbbfeccce1",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T15:00:00+03:00",
+      "added": [
+        "src/bulk_35.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "fe3a831ee0f6e1a77b22061cccb3072892a3ef79",
+      "message": "KEY-5: bulk step 34\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/fe3a831ee0f6e1a77b22061cccb3072892a3ef79",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T14:00:00+03:00",
+      "added": [
+        "src/bulk_34.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "d9c27e551ba390d36005d59facdfb30f3017413f",
+      "message": "KEY-5: bulk step 33\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/d9c27e551ba390d36005d59facdfb30f3017413f",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T13:00:00+03:00",
+      "added": [
+        "src/bulk_33.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "72cbc1ceab961e70db2210ba2128ea3acaff5a46",
+      "message": "KEY-5: bulk step 32\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/72cbc1ceab961e70db2210ba2128ea3acaff5a46",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T12:00:00+03:00",
+      "added": [
+        "src/bulk_32.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "0d45bef0f1f6eda2d78d0c1f68929fcb6d0a5d28",
+      "message": "KEY-5: bulk step 31\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/0d45bef0f1f6eda2d78d0c1f68929fcb6d0a5d28",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T11:00:00+03:00",
+      "added": [
+        "src/bulk_31.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "586372c1d4446d11bde71f1cdfaf361f8abf8bae",
+      "message": "KEY-5: bulk step 30\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/586372c1d4446d11bde71f1cdfaf361f8abf8bae",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T10:00:00+03:00",
+      "added": [
+        "src/bulk_30.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "5ea76aaf1e3b0aa83336a26d19b745e0153363d7",
+      "message": "KEY-5: bulk step 29\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/5ea76aaf1e3b0aa83336a26d19b745e0153363d7",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T19:00:00+03:00",
+      "added": [
+        "src/bulk_29.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "fb38ad56c40b1c643a4c244603d169f255da19a7",
+      "message": "KEY-5: bulk step 28\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/fb38ad56c40b1c643a4c244603d169f255da19a7",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T18:00:00+03:00",
+      "added": [
+        "src/bulk_28.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "c4cf0c7a12fa427a392090ca9c3d970362c3fdeb",
+      "message": "KEY-5: bulk step 27\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/c4cf0c7a12fa427a392090ca9c3d970362c3fdeb",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T17:00:00+03:00",
+      "added": [
+        "src/bulk_27.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "5d0067ef5cf0e85ebc388d56bf333e4424f791bd",
+      "message": "KEY-5: bulk step 26\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/5d0067ef5cf0e85ebc388d56bf333e4424f791bd",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-27T16:00:00+03:00",
+      "added": [
+        "src/bulk_26.py"
+      ],
+      "removed": [],
+      "modified": []
+    }
+  ],
+  "total_commits": 20,
+  "head_commit": {
+    "id": "c7eb742b6962b2d76a17746ffcf154f3a03dd423",
+    "message": "KEY-5: bulk step 40\n",
+    "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/c7eb742b6962b2d76a17746ffcf154f3a03dd423",
+    "author": {
+      "name": "Dev One",
+      "email": "dev1@example.test",
+      "username": "dev1"
+    },
+    "committer": {
+      "name": "Dev One",
+      "email": "dev1@example.test",
+      "username": "dev1"
+    },
+    "verification": null,
+    "timestamp": "2026-09-27T10:00:00+03:00",
+    "added": [
+      "src/bulk_40.py"
+    ],
+    "removed": [],
+    "modified": []
+  },
+  "repository": {
+    "id": 1,
+    "owner": {
+      "id": 4,
+      "login": "team-alpha",
+      "login_name": "",
+      "source_id": 0,
+      "full_name": "Team Alpha",
+      "email": "",
+      "avatar_url": "https://git.ppm-g21-a2.localhost:19443/avatars/fd1f3685585c5f847448390ec17a34cf",
+      "html_url": "https://git.ppm-g21-a2.localhost:19443/team-alpha",
+      "language": "",
+      "is_admin": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "created": "2026-09-28T13:18:49Z",
+      "restricted": false,
+      "active": false,
+      "prohibit_login": false,
+      "location": "",
+      "pronouns": "",
+      "website": "",
+      "description": "",
+      "visibility": "private",
+      "followers_count": 0,
+      "following_count": 0,
+      "starred_repos_count": 0,
+      "username": "team-alpha"
+    },
+    "name": "app",
+    "full_name": "team-alpha/app",
+    "description": "Приложение команды",
+    "empty": false,
+    "private": true,
+    "fork": false,
+    "template": false,
+    "parent": null,
+    "mirror": false,
+    "size": 65,
+    "language": "Python",
+    "languages_url": "https://git.ppm-g21-a2.localhost:19443/api/v1/repos/team-alpha/app/languages",
+    "html_url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app",
+    "url": "https://git.ppm-g21-a2.localhost:19443/api/v1/repos/team-alpha/app",
+    "link": "",
+    "ssh_url": "ssh://git@git.ppm-g21-a2.localhost:2222/team-alpha/app.git",
+    "clone_url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app.git",
+    "original_url": "",
+    "website": "",
+    "stars_count": 0,
+    "forks_count": 0,
+    "watchers_count": 2,
+    "open_issues_count": 0,
+    "open_pr_counter": 1,
+    "release_counter": 0,
+    "default_branch": "main",
+    "archived": false,
+    "created_at": "2026-09-28T13:19:34Z",
+    "updated_at": "2026-09-28T13:32:16Z",
+    "archived_at": "1970-01-01T00:00:00Z",
+    "permissions": {
+      "admin": true,
+      "push": true,
+      "pull": true
+    },
+    "has_issues": true,
+    "internal_tracker": {
+      "enable_time_tracker": true,
+      "allow_only_contributors_to_track_time": true,
+      "enable_issue_dependencies": true
+    },
+    "has_wiki": true,
+    "has_wiki_contents": false,
+    "wiki_branch": "main",
+    "wiki_ssh_url": "ssh://git@git.ppm-g21-a2.localhost:2222/team-alpha/app.wiki.git",
+    "wiki_clone_url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app.wiki.git",
+    "globally_editable_wiki": false,
+    "has_pull_requests": true,
+    "has_projects": true,
+    "has_releases": true,
+    "has_packages": false,
+    "has_actions": false,
+    "ignore_whitespace_conflicts": false,
+    "allow_merge_commits": true,
+    "allow_rebase": true,
+    "allow_rebase_explicit": true,
+    "allow_squash_merge": true,
+    "allow_fast_forward_only_merge": true,
+    "allow_rebase_update": true,
+    "default_delete_branch_after_merge": false,
+    "default_merge_style": "merge",
+    "default_allow_maintainer_edit": false,
+    "default_update_style": "merge",
+    "avatar_url": "",
+    "internal": false,
+    "mirror_interval": "",
+    "object_format_name": "sha1",
+    "mirror_updated": "0001-01-01T00:00:00Z",
+    "repo_transfer": null,
+    "topics": []
+  },
+  "pusher": {
+    "id": 3,
+    "login": "dev1",
+    "login_name": "",
+    "source_id": 0,
+    "full_name": "",
+    "email": "dev1@noreply.git.ppm-g21-a2.localhost",
+    "avatar_url": "https://git.ppm-g21-a2.localhost:19443/avatars/85332bb8d2ad939288b37af279f23982",
+    "html_url": "https://git.ppm-g21-a2.localhost:19443/dev1",
+    "language": "",
+    "is_admin": false,
+    "last_login": "0001-01-01T00:00:00Z",
+    "created": "2026-09-28T13:18:12Z",
+    "restricted": false,
+    "active": false,
+    "prohibit_login": false,
+    "location": "",
+    "pronouns": "",
+    "website": "",
+    "description": "",
+    "visibility": "public",
+    "followers_count": 0,
+    "following_count": 0,
+    "starred_repos_count": 0,
+    "username": "dev1"
+  },
+  "sender": {
+    "id": 3,
+    "login": "dev1",
+    "login_name": "",
+    "source_id": 0,
+    "full_name": "",
+    "email": "dev1@noreply.git.ppm-g21-a2.localhost",
+    "avatar_url": "https://git.ppm-g21-a2.localhost:19443/avatars/85332bb8d2ad939288b37af279f23982",
+    "html_url": "https://git.ppm-g21-a2.localhost:19443/dev1",
+    "language": "",
+    "is_admin": false,
+    "last_login": "0001-01-01T00:00:00Z",
+    "created": "2026-09-28T13:18:12Z",
+    "restricted": false,
+    "active": false,
+    "prohibit_login": false,
+    "location": "",
+    "pronouns": "",
+    "website": "",
+    "description": "",
+    "visibility": "public",
+    "followers_count": 0,
+    "following_count": 0,
+    "starred_repos_count": 0,
+    "username": "dev1"
+  }
+}

@@ -6,6 +6,8 @@ from django.utils import timezone
 
 class PpmGitProvider(models.TextChoices):
     GITHUB = "github", "GitHub"
+    # G2.1: PPM's own Git server (Forgejo next to PPM, «Наш Git-сервер» in the UI).
+    FORGEJO = "forgejo", "Forgejo"
     GITLAB = "gitlab", "GitLab"
     BITBUCKET = "bitbucket", "Bitbucket"
     GITEA = "gitea", "Gitea"

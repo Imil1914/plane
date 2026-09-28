@@ -17,6 +17,7 @@ from .models import (
     PpmGitRepositoryStatus,
     PpmGitVisibility,
 )
+from .providers.forgejo import forgejo_trusted_origin
 
 
 CONTROL = re.compile(r"[\x00-\x1f\x7f]")
@@ -62,7 +63,34 @@ def parse_uuid(value, *, field):
         raise PpmGitError("GIT_INVALID_FIELD", "Идентификатор некорректен.", {"field": field}) from exc
 
 
-def _safe_host(raw_host):
+def trusted_git_origin(provider):
+    """G2.1 A2: ``(host, port)`` of PPM's own Git server for a repository of ``provider`` — else None.
+
+    Stored Git links never point at local-looking hosts (``_safe_host``). The one exception is the Git server the
+    operator configured in ``PPM_FORGEJO_PUBLIC_URL`` (https): exactly that host and port, only for Forgejo repositories
+    — a local stack serves it on ``git.<…>.localhost``. A manual (G0.1) record never gets it.
+    """
+    if provider != PpmGitProvider.FORGEJO:
+        return None
+    return forgejo_trusted_origin()
+
+
+def _trusted_host(trusted_origin, port):
+    """The trusted host when ``port`` (``None`` = 443) is exactly the trusted origin's port."""
+    if trusted_origin is None:
+        return None
+    host, trusted_port = trusted_origin
+    return host if (port or 443) == trusted_port else None
+
+
+def _port(parsed):
+    try:
+        return parsed.port, None
+    except ValueError as exc:
+        return None, exc
+
+
+def _safe_host(raw_host, *, trusted=None):
     if not raw_host:
         raise PpmGitError("GIT_INVALID_URL", "В Git-ссылке отсутствует домен.")
     try:
@@ -70,6 +98,8 @@ def _safe_host(raw_host):
     except UnicodeError as exc:
         raise PpmGitError("GIT_INVALID_URL", "Домен Git-ссылки некорректен.") from exc
 
+    if trusted is not None and host == trusted:
+        return host
     if host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
         raise PpmGitError("GIT_UNSAFE_URL", "Локальные адреса нельзя сохранять как репозитории Git.")
     try:
@@ -93,7 +123,7 @@ def _safe_repository_path(path):
     return "/" + "/".join(segments)
 
 
-def normalize_https_url(value, *, canonical=False):
+def normalize_https_url(value, *, canonical=False, trusted_origin=None):
     if not isinstance(value, str) or not value or len(value) > 2048 or CONTROL_OR_SPACE.search(value):
         raise PpmGitError("GIT_INVALID_URL", "Укажите корректную HTTPS-ссылку.")
     parsed = urlsplit(value.strip())
@@ -101,11 +131,11 @@ def normalize_https_url(value, *, canonical=False):
         raise PpmGitError("GIT_INVALID_URL", "Разрешены только HTTPS-ссылки без учётных данных.")
     if parsed.query or parsed.fragment:
         raise PpmGitError("GIT_INVALID_URL", "Параметры запроса и якорь нельзя сохранять в Git-ссылке.")
-    host = _safe_host(parsed.hostname)
-    try:
-        port = parsed.port
-    except ValueError as exc:
-        raise PpmGitError("GIT_INVALID_URL", "Порт Git-ссылки некорректен.") from exc
+    port, port_error = _port(parsed)
+    # The host is checked first, as before G2.1; a broken port never makes a host trusted.
+    host = _safe_host(parsed.hostname, trusted=None if port_error else _trusted_host(trusted_origin, port))
+    if port_error is not None:
+        raise PpmGitError("GIT_INVALID_URL", "Порт Git-ссылки некорректен.") from port_error
     netloc = host if port in (None, 443) else f"{host}:{port}"
     path = _safe_repository_path(parsed.path).rstrip("/")
     if canonical and path.casefold().endswith(".git"):
@@ -113,23 +143,27 @@ def normalize_https_url(value, *, canonical=False):
     return urlunsplit(("https", netloc, path, "", ""))
 
 
-def _repository_identity_from_https(value):
+def _repository_identity_from_https(value, *, trusted_origin=None):
     parsed = urlsplit(value)
     path = _safe_repository_path(parsed.path).rstrip("/")
     if path.casefold().endswith(".git"):
         path = path[:-4]
-    return _safe_host(parsed.hostname), path
+    port, port_error = _port(parsed)
+    return _safe_host(parsed.hostname, trusted=None if port_error else _trusted_host(trusted_origin, port)), path
 
 
-def normalize_ssh_url(value):
+def normalize_ssh_url(value, *, trusted_origin=None):
+    """SSH clone address; with ``trusted_origin`` its host may be the Git server's (any SSH port: the identity check
+    ties the address to the HTTPS one)."""
     if value in (None, ""):
         return ""
     if not isinstance(value, str) or len(value) > 2048 or CONTROL_OR_SPACE.search(value):
         raise PpmGitError("GIT_INVALID_SSH_URL", "Укажите стандартный SSH-адрес клонирования.")
+    trusted = trusted_origin[0] if trusted_origin else None
     raw = value.strip()
     match = SCP_SSH.fullmatch(raw)
     if match:
-        host = _safe_host(match.group("host"))
+        host = _safe_host(match.group("host"), trusted=trusted)
         path = _safe_repository_path("/" + match.group("path")).lstrip("/")
         return f"git@{host}:{path}"
 
@@ -138,7 +172,7 @@ def normalize_ssh_url(value):
         raise PpmGitError("GIT_INVALID_SSH_URL", "Разрешены только стандартные SSH-ссылки пользователя git.")
     if parsed.query or parsed.fragment:
         raise PpmGitError("GIT_INVALID_SSH_URL", "Параметры запроса и якорь нельзя сохранять в SSH-ссылке.")
-    host = _safe_host(parsed.hostname)
+    host = _safe_host(parsed.hostname, trusted=trusted)
     try:
         port = parsed.port
     except ValueError as exc:
@@ -148,26 +182,29 @@ def normalize_ssh_url(value):
     return urlunsplit(("ssh", netloc, path, "", ""))
 
 
-def _repository_identity_from_ssh(value):
+def _repository_identity_from_ssh(value, *, trusted_origin=None):
+    trusted = trusted_origin[0] if trusted_origin else None
     if value.startswith("git@"):
         match = SCP_SSH.fullmatch(value)
-        return _safe_host(match.group("host")), "/" + match.group("path").removesuffix(".git")
+        return _safe_host(match.group("host"), trusted=trusted), "/" + match.group("path").removesuffix(".git")
     parsed = urlsplit(value)
-    return _safe_host(parsed.hostname), _safe_repository_path(parsed.path).removesuffix(".git")
+    return _safe_host(parsed.hostname, trusted=trusted), _safe_repository_path(parsed.path).removesuffix(".git")
 
 
-def ensure_clone_scope(*, canonical_url, clone_https, clone_ssh):
-    identity = _repository_identity_from_https(canonical_url)
-    if _repository_identity_from_https(clone_https) != identity:
+def ensure_clone_scope(*, canonical_url, clone_https, clone_ssh, trusted_origin=None):
+    identity = _repository_identity_from_https(canonical_url, trusted_origin=trusted_origin)
+    if _repository_identity_from_https(clone_https, trusted_origin=trusted_origin) != identity:
         raise PpmGitError("GIT_URL_SCOPE_MISMATCH", "HTTPS-адрес клонирования относится к другому репозиторию.")
-    if clone_ssh and _repository_identity_from_ssh(clone_ssh) != identity:
+    if clone_ssh and _repository_identity_from_ssh(clone_ssh, trusted_origin=trusted_origin) != identity:
         raise PpmGitError("GIT_URL_SCOPE_MISMATCH", "SSH-адрес клонирования относится к другому репозиторию.")
 
 
 def normalize_git_object_url(value, *, repository):
-    normalized = normalize_https_url(value)
-    repo_host, repo_path = _repository_identity_from_https(repository.canonical_url)
-    object_host, object_path = _repository_identity_from_https(normalized)
+    # G2.1 A2: objects of a Forgejo repository live on PPM's Git server — its configured host is trusted exactly.
+    trusted_origin = trusted_git_origin(repository.provider)
+    normalized = normalize_https_url(value, trusted_origin=trusted_origin)
+    repo_host, repo_path = _repository_identity_from_https(repository.canonical_url, trusted_origin=trusted_origin)
+    object_host, object_path = _repository_identity_from_https(normalized, trusted_origin=trusted_origin)
     if object_host != repo_host or object_path == repo_path or not object_path.startswith(f"{repo_path}/"):
         raise PpmGitError("GIT_URL_SCOPE_MISMATCH", "Git-объект должен принадлежать выбранному репозиторию.")
     return normalized
@@ -184,7 +221,9 @@ def detect_provider(canonical_url):
     return PpmGitProvider.GENERIC
 
 
-def validate_repository_data(payload, *, current=None):
+def validate_repository_data(payload, *, current=None, trusted_origin=None):
+    """``trusted_origin`` (G2.1 A2): the Git server's ``(host, port)`` for a record of the Forgejo provider — passed by
+    the Forgejo connect flow and kept for an existing Forgejo record; a manual record never gets it."""
     reject_credential_fields(payload)
     allowed = {
         "name",
@@ -204,11 +243,20 @@ def validate_repository_data(payload, *, current=None):
         return payload[key] if key in payload else getattr(current, key, fallback)
 
     name = normalize_name(value("name"), field="name")
-    canonical_url = normalize_https_url(value("canonical_url"), canonical=True)
+    # Only a record that is (and stays) of the Forgejo provider may use the Git server's host; `detect_provider` never
+    # answers «forgejo».
+    if value("provider") != PpmGitProvider.FORGEJO:
+        trusted_origin = None
+    canonical_url = normalize_https_url(value("canonical_url"), canonical=True, trusted_origin=trusted_origin)
     clone_https_raw = value("clone_https") or f"{canonical_url}.git"
-    clone_https = normalize_https_url(clone_https_raw)
-    clone_ssh = normalize_ssh_url(value("clone_ssh"))
-    ensure_clone_scope(canonical_url=canonical_url, clone_https=clone_https, clone_ssh=clone_ssh)
+    clone_https = normalize_https_url(clone_https_raw, trusted_origin=trusted_origin)
+    clone_ssh = normalize_ssh_url(value("clone_ssh"), trusted_origin=trusted_origin)
+    ensure_clone_scope(
+        canonical_url=canonical_url,
+        clone_https=clone_https,
+        clone_ssh=clone_ssh,
+        trusted_origin=trusted_origin,
+    )
     provider = value("provider") or detect_provider(canonical_url)
     if provider not in PpmGitProvider.values:
         raise PpmGitError("GIT_INVALID_FIELD", "Неизвестный поставщик Git.", {"field": "provider"})
@@ -234,8 +282,8 @@ def validate_repository_data(payload, *, current=None):
     }
 
 
-def create_repository(*, workspace_id, project_id, payload, user_id):
-    values = validate_repository_data(payload)
+def create_repository(*, workspace_id, project_id, payload, user_id, trusted_origin=None):
+    values = validate_repository_data(payload, trusted_origin=trusted_origin)
     try:
         with transaction.atomic():
             repositories = PpmGitRepository.objects.select_for_update().filter(
@@ -257,8 +305,11 @@ def create_repository(*, workspace_id, project_id, payload, user_id):
         raise PpmGitError("GIT_REPOSITORY_CONFLICT", "Такой репозиторий уже добавлен в проект.") from exc
 
 
-def update_repository(*, repository, payload, user_id):
-    values = validate_repository_data(payload, current=repository)
+def update_repository(*, repository, payload, user_id, trusted_origin=None):
+    if trusted_origin is None:
+        # An existing Forgejo record keeps its Git server trusted (for example a PATCH of `is_default`).
+        trusted_origin = trusted_git_origin(repository.provider)
+    values = validate_repository_data(payload, current=repository, trusted_origin=trusted_origin)
     try:
         with transaction.atomic():
             locked = PpmGitRepository.objects.select_for_update().get(id=repository.id)
@@ -305,6 +356,30 @@ def archive_repository(*, repository, user_id):
                 next_repository.updated_by = user_id
                 next_repository.save(update_fields=["is_default", "updated_by", "updated_at"])
         return locked
+
+
+def restore_repository(*, repository, payload, user_id, trusted_origin=None):
+    """G2.1 A2 fix round 1: an archived record comes back — its repository of the Git server is connected again — with
+    its history (objects, links, index policy). It is the default one when the project has no other active record."""
+    values = validate_repository_data(payload, current=repository, trusted_origin=trusted_origin)
+    try:
+        with transaction.atomic():
+            locked = PpmGitRepository.objects.select_for_update().get(id=repository.id)
+            others = PpmGitRepository.objects.select_for_update().filter(
+                workspace_id=locked.workspace_id,
+                project_id=locked.project_id,
+                status=PpmGitRepositoryStatus.ACTIVE,
+            )
+            values["is_default"] = not others.exists()
+            for field, value in values.items():
+                setattr(locked, field, value)
+            locked.status = PpmGitRepositoryStatus.ACTIVE
+            locked.archived_at = None
+            locked.updated_by = user_id
+            locked.save(update_fields=[*values.keys(), "status", "archived_at", "updated_by", "updated_at"])
+            return locked
+    except IntegrityError as exc:
+        raise PpmGitError("GIT_REPOSITORY_CONFLICT", "Такой репозиторий уже добавлен в проект.") from exc
 
 
 def create_link(*, workspace_id, project_id, payload, user_id):

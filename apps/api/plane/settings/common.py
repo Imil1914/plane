@@ -271,6 +271,19 @@ PPM_GITHUB_APP_CONFIGURED = all(
     )
 )
 
+# G2.1: PPM's own Git server (Forgejo next to PPM, deployments/ppm). PPM reads it over the internal address with a
+# read-only token of the service account ppm-bot and receives its signed system webhook. The provider is on only when
+# the four values below are all set (`providers.forgejo.forgejo_is_configured`); the token and the secret never leave
+# the API server.
+PPM_FORGEJO_URL = os.environ.get("PPM_FORGEJO_URL", "").strip()
+PPM_FORGEJO_PUBLIC_URL = os.environ.get("PPM_FORGEJO_PUBLIC_URL", "").strip()
+PPM_FORGEJO_TOKEN = _ppm_secret("PPM_FORGEJO_TOKEN", "PPM_FORGEJO_TOKEN_FILE")
+PPM_FORGEJO_WEBHOOK_SECRET = _ppm_secret("PPM_FORGEJO_WEBHOOK_SECRET", "PPM_FORGEJO_WEBHOOK_SECRET_FILE")
+PPM_FORGEJO_WEBHOOK_MAX_BYTES = int(os.environ.get("PPM_FORGEJO_WEBHOOK_MAX_BYTES", "2097152"))
+# Forgejo reports an SSH clone address even with its SSH server off; "0" (the bundle's PPM_GIT_SSH_ENABLED=0) makes
+# PPM show and store no SSH address for Forgejo repositories.
+PPM_FORGEJO_SSH_ENABLED = os.environ.get("PPM_FORGEJO_SSH_ENABLED", "1").strip() != "0"
+
 # Django Auth Backend
 AUTHENTICATION_BACKENDS = ("django.contrib.auth.backends.ModelBackend",)  # default
 

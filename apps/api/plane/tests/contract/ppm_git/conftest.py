@@ -6,6 +6,7 @@ from django.test import override_settings
 from plane.db.models import Issue, State
 from plane.ppm_git.models import PpmGitConnection, PpmGitInstallation, PpmGitRepository
 from plane.ppm_git.providers.github import GitHubAppClient
+from plane.tests.contract.ppm_git.forgejo_fake import FORGEJO_SETTINGS, FakeForgejoApi
 from plane.tests.contract.ppm_git.github_fake import FakeGitHubApi
 from plane.tests.factories import (
     ProjectFactory,
@@ -92,3 +93,57 @@ def github(monkeypatch):
     monkeypatch.setattr(GitHubAppClient, "_app_jwt", lambda self: "fake-app-jwt")
     with override_settings(PPM_GITHUB_APP_CONFIGURED=True, PPM_GITHUB_APP_SLUG="ppm-test-app"):
         yield api
+
+
+def forgejo_style_code_file_url(canonical_url, commit_sha, path):
+    return f"{canonical_url.rstrip('/')}/src/commit/{commit_sha}/{path}"
+
+
+@pytest.fixture
+def forgejo(monkeypatch, settings):
+    """G2.1 A2: PPM's Git server — the real ForgejoClient talking to an in-memory Forgejo 15 built from live answers.
+
+    All ``PPM_FORGEJO_*`` settings are set (the provider is configured); a test clears one to switch it off. The
+    registration keeps the real «configured» check and file URL layout; only the HTTP session is the fake.
+    """
+    from plane.ppm_git.providers import registry
+    from plane.ppm_git.providers.forgejo import ForgejoClient, forgejo_code_file_url, forgejo_is_configured
+
+    api = FakeForgejoApi.from_live()
+    for name, value in FORGEJO_SETTINGS.items():
+        setattr(settings, name, value)
+    monkeypatch.setitem(
+        registry._REGISTRY,
+        "forgejo",
+        registry.ProviderRegistration(
+            factory=lambda **kwargs: ForgejoClient(session=api, page_size=api.page_size),
+            is_configured=forgejo_is_configured,
+            code_file_url=forgejo_code_file_url,
+        ),
+    )
+    return api
+
+
+@pytest.fixture
+def provider_registry(monkeypatch):
+    """G2.1: substitutes one Git provider registration for a single test; the registry is restored afterwards.
+
+    ``provider_registry(provider, factory, configured=True, code_file_url=None)`` — ``factory(**kwargs)`` builds the
+    client. A replaced registration keeps its file URL layout unless another one is given.
+    """
+    from plane.ppm_git.providers import registry
+
+    def install(provider, factory, *, configured=True, code_file_url=None):
+        key = registry.provider_key(provider)
+        current = registry._REGISTRY.get(key)
+        monkeypatch.setitem(
+            registry._REGISTRY,
+            key,
+            registry.ProviderRegistration(
+                factory=factory,
+                is_configured=lambda: configured,
+                code_file_url=code_file_url or (current.code_file_url if current else forgejo_style_code_file_url),
+            ),
+        )
+
+    return install

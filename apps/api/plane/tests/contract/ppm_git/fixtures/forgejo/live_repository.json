@@ -1,0 +1,1413 @@
+{
+ "repository": {
+  "id": 1,
+  "name": "app",
+  "full_name": "team-alpha/app",
+  "description": "Приложение команды",
+  "private": true,
+  "internal": false,
+  "archived": false,
+  "default_branch": "main",
+  "html_url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app",
+  "clone_url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app.git",
+  "ssh_url": "ssh://git@git.ppm-g21-a2.localhost:2222/team-alpha/app.git",
+  "updated_at": "2026-09-28T13:32:16Z",
+  "created_at": "2026-09-28T13:19:34Z",
+  "empty": false,
+  "fork": false,
+  "mirror": false
+ },
+ "owner": {
+  "id": 4,
+  "login": "team-alpha",
+  "full_name": "Team Alpha",
+  "username": "team-alpha"
+ },
+ "branches": {
+  "main": "097f3ee58ccd2e6259bf755652b9420ac28bf9bc",
+  "KEY-4/docs": "c02501c4323ed74cc45a89a8db0774ff51b58cfe",
+  "KEY-5/bulk": "c7eb742b6962b2d76a17746ffcf154f3a03dd423"
+ },
+ "commits": [
+  {
+   "sha": "097f3ee58ccd2e6259bf755652b9420ac28bf9bc",
+   "parents": [
+    "2afb6d980cb230732d188de52866425cac96b979",
+    "50f9a1b5cd565e9994a612369de848d7cf200adc"
+   ],
+   "message": "Merge pull request 'KEY-2 — форма входа и проверка' (#1) from KEY-2/login-form into main\n",
+   "author": {
+    "name": "dev1",
+    "email": "dev1@noreply.git.ppm-g21-a2.localhost",
+    "date": "2026-09-28T13:21:05Z"
+   },
+   "committer": {
+    "name": "dev1",
+    "email": "dev1@noreply.git.ppm-g21-a2.localhost",
+    "date": "2026-09-28T13:21:05Z"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "50f9a1b5cd565e9994a612369de848d7cf200adc",
+   "parents": [
+    "5d2d8b33018a04ffba909dabe9db92d14e13f34f"
+   ],
+   "message": "KEY-2: limit attempts\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-28T11:20:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-28T11:20:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "5d2d8b33018a04ffba909dabe9db92d14e13f34f",
+   "parents": [
+    "c2c885dd1f1be238ae8cd835739a2de3b6683257"
+   ],
+   "message": "KEY-2: validate input\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-28T11:10:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-28T11:10:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "c2c885dd1f1be238ae8cd835739a2de3b6683257",
+   "parents": [
+    "2afb6d980cb230732d188de52866425cac96b979"
+   ],
+   "message": "KEY-2: login form\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-28T11:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-28T11:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "2afb6d980cb230732d188de52866425cac96b979",
+   "parents": [
+    "2ed01452b65e80254e26ee74d0acbec40c23b49f"
+   ],
+   "message": "KEY-1: add sensor driver\n\nReads the value once per second.\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-28T10:05:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-28T10:05:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "2ed01452b65e80254e26ee74d0acbec40c23b49f",
+   "parents": [],
+   "message": "Initial commit\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-28T10:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-28T10:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "c02501c4323ed74cc45a89a8db0774ff51b58cfe",
+   "parents": [
+    "097f3ee58ccd2e6259bf755652b9420ac28bf9bc"
+   ],
+   "message": "KEY-4: документация датчика\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-28T14:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-28T14:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "c7eb742b6962b2d76a17746ffcf154f3a03dd423",
+   "parents": [
+    "3804d89124b0b55ad1fde39240c927b8b449eeb6"
+   ],
+   "message": "KEY-5: bulk step 40\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T10:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T10:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "3804d89124b0b55ad1fde39240c927b8b449eeb6",
+   "parents": [
+    "53ae968363a1f4e9dd173f5af363307edac8aae5"
+   ],
+   "message": "KEY-5: bulk step 39\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T19:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T19:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "53ae968363a1f4e9dd173f5af363307edac8aae5",
+   "parents": [
+    "82a67e0e7fb9c78ad056c47436103304b357975d"
+   ],
+   "message": "KEY-5: bulk step 38\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T18:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T18:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "82a67e0e7fb9c78ad056c47436103304b357975d",
+   "parents": [
+    "e72e36e860e848ba4747b161c0abb50e9f1ccac1"
+   ],
+   "message": "KEY-5: bulk step 37\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T17:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T17:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "e72e36e860e848ba4747b161c0abb50e9f1ccac1",
+   "parents": [
+    "59fce5a7ef1c174a686f358c8b9a75fbbfeccce1"
+   ],
+   "message": "KEY-5: bulk step 36\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T16:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T16:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "59fce5a7ef1c174a686f358c8b9a75fbbfeccce1",
+   "parents": [
+    "fe3a831ee0f6e1a77b22061cccb3072892a3ef79"
+   ],
+   "message": "KEY-5: bulk step 35\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T15:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T15:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "fe3a831ee0f6e1a77b22061cccb3072892a3ef79",
+   "parents": [
+    "d9c27e551ba390d36005d59facdfb30f3017413f"
+   ],
+   "message": "KEY-5: bulk step 34\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T14:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T14:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "d9c27e551ba390d36005d59facdfb30f3017413f",
+   "parents": [
+    "72cbc1ceab961e70db2210ba2128ea3acaff5a46"
+   ],
+   "message": "KEY-5: bulk step 33\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T13:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T13:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "72cbc1ceab961e70db2210ba2128ea3acaff5a46",
+   "parents": [
+    "0d45bef0f1f6eda2d78d0c1f68929fcb6d0a5d28"
+   ],
+   "message": "KEY-5: bulk step 32\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T12:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T12:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "0d45bef0f1f6eda2d78d0c1f68929fcb6d0a5d28",
+   "parents": [
+    "586372c1d4446d11bde71f1cdfaf361f8abf8bae"
+   ],
+   "message": "KEY-5: bulk step 31\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T11:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T11:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "586372c1d4446d11bde71f1cdfaf361f8abf8bae",
+   "parents": [
+    "5ea76aaf1e3b0aa83336a26d19b745e0153363d7"
+   ],
+   "message": "KEY-5: bulk step 30\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T10:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T10:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "5ea76aaf1e3b0aa83336a26d19b745e0153363d7",
+   "parents": [
+    "fb38ad56c40b1c643a4c244603d169f255da19a7"
+   ],
+   "message": "KEY-5: bulk step 29\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T19:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T19:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "fb38ad56c40b1c643a4c244603d169f255da19a7",
+   "parents": [
+    "c4cf0c7a12fa427a392090ca9c3d970362c3fdeb"
+   ],
+   "message": "KEY-5: bulk step 28\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T18:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T18:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "c4cf0c7a12fa427a392090ca9c3d970362c3fdeb",
+   "parents": [
+    "5d0067ef5cf0e85ebc388d56bf333e4424f791bd"
+   ],
+   "message": "KEY-5: bulk step 27\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T17:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T17:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "5d0067ef5cf0e85ebc388d56bf333e4424f791bd",
+   "parents": [
+    "40d59c1610efdc474d0938ac56713ab49612ee54"
+   ],
+   "message": "KEY-5: bulk step 26\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T16:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T16:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "40d59c1610efdc474d0938ac56713ab49612ee54",
+   "parents": [
+    "66ca1a1567bef4ac0fbb9dd00dccb2498a631199"
+   ],
+   "message": "KEY-5: bulk step 25\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T15:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T15:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "66ca1a1567bef4ac0fbb9dd00dccb2498a631199",
+   "parents": [
+    "f586c8d65b0c20300e1f2d4ad6b59a6e4e44de2e"
+   ],
+   "message": "KEY-5: bulk step 24\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T14:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T14:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "f586c8d65b0c20300e1f2d4ad6b59a6e4e44de2e",
+   "parents": [
+    "ba0f2d80a897d9284186a55406c796905375184c"
+   ],
+   "message": "KEY-5: bulk step 23\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T13:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T13:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "ba0f2d80a897d9284186a55406c796905375184c",
+   "parents": [
+    "10e28bca2c599125c80bc4bee2026363679e9276"
+   ],
+   "message": "KEY-5: bulk step 22\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T12:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T12:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "10e28bca2c599125c80bc4bee2026363679e9276",
+   "parents": [
+    "605e512f1a59749c195663d2ff266d8e4d422097"
+   ],
+   "message": "KEY-5: bulk step 21\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T11:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T11:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "605e512f1a59749c195663d2ff266d8e4d422097",
+   "parents": [
+    "81e7adbff2986a2bc4b3b4965a485524efa7c676"
+   ],
+   "message": "KEY-5: bulk step 20\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T00:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T00:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "81e7adbff2986a2bc4b3b4965a485524efa7c676",
+   "parents": [
+    "a8886ce2e22649bf0017feee8a985316cce43318"
+   ],
+   "message": "KEY-5: bulk step 19\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T09:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T09:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "a8886ce2e22649bf0017feee8a985316cce43318",
+   "parents": [
+    "7567f839d5831237ab1a6159f6160edefc907156"
+   ],
+   "message": "KEY-5: bulk step 18\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T08:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T08:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "7567f839d5831237ab1a6159f6160edefc907156",
+   "parents": [
+    "501f10153313feb0b0f39b96b0555188a4c71a63"
+   ],
+   "message": "KEY-5: bulk step 17\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T07:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T07:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "501f10153313feb0b0f39b96b0555188a4c71a63",
+   "parents": [
+    "f5e0069add5393c99c1eaf6e69802d07a63abbbd"
+   ],
+   "message": "KEY-5: bulk step 16\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T06:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T06:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "f5e0069add5393c99c1eaf6e69802d07a63abbbd",
+   "parents": [
+    "484b4e96c7d83e78492361465dc0468ebb5a5f52"
+   ],
+   "message": "KEY-5: bulk step 15\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T05:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T05:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "484b4e96c7d83e78492361465dc0468ebb5a5f52",
+   "parents": [
+    "dde69191e53369ffb79020b163d2e69048f4ac56"
+   ],
+   "message": "KEY-5: bulk step 14\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T04:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T04:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "dde69191e53369ffb79020b163d2e69048f4ac56",
+   "parents": [
+    "7ec0552444a14d5de05b8087e34419f8083fa177"
+   ],
+   "message": "KEY-5: bulk step 13\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T03:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T03:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "7ec0552444a14d5de05b8087e34419f8083fa177",
+   "parents": [
+    "f071a4a484318629677518baf9e50265e4bc837e"
+   ],
+   "message": "KEY-5: bulk step 12\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T02:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T02:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "f071a4a484318629677518baf9e50265e4bc837e",
+   "parents": [
+    "6823207db2ddee90632f44b21af4a855353fed69"
+   ],
+   "message": "KEY-5: bulk step 11\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T01:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T01:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "6823207db2ddee90632f44b21af4a855353fed69",
+   "parents": [
+    "90e82e30e6f308b94313f10a2b4c4af18637b0bb"
+   ],
+   "message": "KEY-5: bulk step 10\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T00:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T00:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "90e82e30e6f308b94313f10a2b4c4af18637b0bb",
+   "parents": [
+    "193279e290d817c004f89eadae8a2c07ab6cf4fe"
+   ],
+   "message": "KEY-5: bulk step 9\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T09:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T09:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "193279e290d817c004f89eadae8a2c07ab6cf4fe",
+   "parents": [
+    "3d3d3fd9817d7b48512f117288901a3405cd6963"
+   ],
+   "message": "KEY-5: bulk step 8\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T08:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T08:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "3d3d3fd9817d7b48512f117288901a3405cd6963",
+   "parents": [
+    "e4e9398822064cb944ea1086c02c2b8f5843dfd8"
+   ],
+   "message": "KEY-5: bulk step 7\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T07:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T07:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "e4e9398822064cb944ea1086c02c2b8f5843dfd8",
+   "parents": [
+    "222d1cc7c4d5725f1d52402764c652b089bc7f19"
+   ],
+   "message": "KEY-5: bulk step 6\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T06:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T06:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "222d1cc7c4d5725f1d52402764c652b089bc7f19",
+   "parents": [
+    "36599fac9f755c801e510874cc3c6af17e451a35"
+   ],
+   "message": "KEY-5: bulk step 5\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T05:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T05:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "36599fac9f755c801e510874cc3c6af17e451a35",
+   "parents": [
+    "ca680a396b5435079e5c70d5bd91b83ff25fefe2"
+   ],
+   "message": "KEY-5: bulk step 4\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T04:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T04:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "ca680a396b5435079e5c70d5bd91b83ff25fefe2",
+   "parents": [
+    "af9fb9ed71c6874bcacf13202c8b2e6c0e62e811"
+   ],
+   "message": "KEY-5: bulk step 3\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T03:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T03:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "af9fb9ed71c6874bcacf13202c8b2e6c0e62e811",
+   "parents": [
+    "f2a69a54a3bae8a04f93852a8c8ed8fa906fd20e"
+   ],
+   "message": "KEY-5: bulk step 2\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T02:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T02:00:00+03:00"
+   },
+   "author_login": "dev1"
+  },
+  {
+   "sha": "f2a69a54a3bae8a04f93852a8c8ed8fa906fd20e",
+   "parents": [
+    "097f3ee58ccd2e6259bf755652b9420ac28bf9bc"
+   ],
+   "message": "KEY-5: bulk step 1\n",
+   "author": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T01:00:00+03:00"
+   },
+   "committer": {
+    "name": "Dev One",
+    "email": "dev1@example.test",
+    "date": "2026-09-27T01:00:00+03:00"
+   },
+   "author_login": "dev1"
+  }
+ ],
+ "pulls": [
+  {
+   "id": 3,
+   "number": 3,
+   "title": "KEY-4 — документация",
+   "body": "",
+   "state": "open",
+   "draft": false,
+   "merged": false,
+   "merged_at": null,
+   "merge_commit_sha": null,
+   "created_at": "2026-09-28T13:22:29Z",
+   "updated_at": "2026-09-28T13:22:29Z",
+   "closed_at": null,
+   "user_login": "dev1",
+   "base": {
+    "label": "main",
+    "ref": "main",
+    "sha": "097f3ee58ccd2e6259bf755652b9420ac28bf9bc"
+   },
+   "head": {
+    "label": "KEY-4/docs",
+    "ref": "KEY-4/docs",
+    "sha": "c02501c4323ed74cc45a89a8db0774ff51b58cfe"
+   }
+  },
+  {
+   "id": 2,
+   "number": 2,
+   "title": "WIP: KEY-3 черновик",
+   "body": "Ещё не готово.",
+   "state": "closed",
+   "draft": true,
+   "merged": false,
+   "merged_at": null,
+   "merge_commit_sha": null,
+   "created_at": "2026-09-28T13:20:48Z",
+   "updated_at": "2026-09-28T13:21:10Z",
+   "closed_at": "2026-09-28T13:21:10Z",
+   "user_login": "dev1",
+   "base": {
+    "label": "main",
+    "ref": "main",
+    "sha": "097f3ee58ccd2e6259bf755652b9420ac28bf9bc"
+   },
+   "head": {
+    "label": "KEY-3/wip",
+    "ref": "refs/pull/2/head",
+    "sha": "a424fd9c6494bb38c596f49f45cc1f0a5155420d"
+   }
+  },
+  {
+   "id": 1,
+   "number": 1,
+   "title": "KEY-2 — форма входа и проверка",
+   "body": "Добавляет форму входа.",
+   "state": "closed",
+   "draft": false,
+   "merged": true,
+   "merged_at": "2026-09-28T13:21:05Z",
+   "merge_commit_sha": "097f3ee58ccd2e6259bf755652b9420ac28bf9bc",
+   "created_at": "2026-09-28T13:20:42Z",
+   "updated_at": "2026-09-28T13:21:05Z",
+   "closed_at": "2026-09-28T13:21:05Z",
+   "user_login": "dev1",
+   "base": {
+    "label": "main",
+    "ref": "main",
+    "sha": "097f3ee58ccd2e6259bf755652b9420ac28bf9bc"
+   },
+   "head": {
+    "label": "KEY-2/login-form",
+    "ref": "refs/pull/1/head",
+    "sha": "50f9a1b5cd565e9994a612369de848d7cf200adc"
+   }
+  }
+ ],
+ "trees": {
+  "097f3ee58ccd2e6259bf755652b9420ac28bf9bc": [
+   {
+    "path": "README.md",
+    "mode": "100644",
+    "type": "blob",
+    "size": 6,
+    "sha": "95f541a31a59581a0805203467c33f6baf1df983"
+   },
+   {
+    "path": "src",
+    "mode": "040000",
+    "type": "tree",
+    "size": 0,
+    "sha": "bc2a002f3022bf38229ae85cd3aa4cba4612435c"
+   },
+   {
+    "path": "src/limits.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 10,
+    "sha": "f910429279ee5ab06c4e89daed0b77473417d3db"
+   },
+   {
+    "path": "src/login.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 56,
+    "sha": "016dde8679ef5b3fcfc9c7b4d601577585aaef9c"
+   },
+   {
+    "path": "src/sensor.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 33,
+    "sha": "156690136dfbfcee068442a8d2f735069e234c58"
+   }
+  ],
+  "c02501c4323ed74cc45a89a8db0774ff51b58cfe": [
+   {
+    "path": "README.md",
+    "mode": "100644",
+    "type": "blob",
+    "size": 6,
+    "sha": "95f541a31a59581a0805203467c33f6baf1df983"
+   },
+   {
+    "path": "docs",
+    "mode": "040000",
+    "type": "tree",
+    "size": 0,
+    "sha": "f52975920758143c19d90579207add9d2a457435"
+   },
+   {
+    "path": "docs/sensor.md",
+    "mode": "100644",
+    "type": "blob",
+    "size": 67,
+    "sha": "a58615eaed13890010b0bb6676c7bf3c89dede7f"
+   },
+   {
+    "path": "src",
+    "mode": "040000",
+    "type": "tree",
+    "size": 0,
+    "sha": "bc2a002f3022bf38229ae85cd3aa4cba4612435c"
+   },
+   {
+    "path": "src/limits.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 10,
+    "sha": "f910429279ee5ab06c4e89daed0b77473417d3db"
+   },
+   {
+    "path": "src/login.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 56,
+    "sha": "016dde8679ef5b3fcfc9c7b4d601577585aaef9c"
+   },
+   {
+    "path": "src/sensor.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 33,
+    "sha": "156690136dfbfcee068442a8d2f735069e234c58"
+   }
+  ],
+  "c7eb742b6962b2d76a17746ffcf154f3a03dd423": [
+   {
+    "path": "README.md",
+    "mode": "100644",
+    "type": "blob",
+    "size": 6,
+    "sha": "95f541a31a59581a0805203467c33f6baf1df983"
+   },
+   {
+    "path": "src",
+    "mode": "040000",
+    "type": "tree",
+    "size": 0,
+    "sha": "6f715f967754c0d17cbc9cec2c117e140c19e7f4"
+   },
+   {
+    "path": "src/bulk_1.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 6,
+    "sha": "4a3f3148a6563c03794f7e788da042e0d5214f98"
+   },
+   {
+    "path": "src/bulk_10.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "3155d4e89e884060e9e4c7444849be2898d371bc"
+   },
+   {
+    "path": "src/bulk_11.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "f9d913d0003b39ccabd3d98f628d8b01af9f849a"
+   },
+   {
+    "path": "src/bulk_12.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "dd17bb7b1f1d1c315a46385d4b0f733ea33ba16c"
+   },
+   {
+    "path": "src/bulk_13.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "8173b040d3a06e3b5466bc708b24224c17d9a598"
+   },
+   {
+    "path": "src/bulk_14.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "272125742543ae27f0a6b3428b3b4b5e2fd8b9af"
+   },
+   {
+    "path": "src/bulk_15.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "adc058df26b9360572837a37fb6ec3ece1be865c"
+   },
+   {
+    "path": "src/bulk_16.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "7727e69083b3fa1f4b0401f53f9d50f472ea3e51"
+   },
+   {
+    "path": "src/bulk_17.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "0c415aeb623c415d6cb42ad97f446eb1021fcb12"
+   },
+   {
+    "path": "src/bulk_18.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "167728c1c7d8004aa28e51a82631950db180c841"
+   },
+   {
+    "path": "src/bulk_19.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "fa1a30d12cb8e96877d456e61e3bcb19e6662a22"
+   },
+   {
+    "path": "src/bulk_2.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 6,
+    "sha": "8c15bf30fd281927cec0c3c3d6b8fd518d4685ad"
+   },
+   {
+    "path": "src/bulk_20.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "68021e27951512c148be183dc5cf1ed9156e8d95"
+   },
+   {
+    "path": "src/bulk_21.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "1268c16ca61c2231d74be76422f7edb2f8183abb"
+   },
+   {
+    "path": "src/bulk_22.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "2d636239fe4f18f2ea2c9106978295df6c8dcf21"
+   },
+   {
+    "path": "src/bulk_23.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "5baecda39bb3b1d724689fcd42f28b01adb96459"
+   },
+   {
+    "path": "src/bulk_24.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "3ea426bd1832dbd58ad08b675574c42df926264b"
+   },
+   {
+    "path": "src/bulk_25.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "f5e98cfdafb080f9c06df881c9cbcdf7562b7937"
+   },
+   {
+    "path": "src/bulk_26.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "6f6e0f89e6b38d7a2639dd66739f43da88ff307c"
+   },
+   {
+    "path": "src/bulk_27.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "337d6b1666c616053a97f65d5f01aece445ccdb9"
+   },
+   {
+    "path": "src/bulk_28.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "9a3af6eac139eef4d72e689d684c877f721e5286"
+   },
+   {
+    "path": "src/bulk_29.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "8679dc37382908740fb5b0fb3da094c7e9df085b"
+   },
+   {
+    "path": "src/bulk_3.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 6,
+    "sha": "348cc48cbe66d496f8718e1a232d338398412bbb"
+   },
+   {
+    "path": "src/bulk_30.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "3a06d4fe6359c342b493fe58542c3972907ff05e"
+   },
+   {
+    "path": "src/bulk_31.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "f6ea83fb60f43bfb59d947cb133586674b4f45c9"
+   },
+   {
+    "path": "src/bulk_32.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "48ffb80ffda597564781f19c460bb3da8f905166"
+   },
+   {
+    "path": "src/bulk_33.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "b8a79d2b1ca4fadbaa09ecfac98e409163c78038"
+   },
+   {
+    "path": "src/bulk_34.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "1a7a4a4f8024a44e168e3fe5459db71ef45ac2ad"
+   },
+   {
+    "path": "src/bulk_35.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "fae8ddce22e87a88bf29ea541e867fabad9e349f"
+   },
+   {
+    "path": "src/bulk_36.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "77748c46d7d0647e554972d6511a98621529fbcc"
+   },
+   {
+    "path": "src/bulk_37.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "c7921a743f05d7bd6211b8228535c513400027eb"
+   },
+   {
+    "path": "src/bulk_38.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "34e430fd60516d96e39be7148b3b77415b8d5a9b"
+   },
+   {
+    "path": "src/bulk_39.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "fed96cb467f20b2b8ee46b9e8f5613faa307d1f3"
+   },
+   {
+    "path": "src/bulk_4.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 6,
+    "sha": "44c7688a9ed66221f82c32379bf849b08579416e"
+   },
+   {
+    "path": "src/bulk_40.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 7,
+    "sha": "f98a9e4fb9590e53e031e504c38186457a1769c6"
+   },
+   {
+    "path": "src/bulk_5.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 6,
+    "sha": "1233d0050c98a16442f59b81e73c74243ed16cd3"
+   },
+   {
+    "path": "src/bulk_6.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 6,
+    "sha": "f78ea46c84476e8ba51684330f1175e331f6b780"
+   },
+   {
+    "path": "src/bulk_7.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 6,
+    "sha": "2b956998dae64fcaaea11aeb64428ff43247ef28"
+   },
+   {
+    "path": "src/bulk_8.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 6,
+    "sha": "9a1ef4137fbf234750d91ba13bece6f9cbd076b0"
+   },
+   {
+    "path": "src/bulk_9.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 6,
+    "sha": "cd14348201a033ddeaa3a7cf3029e0292fe595c1"
+   },
+   {
+    "path": "src/limits.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 10,
+    "sha": "f910429279ee5ab06c4e89daed0b77473417d3db"
+   },
+   {
+    "path": "src/login.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 56,
+    "sha": "016dde8679ef5b3fcfc9c7b4d601577585aaef9c"
+   },
+   {
+    "path": "src/sensor.py",
+    "mode": "100644",
+    "type": "blob",
+    "size": 33,
+    "sha": "156690136dfbfcee068442a8d2f735069e234c58"
+   }
+  ]
+ },
+ "blobs": {
+  "95f541a31a59581a0805203467c33f6baf1df983": "# App\n",
+  "f910429279ee5ab06c4e89daed0b77473417d3db": "LIMIT = 3\n",
+  "016dde8679ef5b3fcfc9c7b4d601577585aaef9c": "def login(user):\n    return bool(user and user.strip())\n",
+  "156690136dfbfcee068442a8d2f735069e234c58": "def read_sensor():\n    return 42\n",
+  "a58615eaed13890010b0bb6676c7bf3c89dede7f": "# Документация\n\nПодключение датчика.\n",
+  "4a3f3148a6563c03794f7e788da042e0d5214f98": "n = 1\n",
+  "3155d4e89e884060e9e4c7444849be2898d371bc": "n = 10\n",
+  "f9d913d0003b39ccabd3d98f628d8b01af9f849a": "n = 11\n",
+  "dd17bb7b1f1d1c315a46385d4b0f733ea33ba16c": "n = 12\n",
+  "8173b040d3a06e3b5466bc708b24224c17d9a598": "n = 13\n",
+  "272125742543ae27f0a6b3428b3b4b5e2fd8b9af": "n = 14\n",
+  "adc058df26b9360572837a37fb6ec3ece1be865c": "n = 15\n",
+  "7727e69083b3fa1f4b0401f53f9d50f472ea3e51": "n = 16\n",
+  "0c415aeb623c415d6cb42ad97f446eb1021fcb12": "n = 17\n",
+  "167728c1c7d8004aa28e51a82631950db180c841": "n = 18\n",
+  "fa1a30d12cb8e96877d456e61e3bcb19e6662a22": "n = 19\n",
+  "8c15bf30fd281927cec0c3c3d6b8fd518d4685ad": "n = 2\n",
+  "68021e27951512c148be183dc5cf1ed9156e8d95": "n = 20\n",
+  "1268c16ca61c2231d74be76422f7edb2f8183abb": "n = 21\n",
+  "2d636239fe4f18f2ea2c9106978295df6c8dcf21": "n = 22\n",
+  "5baecda39bb3b1d724689fcd42f28b01adb96459": "n = 23\n",
+  "3ea426bd1832dbd58ad08b675574c42df926264b": "n = 24\n",
+  "f5e98cfdafb080f9c06df881c9cbcdf7562b7937": "n = 25\n",
+  "6f6e0f89e6b38d7a2639dd66739f43da88ff307c": "n = 26\n",
+  "337d6b1666c616053a97f65d5f01aece445ccdb9": "n = 27\n",
+  "9a3af6eac139eef4d72e689d684c877f721e5286": "n = 28\n",
+  "8679dc37382908740fb5b0fb3da094c7e9df085b": "n = 29\n",
+  "348cc48cbe66d496f8718e1a232d338398412bbb": "n = 3\n",
+  "3a06d4fe6359c342b493fe58542c3972907ff05e": "n = 30\n",
+  "f6ea83fb60f43bfb59d947cb133586674b4f45c9": "n = 31\n",
+  "48ffb80ffda597564781f19c460bb3da8f905166": "n = 32\n",
+  "b8a79d2b1ca4fadbaa09ecfac98e409163c78038": "n = 33\n",
+  "1a7a4a4f8024a44e168e3fe5459db71ef45ac2ad": "n = 34\n",
+  "fae8ddce22e87a88bf29ea541e867fabad9e349f": "n = 35\n",
+  "77748c46d7d0647e554972d6511a98621529fbcc": "n = 36\n",
+  "c7921a743f05d7bd6211b8228535c513400027eb": "n = 37\n",
+  "34e430fd60516d96e39be7148b3b77415b8d5a9b": "n = 38\n",
+  "fed96cb467f20b2b8ee46b9e8f5613faa307d1f3": "n = 39\n",
+  "44c7688a9ed66221f82c32379bf849b08579416e": "n = 4\n",
+  "f98a9e4fb9590e53e031e504c38186457a1769c6": "n = 40\n",
+  "1233d0050c98a16442f59b81e73c74243ed16cd3": "n = 5\n",
+  "f78ea46c84476e8ba51684330f1175e331f6b780": "n = 6\n",
+  "2b956998dae64fcaaea11aeb64428ff43247ef28": "n = 7\n",
+  "9a1ef4137fbf234750d91ba13bece6f9cbd076b0": "n = 8\n",
+  "cd14348201a033ddeaa3a7cf3029e0292fe595c1": "n = 9\n"
+ },
+ "bot": {
+  "id": 2,
+  "login": "ppm-bot"
+ }
+}

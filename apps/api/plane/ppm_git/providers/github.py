@@ -31,6 +31,11 @@ def github_app_is_configured():
     return bool(settings.PPM_GITHUB_APP_CONFIGURED)
 
 
+def github_code_file_url(canonical_url, commit_sha, path):
+    """GitHub link to one file at one commit (code index, G1.2): ``<repository>/blob/<sha>/<path>``."""
+    return f"{canonical_url.rstrip('/')}/blob/{quote(commit_sha, safe='')}/{quote(path, safe='/-._~')}"
+
+
 def _required_string(payload, key, *, maximum=2048):
     value = payload.get(key)
     if not isinstance(value, str) or not value or len(value) > maximum:

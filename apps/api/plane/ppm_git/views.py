@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.exceptions import AuthenticationFailed, NotAuthenticated
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from plane.authentication.session import BaseSessionAuthentication
@@ -18,11 +19,13 @@ from plane.ppm_core.permissions import PpmProjectAccess
 from .models import (
     PpmGitAudit,
     PpmGitConnection,
+    PpmGitConnectionStatus,
     PpmGitInstallation,
     PpmGitInstallationStatus,
     PpmGitLink,
     PpmGitLinkStatus,
     PpmGitObject,
+    PpmGitProvider,
     PpmGitRepository,
     PpmGitRepositoryStatus,
     PpmGitWriteAction,
@@ -32,18 +35,30 @@ from .permissions import get_ppm_git_capabilities
 from .provider_services import (
     begin_github_user_authorization,
     complete_github_connect,
+    connect_forgejo_repository,
     connect_github_repository,
     create_delivery,
     disconnect_github_connection,
+    list_forgejo_repositories,
     list_github_repositories,
     provider_summary,
+    providers_summary,
     refresh_github_installation,
+    resume_connection_sync,
     start_github_connect,
+    unfollowed_delivery_payload,
 )
+from .providers import forgejo_is_configured, forgejo_ssh_enabled
 from .providers.base import PpmGitProviderError
 from .services import PpmGitError, archive_repository, create_link, create_repository, update_repository
 from .tasks import process_git_delivery_task, reconcile_git_connection_task, synchronize_git_code_task
-from .webhooks import body_sha256, parse_github_webhook, verify_github_signature
+from .webhooks import (
+    body_sha256,
+    parse_forgejo_webhook,
+    parse_github_webhook,
+    verify_forgejo_signature,
+    verify_github_signature,
+)
 from .write_actions import (
     apply_git_write_action,
     cancel_git_write_action,
@@ -67,7 +82,10 @@ def serialize_repository(repository):
         "provider_full_name": repository.provider_full_name,
         "canonical_url": repository.canonical_url,
         "clone_https": repository.clone_https,
-        "clone_ssh": repository.clone_ssh,
+        # G2.1 (controller ruling): no SSH address of PPM's Git server while its SSH is switched off.
+        "clone_ssh": (
+            "" if repository.provider == PpmGitProvider.FORGEJO and not forgejo_ssh_enabled() else repository.clone_ssh
+        ),
         "default_branch": repository.default_branch,
         "visibility": repository.visibility,
         "is_default": repository.is_default,
@@ -192,10 +210,19 @@ def error_status(code):
         "GIT_WRITE_REF_CONFLICT",
         "GIT_WRITE_DECISION_FINAL",
         "GIT_WRITE_SOURCE_CHANGED",
+        "GIT_DELIVERY_CONFLICT",
     }:
         return status.HTTP_409_CONFLICT
-    if code == "GITHUB_RATE_LIMITED":
+    if code in {"GITHUB_RATE_LIMITED", "GIT_PROVIDER_RATE_LIMITED"}:
         return status.HTTP_429_TOO_MANY_REQUESTS
+    # G2.1: the Git server did not answer as it should (the HTTP contract of «Код»).
+    if code in {
+        "GIT_PROVIDER_UNAVAILABLE",
+        "GIT_PROVIDER_REQUEST_FAILED",
+        "GIT_PROVIDER_INVALID_RESPONSE",
+        "GIT_PROVIDER_PAGE_LIMIT",
+    }:
+        return status.HTTP_502_BAD_GATEWAY
     return status.HTTP_400_BAD_REQUEST
 
 
@@ -235,13 +262,17 @@ class PpmGitAPIView(APIView):
             project_id=project_id,
         )
         if access == PpmProjectAccess.DENY or not capabilities[capability]:
-            return None, ppm_error_response(
-                request,
-                code="GIT_PERMISSION_DENIED",
-                message="Недостаточно прав для Git-раздела проекта.",
-                status_code=status.HTTP_403_FORBIDDEN,
-            )
+            return None, self.permission_denied_response(request)
         return capabilities, None
+
+    @staticmethod
+    def permission_denied_response(request):
+        return ppm_error_response(
+            request,
+            code="GIT_PERMISSION_DENIED",
+            message="Недостаточно прав для Git-раздела проекта.",
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
 
     def audit(self, request, *, workspace_id, project_id, action, target_type, target_id, metadata=None):
         PpmGitAudit.objects.create(
@@ -359,6 +390,8 @@ class PpmGitOverviewView(PpmGitAPIView):
             {
                 "capabilities": capabilities,
                 "provider": provider_summary(),
+                # G2.1 R9: GitHub and PPM's own Git server — configured or not, and the server's public address.
+                "providers": providers_summary(),
                 "repositories": [serialize_repository(repository) for repository in repositories],
                 "installations": [serialize_installation(installation) for installation in installations],
                 "connections": [serialize_connection(connection) for connection in connections],
@@ -587,15 +620,41 @@ class PpmGitRepositoryDetailView(PpmGitAPIView):
         return Response(serialize_repository(repository))
 
     def delete(self, request, workspace_id, project_id, repository_id):
-        _, denied = self.require_capability(request, workspace_id, project_id, "manage_repositories")
+        capabilities, denied = self.require_capability(request, workspace_id, project_id, "manage_repositories")
         if denied:
             return denied
-        repository = archive_repository(
-            repository=self.get_repository(
-                workspace_id=workspace_id, project_id=project_id, repository_id=repository_id
-            ),
-            user_id=request.user.id,
-        )
+        repository = self.get_repository(workspace_id=workspace_id, project_id=project_id, repository_id=repository_id)
+        with transaction.atomic():
+            PpmGitRepository.objects.select_for_update().filter(id=repository.id).first()
+            # G2.1 A2 fix round 1: a repository of PPM's own Git server is removed from a project only by a PPM global
+            # administrator (it connected it); removing it also disconnects it, so nothing is synchronized into an
+            # archived record. Records of other providers keep their RC.1 behaviour.
+            git_server_connection = (
+                PpmGitConnection.objects.select_for_update()
+                .select_related("installation")
+                .filter(repository_id=repository.id, installation__provider=PpmGitProvider.FORGEJO)
+                .exclude(status__in=[PpmGitConnectionStatus.DISCONNECTED, PpmGitConnectionStatus.REVOKED])
+                .first()
+            )
+            if git_server_connection is not None and not capabilities["manage_git_server"]:
+                return ppm_error_response(
+                    request,
+                    code="GIT_SERVER_ADMIN_REQUIRED",
+                    message="Репозиторий Git-сервера убирает администратор PPM.",
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+            if git_server_connection is not None:
+                disconnect_github_connection(connection=git_server_connection, user_id=request.user.id)
+                self.audit(
+                    request,
+                    workspace_id=workspace_id,
+                    project_id=project_id,
+                    action="forgejo.repository.disconnect",
+                    target_type="connection",
+                    target_id=git_server_connection.id,
+                    metadata={"reason": "repository.archive"},
+                )
+            repository = archive_repository(repository=repository, user_id=request.user.id)
         self.audit(
             request,
             workspace_id=workspace_id,
@@ -874,8 +933,15 @@ class PpmGitHubRepositoryConnectView(PpmGitAPIView):
         return Response(serialize_connection(connection), status=status.HTTP_201_CREATED)
 
 
+def _connection_audit_prefix(connection):
+    """Audit names of the shared connection actions: «forgejo.…» for PPM's Git server, else the historical
+    «github.…»."""
+    return "forgejo" if connection.installation.provider == PpmGitProvider.FORGEJO else "github"
+
+
 class PpmGitConnectionDetailView(PpmGitAPIView):
     def post(self, request, workspace_id, project_id, connection_id):
+        # G2.1: «Обновить» only queues a reconciliation — for PPM's Git server too it stays on `manage_provider`.
         _, denied = self.require_capability(request, workspace_id, project_id, "manage_provider")
         if denied:
             return denied
@@ -884,14 +950,17 @@ class PpmGitConnectionDetailView(PpmGitAPIView):
             project_id=project_id,
             connection_id=connection_id,
         )
+        # G2.1: «Обновить» also lifts a provider halt (for example «repository deleted»), so the sync runs normally.
+        resumed = resume_connection_sync(connection=connection, user_id=request.user.id)
         reconcile_git_connection_task.delay(str(connection.id))
         self.audit(
             request,
             workspace_id=workspace_id,
             project_id=project_id,
-            action="github.repository.sync",
+            action=f"{_connection_audit_prefix(connection)}.repository.sync",
             target_type="connection",
             target_id=connection.id,
+            metadata={"resumed_halt": resumed.get("code", "")} if resumed is not None else None,
         )
         return Response(
             {"accepted": True, "connection": serialize_connection(connection)},
@@ -899,26 +968,75 @@ class PpmGitConnectionDetailView(PpmGitAPIView):
         )
 
     def delete(self, request, workspace_id, project_id, connection_id):
-        _, denied = self.require_capability(request, workspace_id, project_id, "manage_provider")
+        capabilities, denied = self.require_capability(request, workspace_id, project_id)
         if denied:
             return denied
-        connection = disconnect_github_connection(
-            connection=self.get_connection(
+        if not (capabilities["manage_provider"] or capabilities["manage_git_server"]):
+            return self.permission_denied_response(request)
+        connection = self.get_connection(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            connection_id=connection_id,
+        )
+        # G2.1 R7: a repository of PPM's Git server is disconnected only by a PPM global administrator.
+        needed = (
+            "manage_git_server" if connection.installation.provider == PpmGitProvider.FORGEJO else "manage_provider"
+        )
+        if not capabilities[needed]:
+            return self.permission_denied_response(request)
+        connection = disconnect_github_connection(connection=connection, user_id=request.user.id)
+        self.audit(
+            request,
+            workspace_id=workspace_id,
+            project_id=project_id,
+            action=f"{_connection_audit_prefix(connection)}.repository.disconnect",
+            target_type="connection",
+            target_id=connection.id,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PpmForgejoRepositoriesView(PpmGitAPIView):
+    """G2.1 R7: repositories of PPM's own Git server — listed and connected only by a PPM global administrator."""
+
+    def get(self, request, workspace_id, project_id):
+        _, denied = self.require_capability(request, workspace_id, project_id, "manage_git_server")
+        if denied:
+            return denied
+        return Response(
+            list_forgejo_repositories(
                 workspace_id=workspace_id,
                 project_id=project_id,
-                connection_id=connection_id,
-            ),
+                search=request.query_params.get("search", ""),
+                page=request.query_params.get("page", "1"),
+            )
+        )
+
+    def post(self, request, workspace_id, project_id):
+        _, denied = self.require_capability(request, workspace_id, project_id, "manage_git_server")
+        if denied:
+            return denied
+        repository, connection = connect_forgejo_repository(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            provider_repository_id=request.data.get("provider_repository_id"),
             user_id=request.user.id,
         )
         self.audit(
             request,
             workspace_id=workspace_id,
             project_id=project_id,
-            action="github.repository.disconnect",
+            action="forgejo.repository.connect",
             target_type="connection",
             target_id=connection.id,
+            metadata={"provider_full_name": connection.provider_full_name, "repository_id": str(repository.id)},
         )
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        connection_id = str(connection.id)
+        transaction.on_commit(lambda: reconcile_git_connection_task.delay(connection_id))
+        return Response(
+            {"repository": serialize_repository(repository), "connection": serialize_connection(connection)},
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class PpmGitHubWebhookView(APIView):
@@ -1000,4 +1118,105 @@ class PpmGitHubWebhookView(APIView):
         return Response(
             {"accepted": True, "duplicate": duplicate},
             status=status.HTTP_200_OK if duplicate else status.HTTP_202_ACCEPTED,
+        )
+
+
+class ForgejoWebhookThrottle(AnonRateThrottle):
+    """The system webhook of the Git server comes from one address (the Forgejo container), a burst per push (push,
+    create, pull request sync) — the default anonymous rate (30/minute) would drop deliveries Forgejo does not retry.
+    Unsigned requests are still refused before anything else happens."""
+
+    scope = "ppm_forgejo_webhook"
+    rate = "600/minute"
+
+
+class PpmForgejoWebhookView(APIView):
+    """G2.1 R6: the system webhook of PPM's own Git server (Forgejo) — ``POST /api/ppm/v1/git/forgejo/webhook/``.
+
+    The raw body is read and bounded before anything is parsed; ``X-Forgejo-Signature`` (hex HMAC-SHA256 of the body
+    with ``PPM_FORGEJO_WEBHOOK_SECRET``) is checked in constant time; ``X-Forgejo-Delivery`` and ``X-Forgejo-Event``
+    are required. The GitHub-compatible headers Forgejo also sends are never read here. Answers never echo the body.
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [ForgejoWebhookThrottle]
+
+    def post(self, request):
+        if not forgejo_is_configured():
+            return ppm_error_response(
+                request,
+                code="FORGEJO_NOT_CONFIGURED",
+                message="Git-сервер PPM ещё не настроен.",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        max_bytes = settings.PPM_FORGEJO_WEBHOOK_MAX_BYTES
+        content_length = request.META.get("CONTENT_LENGTH")
+        if content_length and content_length.isdigit() and int(content_length) > max_bytes:
+            return self._too_large(request)
+        raw_body = request.body
+        if len(raw_body) > max_bytes:
+            return self._too_large(request)
+        if not verify_forgejo_signature(raw_body, request.META.get("HTTP_X_FORGEJO_SIGNATURE")):
+            return ppm_error_response(
+                request,
+                code="FORGEJO_WEBHOOK_SIGNATURE_INVALID",
+                message="Подпись события Git-сервера не прошла проверку.",
+                status_code=status.HTTP_401_UNAUTHORIZED,
+            )
+        delivery_id = request.META.get("HTTP_X_FORGEJO_DELIVERY", "")
+        event_name = request.META.get("HTTP_X_FORGEJO_EVENT", "")
+        if not delivery_id or len(delivery_id) > 255 or not event_name or len(event_name) > 64:
+            return ppm_error_response(
+                request,
+                code="FORGEJO_WEBHOOK_HEADERS_INVALID",
+                message="В событии Git-сервера отсутствуют обязательные заголовки.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            # Fix round 1: a repository no connection follows keeps only the event and the ids in its receipt.
+            normalized_payload = unfollowed_delivery_payload(
+                provider=PpmGitProvider.FORGEJO,
+                normalized=parse_forgejo_webhook(raw_body, event_name=event_name),
+            )
+            delivery, duplicate = create_delivery(
+                provider=PpmGitProvider.FORGEJO,
+                delivery_id=delivery_id,
+                event_name=event_name,
+                raw_body_hash=body_sha256(raw_body),
+                normalized_payload=normalized_payload,
+            )
+        except (PpmGitError, PpmGitProviderError) as exc:
+            return ppm_error_response(
+                request,
+                code=exc.code,
+                message=exc.message,
+                status_code=getattr(exc, "status_code", None) or error_status(exc.code),
+            )
+        except Exception:
+            logger.exception(
+                "Unexpected Forgejo webhook failure",
+                extra={"forgejo_delivery_id": delivery_id, "forgejo_event_name": event_name},
+            )
+            return ppm_error_response(
+                request,
+                code="FORGEJO_WEBHOOK_FAILED",
+                message="Не удалось принять событие Git-сервера.",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        if not duplicate:
+            delivery_key = str(delivery.id)
+            transaction.on_commit(lambda: process_git_delivery_task.delay(delivery_key))
+        return Response(
+            {"accepted": True, "duplicate": duplicate},
+            status=status.HTTP_200_OK if duplicate else status.HTTP_202_ACCEPTED,
+        )
+
+    @staticmethod
+    def _too_large(request):
+        return ppm_error_response(
+            request,
+            code="FORGEJO_WEBHOOK_TOO_LARGE",
+            message="Событие Git-сервера превышает допустимый размер.",
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
         )

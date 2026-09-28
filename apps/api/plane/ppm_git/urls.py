@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    PpmForgejoRepositoriesView,
+    PpmForgejoWebhookView,
     PpmGitCodeIndexPolicyView,
     PpmGitConnectionDetailView,
     PpmGitHubCallbackView,
@@ -29,6 +31,8 @@ urlpatterns = [
     path("git/github/setup/", PpmGitHubSetupView.as_view(), name="ppm-github-setup"),
     path("git/github/callback/", PpmGitHubCallbackView.as_view(), name="ppm-github-callback"),
     path("git/github/webhook/", PpmGitHubWebhookView.as_view(), name="ppm-github-webhook"),
+    # G2.1: the system webhook of PPM's own Git server (Forgejo calls http://api:8000/api/ppm/v1/git/forgejo/webhook/).
+    path("git/forgejo/webhook/", PpmForgejoWebhookView.as_view(), name="ppm-forgejo-webhook"),
     path(PROJECT, PpmGitOverviewView.as_view(), name="ppm-project-git"),
     path(
         f"{PROJECT}providers/github/start/",
@@ -49,6 +53,11 @@ urlpatterns = [
         f"{PROJECT}providers/github/repositories/",
         PpmGitHubRepositoryConnectView.as_view(),
         name="ppm-github-repository-connect",
+    ),
+    path(
+        f"{PROJECT}providers/forgejo/repositories/",
+        PpmForgejoRepositoriesView.as_view(),
+        name="ppm-forgejo-repositories",
     ),
     path(
         f"{PROJECT}connections/<uuid:connection_id>/",

@@ -3,7 +3,6 @@ import hashlib
 import posixpath
 import re
 from collections import Counter
-from urllib.parse import quote
 
 from django.db import transaction
 from django.utils import timezone
@@ -15,10 +14,12 @@ from .models import (
     PpmGitCodeSnapshotStatus,
     PpmGitConnection,
     PpmGitConnectionStatus,
+    PpmGitProvider,
     PpmGitRepository,
     PpmGitRepositoryStatus,
 )
-from .providers import GitHubAppClient
+from .providers import get_provider_client, provider_code_file_url
+from .providers.base import REPOSITORY_MOVED_CODES, PpmGitProviderError
 from .services import PpmGitError
 
 
@@ -181,10 +182,7 @@ def update_code_index_policy(*, repository, payload, user_id):
             raise PpmGitError("CODE_INDEX_REPOSITORY_INACTIVE", "Архивный репозиторий нельзя индексировать.")
         connection = getattr(repository, "connection", None)
         if connection is None or connection.status != PpmGitConnectionStatus.ACTIVE:
-            raise PpmGitError(
-                "CODE_INDEX_CONNECTION_REQUIRED",
-                "Для индексации кода нужен активный GitHub App и доступ к содержимому репозитория.",
-            )
+            raise PpmGitError("CODE_INDEX_CONNECTION_REQUIRED", _connection_required_message(repository))
         if not policy.branch:
             policy.branch = repository.default_branch
     policy.updated_by = user_id
@@ -192,6 +190,13 @@ def update_code_index_policy(*, repository, payload, user_id):
     if not policy.enabled:
         purge_repository_code(repository=repository, status=PpmGitCodeSnapshotStatus.REVOKED)
     return policy
+
+
+def _connection_required_message(repository):
+    if repository.provider == PpmGitProvider.FORGEJO:
+        # G2.1: PPM's own Git server — no GitHub App involved.
+        return "Для индексации кода нужно активное подключение репозитория к нашему Git-серверу."
+    return "Для индексации кода нужен активный GitHub App и доступ к содержимому репозитория."
 
 
 def normalize_code_path(value):
@@ -267,6 +272,8 @@ def ingest_code_snapshot(*, connection, branch, commit_sha, files, dispatch=True
         raise PpmGitError("CODE_INDEX_COMMIT_INVALID", "Git provider вернул некорректный commit SHA.")
     if branch != policy.branch:
         raise PpmGitError("CODE_INDEX_BRANCH_MISMATCH", "Снимок получен не из разрешённой ветки.")
+    # G2.1: every provider links a file at a commit its own way (GitHub: `<repository>/blob/<sha>/<path>`).
+    file_url = provider_code_file_url(connection.installation.provider)
 
     accepted = []
     excluded = Counter()
@@ -301,10 +308,7 @@ def ingest_code_snapshot(*, connection, branch, commit_sha, files, dispatch=True
                 "content_hash": hashlib.sha256(raw).hexdigest(),
                 "size_bytes": len(raw),
                 "line_count": max(1, text.count("\n") + 1),
-                "canonical_url": (
-                    f"{repository.canonical_url.rstrip('/')}/blob/{quote(commit_sha, safe='')}/"
-                    f"{quote(path, safe='/-._~')}"
-                ),
+                "canonical_url": file_url(repository.canonical_url, commit_sha, path),
             }
         )
         if len(accepted) > policy.max_files:
@@ -434,6 +438,13 @@ def _index_snapshot_files(*, snapshot, dispatch):
         )
 
 
+def _purge_if_moved(repository, error):
+    """G2.1 A2 fix round 1: the repository at the connected id is not the connected one any more (renamed or moved, its
+    old name perhaps taken by another repository) — its indexed code leaves search and AI answers."""
+    if error.code in REPOSITORY_MOVED_CODES:
+        purge_repository_code(repository=repository)
+
+
 def synchronize_repository_code(repository_id, *, client=None, dispatch=True):
     repository = (
         PpmGitRepository.objects.select_related("connection__installation", "code_index_policy")
@@ -448,13 +459,18 @@ def synchronize_repository_code(repository_id, *, client=None, dispatch=True):
     connection = getattr(repository, "connection", None)
     if connection is None or connection.status != PpmGitConnectionStatus.ACTIVE:
         raise PpmGitError("CODE_INDEX_CONNECTION_REQUIRED", "Подключение Git provider неактивно.")
-    client = client or GitHubAppClient()
-    tree = client.get_code_tree(
-        connection.installation.provider_installation_id,
-        connection.provider_repository_id,
-        connection.provider_full_name,
-        policy.branch,
-    )
+    # G2.1: the client of the connection's provider (registry); `client=` stays for tests.
+    client = client or get_provider_client(connection.installation.provider)
+    try:
+        tree = client.get_code_tree(
+            connection.installation.provider_installation_id,
+            connection.provider_repository_id,
+            connection.provider_full_name,
+            policy.branch,
+        )
+    except PpmGitProviderError as exc:
+        _purge_if_moved(repository, exc)
+        raise
     selected = []
     selected_bytes = 0
     for item in tree["files"]:
@@ -470,12 +486,16 @@ def synchronize_repository_code(repository_id, *, client=None, dispatch=True):
         selected.append({"path": path, "sha": item["sha"], "size": size})
         if len(selected) > policy.max_files:
             raise PpmGitError("CODE_INDEX_FILE_LIMIT", "Репозиторий содержит слишком много индексируемых файлов.")
-    blobs = client.get_code_blobs(
-        connection.installation.provider_installation_id,
-        connection.provider_repository_id,
-        connection.provider_full_name,
-        selected,
-    )
+    try:
+        blobs = client.get_code_blobs(
+            connection.installation.provider_installation_id,
+            connection.provider_repository_id,
+            connection.provider_full_name,
+            selected,
+        )
+    except PpmGitProviderError as exc:
+        _purge_if_moved(repository, exc)
+        raise
     candidates = [{"path": item["path"], "content": blobs[item["sha"]]} for item in selected]
     return ingest_code_snapshot(
         connection=connection,

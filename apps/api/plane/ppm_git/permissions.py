@@ -12,6 +12,7 @@ def get_ppm_git_capabilities(*, user, workspace_id, project_id):
             "manage_links": False,
             "manage_provider": False,
             "manage_write_actions": False,
+            "manage_git_server": False,
         }
 
     if is_ppm_global_admin(user=user, workspace_id=workspace_id):
@@ -21,6 +22,9 @@ def get_ppm_git_capabilities(*, user, workspace_id, project_id):
             "manage_links": True,
             "manage_provider": True,
             "manage_write_actions": True,
+            # G2.1: repositories of PPM's own Git server are connected and disconnected only by a PPM global
+            # administrator — its service account sees the code of every team.
+            "manage_git_server": True,
         }
 
     role = (
@@ -40,4 +44,5 @@ def get_ppm_git_capabilities(*, user, workspace_id, project_id):
         "manage_links": role in (ROLE.ADMIN.value, ROLE.MEMBER.value),
         "manage_provider": role == ROLE.ADMIN.value,
         "manage_write_actions": role in (ROLE.ADMIN.value, ROLE.MEMBER.value),
+        "manage_git_server": False,
     }

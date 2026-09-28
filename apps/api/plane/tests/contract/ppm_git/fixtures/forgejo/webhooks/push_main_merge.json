@@ -1,0 +1,272 @@
+{
+  "ref": "refs/heads/main",
+  "before": "2afb6d980cb230732d188de52866425cac96b979",
+  "after": "097f3ee58ccd2e6259bf755652b9420ac28bf9bc",
+  "compare_url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/compare/2afb6d980cb230732d188de52866425cac96b979...097f3ee58ccd2e6259bf755652b9420ac28bf9bc",
+  "commits": [
+    {
+      "id": "097f3ee58ccd2e6259bf755652b9420ac28bf9bc",
+      "message": "Merge pull request 'KEY-2 — форма входа и проверка' (#1) from KEY-2/login-form into main\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/097f3ee58ccd2e6259bf755652b9420ac28bf9bc",
+      "author": {
+        "name": "dev1",
+        "email": "dev1@noreply.git.ppm-g21-a2.localhost",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "dev1",
+        "email": "dev1@noreply.git.ppm-g21-a2.localhost",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-28T13:21:05Z",
+      "added": [
+        "src/limits.py",
+        "src/login.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "50f9a1b5cd565e9994a612369de848d7cf200adc",
+      "message": "KEY-2: limit attempts\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/50f9a1b5cd565e9994a612369de848d7cf200adc",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-28T11:20:00+03:00",
+      "added": [
+        "src/limits.py"
+      ],
+      "removed": [],
+      "modified": []
+    },
+    {
+      "id": "5d2d8b33018a04ffba909dabe9db92d14e13f34f",
+      "message": "KEY-2: validate input\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/5d2d8b33018a04ffba909dabe9db92d14e13f34f",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-28T11:10:00+03:00",
+      "added": [],
+      "removed": [],
+      "modified": [
+        "src/login.py"
+      ]
+    },
+    {
+      "id": "c2c885dd1f1be238ae8cd835739a2de3b6683257",
+      "message": "KEY-2: login form\n",
+      "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/c2c885dd1f1be238ae8cd835739a2de3b6683257",
+      "author": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "committer": {
+        "name": "Dev One",
+        "email": "dev1@example.test",
+        "username": "dev1"
+      },
+      "verification": null,
+      "timestamp": "2026-09-28T11:00:00+03:00",
+      "added": [
+        "src/login.py"
+      ],
+      "removed": [],
+      "modified": []
+    }
+  ],
+  "total_commits": 4,
+  "head_commit": {
+    "id": "097f3ee58ccd2e6259bf755652b9420ac28bf9bc",
+    "message": "Merge pull request 'KEY-2 — форма входа и проверка' (#1) from KEY-2/login-form into main\n",
+    "url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app/commit/097f3ee58ccd2e6259bf755652b9420ac28bf9bc",
+    "author": {
+      "name": "dev1",
+      "email": "dev1@noreply.git.ppm-g21-a2.localhost",
+      "username": "dev1"
+    },
+    "committer": {
+      "name": "dev1",
+      "email": "dev1@noreply.git.ppm-g21-a2.localhost",
+      "username": "dev1"
+    },
+    "verification": null,
+    "timestamp": "2026-09-28T13:21:05Z",
+    "added": [
+      "src/limits.py",
+      "src/login.py"
+    ],
+    "removed": [],
+    "modified": []
+  },
+  "repository": {
+    "id": 1,
+    "owner": {
+      "id": 4,
+      "login": "team-alpha",
+      "login_name": "",
+      "source_id": 0,
+      "full_name": "Team Alpha",
+      "email": "",
+      "avatar_url": "https://git.ppm-g21-a2.localhost:19443/avatars/fd1f3685585c5f847448390ec17a34cf",
+      "html_url": "https://git.ppm-g21-a2.localhost:19443/team-alpha",
+      "language": "",
+      "is_admin": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "created": "2026-09-28T13:18:49Z",
+      "restricted": false,
+      "active": false,
+      "prohibit_login": false,
+      "location": "",
+      "pronouns": "",
+      "website": "",
+      "description": "",
+      "visibility": "private",
+      "followers_count": 0,
+      "following_count": 0,
+      "starred_repos_count": 0,
+      "username": "team-alpha"
+    },
+    "name": "app",
+    "full_name": "team-alpha/app",
+    "description": "Приложение команды",
+    "empty": false,
+    "private": true,
+    "fork": false,
+    "template": false,
+    "parent": null,
+    "mirror": false,
+    "size": 27,
+    "language": "Python",
+    "languages_url": "https://git.ppm-g21-a2.localhost:19443/api/v1/repos/team-alpha/app/languages",
+    "html_url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app",
+    "url": "https://git.ppm-g21-a2.localhost:19443/api/v1/repos/team-alpha/app",
+    "link": "",
+    "ssh_url": "ssh://git@git.ppm-g21-a2.localhost:2222/team-alpha/app.git",
+    "clone_url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app.git",
+    "original_url": "",
+    "website": "",
+    "stars_count": 0,
+    "forks_count": 0,
+    "watchers_count": 2,
+    "open_issues_count": 0,
+    "open_pr_counter": 1,
+    "release_counter": 0,
+    "default_branch": "main",
+    "archived": false,
+    "created_at": "2026-09-28T13:19:34Z",
+    "updated_at": "2026-09-28T13:20:48Z",
+    "archived_at": "1970-01-01T00:00:00Z",
+    "permissions": {
+      "admin": true,
+      "push": true,
+      "pull": true
+    },
+    "has_issues": true,
+    "internal_tracker": {
+      "enable_time_tracker": true,
+      "allow_only_contributors_to_track_time": true,
+      "enable_issue_dependencies": true
+    },
+    "has_wiki": true,
+    "has_wiki_contents": false,
+    "wiki_branch": "main",
+    "wiki_ssh_url": "ssh://git@git.ppm-g21-a2.localhost:2222/team-alpha/app.wiki.git",
+    "wiki_clone_url": "https://git.ppm-g21-a2.localhost:19443/team-alpha/app.wiki.git",
+    "globally_editable_wiki": false,
+    "has_pull_requests": true,
+    "has_projects": true,
+    "has_releases": true,
+    "has_packages": false,
+    "has_actions": false,
+    "ignore_whitespace_conflicts": false,
+    "allow_merge_commits": true,
+    "allow_rebase": true,
+    "allow_rebase_explicit": true,
+    "allow_squash_merge": true,
+    "allow_fast_forward_only_merge": true,
+    "allow_rebase_update": true,
+    "default_delete_branch_after_merge": false,
+    "default_merge_style": "merge",
+    "default_allow_maintainer_edit": false,
+    "default_update_style": "merge",
+    "avatar_url": "",
+    "internal": false,
+    "mirror_interval": "",
+    "object_format_name": "sha1",
+    "mirror_updated": "0001-01-01T00:00:00Z",
+    "repo_transfer": null,
+    "topics": []
+  },
+  "pusher": {
+    "id": 3,
+    "login": "dev1",
+    "login_name": "",
+    "source_id": 0,
+    "full_name": "",
+    "email": "dev1@noreply.git.ppm-g21-a2.localhost",
+    "avatar_url": "https://git.ppm-g21-a2.localhost:19443/avatars/85332bb8d2ad939288b37af279f23982",
+    "html_url": "https://git.ppm-g21-a2.localhost:19443/dev1",
+    "language": "",
+    "is_admin": false,
+    "last_login": "0001-01-01T00:00:00Z",
+    "created": "2026-09-28T13:18:12Z",
+    "restricted": false,
+    "active": false,
+    "prohibit_login": false,
+    "location": "",
+    "pronouns": "",
+    "website": "",
+    "description": "",
+    "visibility": "public",
+    "followers_count": 0,
+    "following_count": 0,
+    "starred_repos_count": 0,
+    "username": "dev1"
+  },
+  "sender": {
+    "id": 3,
+    "login": "dev1",
+    "login_name": "",
+    "source_id": 0,
+    "full_name": "",
+    "email": "dev1@noreply.git.ppm-g21-a2.localhost",
+    "avatar_url": "https://git.ppm-g21-a2.localhost:19443/avatars/85332bb8d2ad939288b37af279f23982",
+    "html_url": "https://git.ppm-g21-a2.localhost:19443/dev1",
+    "language": "",
+    "is_admin": false,
+    "last_login": "0001-01-01T00:00:00Z",
+    "created": "2026-09-28T13:18:12Z",
+    "restricted": false,
+    "active": false,
+    "prohibit_login": false,
+    "location": "",
+    "pronouns": "",
+    "website": "",
+    "description": "",
+    "visibility": "public",
+    "followers_count": 0,
+    "following_count": 0,
+    "starred_repos_count": 0,
+    "username": "dev1"
+  }
+}
