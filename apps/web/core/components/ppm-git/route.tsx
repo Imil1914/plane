@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Dialog } from "@headlessui/react";
 import {
-  Archive,
-  Check,
-  Clipboard,
   Code2,
   ExternalLink,
   GitBranch,
@@ -13,10 +10,8 @@ import {
   Link2,
   LoaderCircle,
   Plus,
-  RefreshCw,
   Search,
   ShieldCheck,
-  Star,
   Unlink,
   X,
 } from "lucide-react";
@@ -26,7 +21,6 @@ import type { TPpmWorkItemProjection } from "@ppm/canvas";
 import { PageHead } from "@/components/core/page-title";
 import { usePpmConfirm } from "@/components/ppm-shell/use-ppm-confirm";
 import { handlePpmDialogKeyDown, shouldDismissPpmDialog } from "@/helpers/ppm-dialog-dismiss.helper";
-import { getPpmGitWebhookStatus, type TPpmGitWebhookStatus } from "@/helpers/ppm-git-webhook-status.helper";
 import { safeGithubUrl, type TPpmGitWriteCommand } from "@/helpers/ppm-git-write-flow.helper";
 import { useProject } from "@/hooks/store/use-project";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -48,7 +42,20 @@ import {
   type TPpmGitWriteAction,
   type TPpmGitWriteActionRequest,
 } from "@/services/ppm-git.service";
+import { ForgejoProviderPanel, ForgejoRepositoryPicker, useForgejoRepositoryPicker } from "./forgejo-connect";
+import type { TForgejoPickerDeps } from "./forgejo-repository-picker";
+import { copyTextToClipboard } from "./git-clipboard";
 import { DialogActions, FormInput } from "./git-dialog-parts";
+import {
+  getActiveGithubInstallation,
+  getActiveGithubRepositories,
+  getGitSecurityNote,
+  getPpmGitServer,
+  PPM_GIT_MANUAL_PROVIDERS,
+  PPM_GIT_PROVIDER_LABELS,
+  splitGitConnectionsByProvider,
+} from "./git-provider-labels";
+import { GitConnectionRow, PPM_GIT_VISIBILITY_LABELS, RepositoryCard } from "./git-section-parts";
 import {
   GitWriteActionDetails,
   GitWriteActionsPanel,
@@ -64,21 +71,6 @@ type TPpmGitRouteProps = {
   workspaceSlug: string;
 };
 
-const PROVIDER_LABELS: Record<TPpmGitProvider, string> = {
-  github: "GitHub",
-  gitlab: "GitLab",
-  bitbucket: "Bitbucket",
-  gitea: "Gitea",
-  generic: "Git",
-};
-
-const VISIBILITY_LABELS: Record<TPpmGitRepository["visibility"], string> = {
-  public: "публичный",
-  private: "приватный",
-  internal: "внутренний",
-  unknown: "видимость не указана",
-};
-
 const OBJECT_LABELS: Record<TPpmGitObjectType, string> = {
   branch: "Ветка",
   commit: "Коммит",
@@ -89,14 +81,6 @@ const OBJECT_ICONS = {
   branch: GitBranch,
   commit: GitCommitHorizontal,
   pull_request: GitPullRequest,
-} as const;
-
-const CODE_INDEX_STATUS_LABELS = {
-  failed: "Ошибка индексации",
-  pending: "Индексация ожидает запуска",
-  ready: "Код доступен Мозгу проекта",
-  revoked: "Индекс удалён",
-  superseded: "Снимок заменён",
 } as const;
 
 const EMPTY_REPOSITORY: TPpmGitRepositoryRequest = {
@@ -146,6 +130,7 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
   const [copied, setCopied] = useState<string>();
   const [repositoryDialog, setRepositoryDialog] = useState(false);
   const [githubDialog, setGithubDialog] = useState(false);
+  const [gitServerDialog, setGitServerDialog] = useState(false);
   const [githubRepositories, setGithubRepositories] = useState<TPpmGitHubRepository[]>([]);
   const [selectedGithubRepositoryId, setSelectedGithubRepositoryId] = useState<number>();
   const [linkDialog, setLinkDialog] = useState(false);
@@ -221,7 +206,7 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
 
   const openGithubRepositoryDialog = async () => {
     if (!workspace) return;
-    const installation = overview?.installations.find((item) => item.status === "active");
+    const installation = getActiveGithubInstallation(overview?.installations ?? []);
     if (!installation) return;
     setSaving(true);
     try {
@@ -240,7 +225,7 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
   const connectGithubRepository = async (event: FormEvent) => {
     event.preventDefault();
     if (!workspace || !selectedGithubRepositoryId) return;
-    const installation = overview?.installations.find((item) => item.status === "active");
+    const installation = getActiveGithubInstallation(overview?.installations ?? []);
     if (!installation) return;
     setSaving(true);
     try {
@@ -256,7 +241,7 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
 
   const refreshGithubPermissions = async () => {
     if (!workspace) return;
-    const installation = overview?.installations.find((item) => item.status === "active");
+    const installation = getActiveGithubInstallation(overview?.installations ?? []);
     if (!installation) {
       setError("Активная установка GitHub App не найдена.");
       return;
@@ -379,12 +364,11 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
   };
 
   const copy = async (value: string, key: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
+    if (await copyTextToClipboard(value)) {
       setCopied(key);
       window.setTimeout(() => setCopied((current) => (current === key ? undefined : current)), 1600);
-    } catch {
-      setError("Браузер не разрешил копирование. Выделите адрес вручную.");
+    } else {
+      setError("Браузер не разрешил копирование. Выделите текст вручную.");
     }
   };
 
@@ -403,11 +387,8 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
   };
 
   const openWriteActionDialog = (prefill?: TPpmGitWriteAction) => {
-    const activeRepositories = overview?.repositories.filter((repository) =>
-      overview.connections.some(
-        (connection) => connection.repository_id === repository.id && connection.status === "active"
-      )
-    );
+    // G1.3 writes to GitHub only: repositories of our Git server are not offered here.
+    const activeRepositories = overview ? getActiveGithubRepositories(overview) : undefined;
     const connectedRepository =
       activeRepositories?.find((repository) => repository.id === prefill?.preview.repository.id) ??
       activeRepositories?.[0];
@@ -615,6 +596,20 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
   if (!workspace || loading) return <GitState text="Открываем код проекта…" />;
   if (!overview) return <GitState text={error ?? "Git-раздел недоступен."} />;
 
+  // G2.1: our Git server next to GitHub. GitHub-only flows see only GitHub connections and the GitHub App installation.
+  const gitServer = getPpmGitServer(overview);
+  const connectionsByProvider = splitGitConnectionsByProvider(overview);
+  const githubInstallation = getActiveGithubInstallation(overview.installations);
+  const githubWritableRepositories = getActiveGithubRepositories(overview);
+  const canPrepareWrite = overview.capabilities.manage_write_actions && githubWritableRepositories.length > 0;
+  const securityNote = getGitSecurityNote({
+    github:
+      overview.provider.configured ||
+      connectionsByProvider.github.length > 0 ||
+      overview.installations.some((item) => item.provider === "github"),
+    forgejo: gitServer.configured || connectionsByProvider.forgejo.length > 0,
+  });
+
   return (
     <>
       <PageHead title={`${project?.name ?? "PPM"} — Код`} />
@@ -630,16 +625,15 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {overview.capabilities.manage_write_actions &&
-                overview.connections.some((connection) => connection.status === "active") && (
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-2 rounded-md border border-accent-strong/40 bg-accent-primary/5 px-3 py-2 text-12 font-semibold text-accent-primary hover:bg-accent-primary/10"
-                    onClick={() => openWriteActionDialog()}
-                  >
-                    <GitPullRequest className="size-4" aria-hidden="true" /> Ветка и черновик PR
-                  </button>
-                )}
+              {canPrepareWrite && (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-md border border-accent-strong/40 bg-accent-primary/5 px-3 py-2 text-12 font-semibold text-accent-primary hover:bg-accent-primary/10"
+                  onClick={() => openWriteActionDialog()}
+                >
+                  <GitPullRequest className="size-4" aria-hidden="true" /> Ветка и черновик PR
+                </button>
+              )}
               {overview.capabilities.manage_links && overview.repositories.length > 0 && (
                 <button
                   type="button"
@@ -673,9 +667,22 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
             </div>
           )}
 
+          <ForgejoProviderPanel
+            canConnect={gitServer.canManage}
+            canSync={overview.capabilities.manage_provider}
+            configured={gitServer.configured}
+            connections={connectionsByProvider.forgejo}
+            onConnect={() => setGitServerDialog(true)}
+            onDisconnect={(connection) => void disconnectConnection(connection)}
+            onSync={(connection) => void syncConnection(connection)}
+            publicUrl={gitServer.publicUrl}
+            repositories={overview.repositories}
+            saving={saving}
+          />
+
           <GithubProviderPanel
             canManage={overview.capabilities.manage_provider}
-            connections={overview.connections}
+            connections={connectionsByProvider.github}
             configured={overview.provider.configured}
             installations={overview.installations}
             saving={saving}
@@ -689,24 +696,14 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
             <ShieldCheck className="mt-0.5 size-5 shrink-0 text-accent-primary" aria-hidden="true" />
             <div>
               <p className="text-13 font-semibold text-primary">Без хранения токенов и SSH-ключей</p>
-              <p className="mt-1 text-12 leading-5 text-secondary">
-                PPM не сохраняет токены: для каждого запроса берётся краткоживущий доступ только к выбранному
-                репозиторию — на чтение, а для подтверждённой ветки или черновика PR — на запись. При включённом поиске
-                индексируются только разрешённые текстовые файлы точного коммита; секреты, зависимости и двоичные файлы
-                отбрасываются. Коммиты и push выполняются обычным Git, слияние (merge) — только в GitHub.
-              </p>
+              <p className="mt-1 text-12 leading-5 text-secondary">{securityNote}</p>
             </div>
           </div>
 
           <GitWriteActionsPanel
             actions={overview.write_actions.items}
-            canRefreshPermissions={
-              overview.capabilities.manage_provider && overview.installations.some((item) => item.status === "active")
-            }
-            canPrepare={
-              overview.capabilities.manage_write_actions &&
-              overview.connections.some((connection) => connection.status === "active")
-            }
+            canRefreshPermissions={overview.capabilities.manage_provider && Boolean(githubInstallation)}
+            canPrepare={canPrepareWrite}
             onOpen={openWriteAction}
             onPrepare={() => openWriteActionDialog()}
             onRefreshPermissions={() => void refreshGithubPermissions()}
@@ -736,20 +733,19 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
                   <RepositoryCard
                     canManage={overview.capabilities.manage_repositories}
                     canManageCode={overview.capabilities.manage_provider}
+                    canvasHref={gitCanvasHref(workspaceSlug, projectId, repository)}
                     copied={copied}
                     hasActiveConnection={overview.connections.some(
                       (connection) => connection.repository_id === repository.id && connection.status === "active"
                     )}
                     key={repository.id}
                     onArchive={archiveRepository}
-                    onCopy={copy}
+                    onCopy={(value, key) => void copy(value, key)}
                     onMakeDefault={makeDefault}
                     onSyncCode={syncCodeIndex}
                     onToggleCode={setCodeIndexEnabled}
-                    projectId={projectId}
                     repository={repository}
                     saving={saving}
-                    workspaceSlug={workspaceSlug}
                   />
                 ))}
               </div>
@@ -843,6 +839,20 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
           onSubmit={connectGithubRepository}
         />
       )}
+      {gitServerDialog && (
+        <GitServerRepositoryDialog
+          connect={(providerRepositoryId) =>
+            service.connectForgejoRepository(workspace.id, projectId, providerRepositoryId)
+          }
+          list={(request) => service.listForgejoRepositories(workspace.id, projectId, request)}
+          onClose={() => setGitServerDialog(false)}
+          onConnected={async () => {
+            await load({ silent: true });
+            setGitServerDialog(false);
+          }}
+          publicUrl={gitServer.publicUrl}
+        />
+      )}
       {linkDialog && (
         <LinkDialog
           form={linkForm}
@@ -880,11 +890,7 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
             <GitWriteBranchForm
               error={writeDialogError}
               form={writeActionForm}
-              repositories={overview.repositories.filter((repository) =>
-                overview.connections.some(
-                  (connection) => connection.repository_id === repository.id && connection.status === "active"
-                )
-              )}
+              repositories={githubWritableRepositories}
               repositoryId={selectedRepositoryId}
               saving={saving}
               searching={searching}
@@ -937,22 +943,37 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
   );
 }
 
-const CONNECTION_STATUS_LABELS: Record<TPpmGitConnection["status"], string> = {
-  active: "Подключён",
-  syncing: "Синхронизация",
-  rate_limited: "GitHub просит подождать",
-  permission_drift: "Доступ к репозиторию отозван",
-  error: "Ошибка синхронизации",
-  suspended: "Установка приостановлена",
-  disconnected: "Отключён",
-  revoked: "Доступ отозван",
-};
-
-const WEBHOOK_STATUS_CLASS_NAMES: Record<TPpmGitWebhookStatus["tone"], string> = {
-  confirmed: "border-success-subtle bg-success-subtle text-success-primary",
-  waiting: "border-warning-subtle bg-warning-subtle text-warning-primary",
-  inactive: "border-subtle bg-surface-2 text-tertiary",
-};
+// G2.1 (R10): the repository picker of our Git server in the page's dialog frame. While a repository is being connected
+// the dialog cannot be closed (Esc, backdrop, × and «Закрыть»): the result — a refreshed page or the reason of a
+// refusal — always lands in this dialog, and a late answer can never close a dialog opened again.
+function GitServerRepositoryDialog({
+  connect,
+  list,
+  onClose,
+  onConnected,
+  publicUrl,
+}: TForgejoPickerDeps & { onClose: () => void; publicUrl: string | null }) {
+  const { picker, state } = useForgejoRepositoryPicker({ connect, list, onConnected });
+  const connecting = state.connectingId !== undefined;
+  return (
+    <DialogFrame
+      closeDisabled={connecting}
+      onClose={onClose}
+      saving={connecting}
+      title="Подключить репозиторий с нашего Git-сервера"
+    >
+      <ForgejoRepositoryPicker
+        onClose={onClose}
+        onConnect={(providerRepositoryId) => void picker.connect(providerRepositoryId)}
+        onLoadMore={picker.loadMore}
+        onQueryChange={picker.setQuery}
+        onReload={picker.reload}
+        publicUrl={publicUrl}
+        state={state}
+      />
+    </DialogFrame>
+  );
+}
 
 function GithubProviderPanel({
   canManage,
@@ -975,7 +996,7 @@ function GithubProviderPanel({
   onSync: (connection: TPpmGitConnection) => void;
   saving: boolean;
 }) {
-  const installation = installations.find((item) => item.status === "active");
+  const installation = getActiveGithubInstallation(installations);
   return (
     <section className="rounded-xl border border-subtle bg-surface-2 p-5" aria-labelledby="ppm-github-title">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -1029,56 +1050,18 @@ function GithubProviderPanel({
 
       {connections.length > 0 && (
         <div className="mt-4 grid gap-2 border-t border-subtle pt-4">
-          {connections.map((connection) => {
-            const webhookStatus = getPpmGitWebhookStatus(connection);
-            return (
-              <div
-                className="flex flex-col gap-3 rounded-lg border border-subtle bg-layer-1 p-3 sm:flex-row sm:items-center"
-                key={connection.id}
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-12 font-semibold text-primary">{connection.provider_full_name}</p>
-                  <p className="mt-1 text-11 text-tertiary">
-                    {CONNECTION_STATUS_LABELS[connection.status]}
-                    {connection.last_sync_at
-                      ? ` · синхронизирован ${new Date(connection.last_sync_at).toLocaleString("ru-RU")}`
-                      : ""}
-                  </p>
-                  <p
-                    className={`mt-2 inline-flex max-w-full flex-wrap items-center gap-x-1 rounded-md border px-2 py-1 text-11 ${WEBHOOK_STATUS_CLASS_NAMES[webhookStatus.tone]}`}
-                    aria-label={`Статус webhook: ${webhookStatus.label}, ${webhookStatus.detail}`}
-                  >
-                    <span className="font-semibold">{webhookStatus.label}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{webhookStatus.detail}</span>
-                  </p>
-                  {connection.last_error && (
-                    <p className="mt-1 text-12 text-danger-primary">{connection.last_error.message}</p>
-                  )}
-                </div>
-                {canManage && !["disconnected", "revoked"].includes(connection.status) && (
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1.5 rounded-md border border-subtle px-2.5 py-1.5 text-12 text-primary disabled:opacity-50"
-                      disabled={saving}
-                      onClick={() => onSync(connection)}
-                    >
-                      <RefreshCw className="size-3.5" aria-hidden="true" /> Обновить
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-md px-2.5 py-1.5 text-12 text-secondary hover:bg-danger-subtle hover:text-danger-primary"
-                      disabled={saving}
-                      onClick={() => onDisconnect(connection)}
-                    >
-                      Отключить
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {connections.map((connection) => (
+            <GitConnectionRow
+              canDisconnect={canManage}
+              canSync={canManage}
+              connection={connection}
+              key={connection.id}
+              onDisconnect={onDisconnect}
+              onSync={onSync}
+              provider="github"
+              saving={saving}
+            />
+          ))}
         </div>
       )}
     </section>
@@ -1117,7 +1100,7 @@ function GithubRepositoryDialog({
             >
               {repositories.map((repository) => (
                 <option key={repository.provider_repository_id} value={repository.provider_repository_id}>
-                  {repository.full_name} · {VISIBILITY_LABELS[repository.visibility]}
+                  {repository.full_name} · {PPM_GIT_VISIBILITY_LABELS[repository.visibility]}
                 </option>
               ))}
             </select>
@@ -1129,223 +1112,6 @@ function GithubRepositoryDialog({
         </form>
       )}
     </DialogFrame>
-  );
-}
-
-function RepositoryCard({
-  canManage,
-  canManageCode,
-  copied,
-  hasActiveConnection,
-  onArchive,
-  onCopy,
-  onMakeDefault,
-  onSyncCode,
-  onToggleCode,
-  projectId,
-  repository,
-  saving,
-  workspaceSlug,
-}: {
-  canManage: boolean;
-  canManageCode: boolean;
-  copied?: string;
-  hasActiveConnection: boolean;
-  onArchive: (repository: TPpmGitRepository) => void;
-  onCopy: (value: string, key: string) => void;
-  onMakeDefault: (repository: TPpmGitRepository) => void;
-  onSyncCode: (repository: TPpmGitRepository) => void;
-  onToggleCode: (repository: TPpmGitRepository, enabled: boolean) => void;
-  projectId: string;
-  repository: TPpmGitRepository;
-  saving: boolean;
-  workspaceSlug: string;
-}) {
-  const snapshot = repository.code_index.snapshot;
-  return (
-    <article className="rounded-xl border border-subtle bg-surface-2 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-14 font-semibold text-primary">{repository.name}</h3>
-            {repository.is_default && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-warning-subtle px-2 py-0.5 text-11 font-semibold text-warning-primary">
-                <Star className="size-3 fill-current" aria-hidden="true" /> Основной
-              </span>
-            )}
-          </div>
-          <p className="mt-1 text-11 text-tertiary">
-            {PROVIDER_LABELS[repository.provider]} · {VISIBILITY_LABELS[repository.visibility]}
-            {repository.default_branch ? ` · ${repository.default_branch}` : ""}
-          </p>
-        </div>
-        <a
-          className="text-secondary hover:text-primary"
-          href={repository.canonical_url}
-          target="_blank"
-          rel="noreferrer"
-          aria-label="Открыть репозиторий"
-        >
-          <ExternalLink className="size-4" />
-        </a>
-      </div>
-
-      <CloneRow
-        copied={copied === `${repository.id}:https`}
-        label="HTTPS"
-        value={repository.clone_https}
-        onCopy={() => void onCopy(repository.clone_https, `${repository.id}:https`)}
-      />
-      {repository.clone_ssh && (
-        <CloneRow
-          copied={copied === `${repository.id}:ssh`}
-          label="SSH"
-          value={repository.clone_ssh}
-          onCopy={() => void onCopy(repository.clone_ssh, `${repository.id}:ssh`)}
-        />
-      )}
-
-      <div className="mt-3 rounded-lg border border-subtle bg-layer-1 p-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="flex items-center gap-1.5 text-12 font-semibold text-primary">
-              <Search className="size-3.5 text-accent-primary" aria-hidden="true" /> Поиск по коду
-            </p>
-            <p className="mt-1 text-12 leading-5 text-secondary">
-              {!repository.code_index.enabled
-                ? "Выключен: PPM не читает содержимое файлов."
-                : snapshot
-                  ? CODE_INDEX_STATUS_LABELS[snapshot.status]
-                  : "Включён: первый безопасный снимок создаётся в фоне."}
-            </p>
-          </div>
-          <span
-            className={`mt-0.5 size-2 shrink-0 rounded-full bg-current ${
-              snapshot?.status === "ready"
-                ? "text-icon-success-primary"
-                : snapshot?.status === "failed"
-                  ? "text-icon-danger-primary"
-                  : repository.code_index.enabled
-                    ? "text-icon-warning-primary"
-                    : "text-icon-tertiary"
-            }`}
-            aria-hidden="true"
-          />
-        </div>
-        {repository.code_index.enabled && snapshot && (
-          <div className="mt-2 text-11 leading-5 text-tertiary">
-            <p>
-              Ветка {snapshot.branch} · коммит {snapshot.commit_sha.slice(0, 12)}
-            </p>
-            {snapshot.status === "ready" && (
-              <p>
-                {snapshot.file_count} файлов · {formatBytes(snapshot.total_bytes)} безопасного текста
-              </p>
-            )}
-            {snapshot.error?.message && <p className="text-danger-primary">{snapshot.error.message}</p>}
-          </div>
-        )}
-        {canManageCode && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {repository.code_index.enabled ? (
-              <>
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-subtle px-2.5 py-1.5 text-12 font-semibold text-primary hover:bg-layer-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={saving || !hasActiveConnection}
-                  onClick={() => onSyncCode(repository)}
-                >
-                  <RefreshCw className={`size-3.5 ${saving ? "animate-spin" : ""}`} aria-hidden="true" /> Обновить
-                </button>
-                <button
-                  type="button"
-                  className="rounded-md px-2.5 py-1.5 text-12 text-secondary hover:bg-danger-subtle hover:text-danger-primary disabled:opacity-50"
-                  disabled={saving}
-                  onClick={() => onToggleCode(repository, false)}
-                >
-                  Выключить и удалить индекс
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="rounded-md border border-subtle px-2.5 py-1.5 text-12 font-semibold text-primary hover:bg-layer-2 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={saving || !hasActiveConnection}
-                title={hasActiveConnection ? undefined : "Сначала подключите репозиторий через GitHub"}
-                onClick={() => onToggleCode(repository, true)}
-              >
-                Включить безопасный поиск
-              </button>
-            )}
-          </div>
-        )}
-        {!hasActiveConnection && canManageCode && (
-          <p className="mt-2 text-12 text-tertiary">Для поиска сначала подключите этот репозиторий через GitHub.</p>
-        )}
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-subtle pt-3">
-        <Link
-          className="inline-flex items-center gap-1.5 rounded-md border border-subtle px-2.5 py-1.5 text-12 font-semibold text-primary hover:bg-layer-1"
-          href={gitCanvasHref(workspaceSlug, projectId, repository)}
-        >
-          <Code2 className="size-3.5" aria-hidden="true" /> На холст
-        </Link>
-        {canManage && !repository.is_default && (
-          <button
-            type="button"
-            className="rounded-md px-2.5 py-1.5 text-12 text-secondary hover:bg-layer-1 hover:text-primary"
-            onClick={() => onMakeDefault(repository)}
-          >
-            Сделать основным
-          </button>
-        )}
-        {canManage && (
-          <button
-            type="button"
-            className="ml-auto inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-12 text-secondary hover:bg-danger-subtle hover:text-danger-primary"
-            onClick={() => onArchive(repository)}
-          >
-            <Archive className="size-3.5" aria-hidden="true" /> Убрать
-          </button>
-        )}
-      </div>
-    </article>
-  );
-}
-
-function formatBytes(value: number) {
-  if (value < 1024) return `${value} Б`;
-  if (value < 1024 * 1024) return `${Math.round(value / 1024)} КБ`;
-  return `${(value / (1024 * 1024)).toFixed(1)} МБ`;
-}
-
-function CloneRow({
-  copied,
-  label,
-  onCopy,
-  value,
-}: {
-  copied: boolean;
-  label: string;
-  onCopy: () => void;
-  value: string;
-}) {
-  return (
-    <div className="mt-3 grid grid-cols-[3.2rem_minmax(0,1fr)_2rem] items-center gap-2 rounded-md border border-subtle bg-layer-1 px-2 py-1.5">
-      <span className="text-11 font-semibold text-tertiary">{label}</span>
-      <code className="truncate text-12 text-secondary" title={value}>
-        {value}
-      </code>
-      <button
-        type="button"
-        className="grid size-7 place-items-center rounded text-secondary hover:bg-layer-2 hover:text-primary"
-        aria-label={`Копировать ${label}`}
-        onClick={onCopy}
-      >
-        {copied ? <Check className="size-3.5 text-icon-success-primary" /> : <Clipboard className="size-3.5" />}
-      </button>
-    </div>
   );
 }
 
@@ -1487,9 +1253,9 @@ function RepositoryDialog({
               value={form.provider}
               onChange={(event) => onChange({ ...form, provider: event.target.value as TPpmGitProvider })}
             >
-              {Object.entries(PROVIDER_LABELS).map(([value, label]) => (
+              {PPM_GIT_MANUAL_PROVIDERS.map((value) => (
                 <option key={value} value={value}>
-                  {label}
+                  {PPM_GIT_PROVIDER_LABELS[value]}
                 </option>
               ))}
             </select>
@@ -1691,11 +1457,14 @@ function LinkDialog({
 // so typed input survives a stray click — focus goes back to the field the user was in.
 function DialogFrame({
   children,
+  closeDisabled = false,
   onClose,
   saving = false,
   title,
 }: {
   children: ReactNode;
+  /** G2.1: the × is inactive too (the Git-server dialog while it connects a repository). */
+  closeDisabled?: boolean;
   onClose: () => void;
   saving?: boolean;
   title: string;
@@ -1722,7 +1491,13 @@ function DialogFrame({
           <Dialog.Title as="h2" className="text-16 font-semibold text-primary">
             {title}
           </Dialog.Title>
-          <button type="button" aria-label="Закрыть" onClick={onClose}>
+          <button
+            type="button"
+            className="disabled:opacity-50"
+            aria-label="Закрыть"
+            disabled={closeDisabled}
+            onClick={onClose}
+          >
             <X className="size-4" aria-hidden="true" />
           </button>
         </div>

@@ -2,7 +2,8 @@ import { isAxiosError } from "axios";
 import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
 
-export type TPpmGitProvider = "github" | "gitlab" | "bitbucket" | "gitea" | "generic";
+// G2.1: `forgejo` is our own Git server next to PPM; it is labelled on the client («Наш Git-сервер»).
+export type TPpmGitProvider = "github" | "forgejo" | "gitlab" | "bitbucket" | "gitea" | "generic";
 export type TPpmGitVisibility = "public" | "private" | "internal" | "unknown";
 export type TPpmGitObjectType = "branch" | "commit" | "pull_request";
 export type TPpmGitCodeIndexSnapshotStatus = "pending" | "ready" | "failed" | "superseded" | "revoked";
@@ -45,6 +46,15 @@ export type TPpmGitCapabilities = {
   manage_links: boolean;
   manage_provider: boolean;
   manage_write_actions: boolean;
+  /** G2.1: only a PPM global administrator connects and disconnects repositories of our Git server. Absent on an
+   * older API — then nobody may. */
+  manage_git_server?: boolean;
+};
+
+/** G2.1: which Git providers this PPM is set up for. Absent on an older API — then only `provider` (GitHub) is known. */
+export type TPpmGitProviders = {
+  github?: { configured: boolean };
+  forgejo?: { configured: boolean; public_url: string | null };
 };
 
 export type TPpmGitProviderSummary = {
@@ -57,7 +67,8 @@ export type TPpmGitProviderSummary = {
 
 export type TPpmGitInstallation = {
   id: string;
-  provider: "github";
+  /** G2.1: a project connected to our Git server also has one `forgejo` installation row. */
+  provider: TPpmGitProvider;
   account_login: string;
   account_type: string;
   repository_selection: string;
@@ -123,6 +134,31 @@ export type TPpmGitHubRepository = {
   visibility: TPpmGitVisibility;
   archived: boolean;
   updated_at: string | null;
+};
+
+/** G2.1: a repository on our Git server (Forgejo) as the connect dialog lists it. */
+export type TPpmForgejoRepository = {
+  provider_repository_id: number;
+  full_name: string;
+  name: string;
+  owner: string;
+  description: string | null;
+  private: boolean;
+  archived: boolean;
+  default_branch: string;
+  html_url: string;
+  clone_https: string;
+  /** Empty or null when SSH is switched off on the Git server. */
+  clone_ssh: string | null;
+  updated_at: string | null;
+  /** Already connected to this project: the dialog shows it, but does not offer it again. */
+  connected: boolean;
+};
+
+export type TPpmForgejoRepositoryPage = {
+  results: TPpmForgejoRepository[];
+  page: number;
+  has_next: boolean;
 };
 
 export type TPpmGitRepository = {
@@ -316,7 +352,9 @@ export type TPpmGitWriteReadiness = {
 
 export type TPpmGitOverview = {
   capabilities: TPpmGitCapabilities;
+  /** The GitHub App summary (kept for the RC.1 clients). */
   provider: TPpmGitProviderSummary;
+  providers?: TPpmGitProviders;
   repositories: TPpmGitRepository[];
   installations: TPpmGitInstallation[];
   connections: TPpmGitConnection[];
@@ -436,6 +474,44 @@ export class PpmGitService extends APIService {
       return response.data as TPpmGitConnection;
     } catch (error) {
       throw normalizeGitError(error);
+    }
+  }
+
+  /** G2.1: repositories of our Git server (only a PPM global administrator may list them). */
+  async listForgejoRepositories(
+    workspaceId: string,
+    projectId: string,
+    { search = "", page = 1 }: { search?: string; page?: number } = {}
+  ): Promise<TPpmForgejoRepositoryPage> {
+    const query = search.trim();
+    try {
+      const response = await this.get(this.forgejoRepositoriesPath(workspaceId, projectId), {
+        params: query ? { search: query, page } : { page },
+      });
+      const payload = response.data as Partial<TPpmForgejoRepositoryPage> | undefined;
+      return {
+        results: Array.isArray(payload?.results) ? payload.results : [],
+        page: typeof payload?.page === "number" ? payload.page : page,
+        has_next: payload?.has_next === true,
+      };
+    } catch (error) {
+      throw normalizeForgejoError(error);
+    }
+  }
+
+  /** G2.1: connect a repository of our Git server to the project (PPM global administrator only). */
+  async connectForgejoRepository(
+    workspaceId: string,
+    projectId: string,
+    providerRepositoryId: number
+  ): Promise<{ repository: TPpmGitRepository; connection: TPpmGitConnection }> {
+    try {
+      const response = await this.post(this.forgejoRepositoriesPath(workspaceId, projectId), {
+        provider_repository_id: providerRepositoryId,
+      });
+      return response.data as { repository: TPpmGitRepository; connection: TPpmGitConnection };
+    } catch (error) {
+      throw normalizeForgejoError(error);
     }
   }
 
@@ -599,6 +675,55 @@ export class PpmGitService extends APIService {
   private gitPath(workspaceId: string, projectId: string) {
     return `/api/ppm/v1/workspaces/${workspaceId}/projects/${projectId}/git/`;
   }
+
+  private forgejoRepositoriesPath(workspaceId: string, projectId: string) {
+    return `${this.gitPath(workspaceId, projectId)}providers/forgejo/repositories/`;
+  }
+}
+
+// G2.1: the contract errors of our Git server in plain Russian. The code wins over the status: a not-configured
+// server answers 400 like any invalid request.
+const PPM_FORGEJO_ERROR_MESSAGES = {
+  forbidden: "Подключать репозитории может только администратор PPM.",
+  notConfigured: "Git-сервер не настроен.",
+  rateLimited: "Git-сервер просит подождать. Повторите чуть позже.",
+  unavailable: "Git-сервер не отвечает. Повторите чуть позже.",
+  conflict: "Репозиторий уже подключён.",
+  notFound: "Репозиторий не найден на Git-сервере. Обновите список.",
+  offline: "Нет связи с PPM. Проверьте подключение и повторите.",
+  fallback: "Не удалось выполнить операцию с Git-сервером.",
+} as const;
+
+export function getPpmForgejoErrorMessage({
+  code,
+  message,
+  status,
+}: {
+  code?: string;
+  message?: string;
+  status?: number;
+}): string {
+  if (code === "FORGEJO_NOT_CONFIGURED") return PPM_FORGEJO_ERROR_MESSAGES.notConfigured;
+  if (code === "GIT_PERMISSION_DENIED" || status === 403) return PPM_FORGEJO_ERROR_MESSAGES.forbidden;
+  if (code === "GIT_PROVIDER_RATE_LIMITED" || status === 429) return PPM_FORGEJO_ERROR_MESSAGES.rateLimited;
+  if (code === "GIT_PROVIDER_UNAVAILABLE" || status === 502) return PPM_FORGEJO_ERROR_MESSAGES.unavailable;
+  if (code === "GIT_REPOSITORY_CONFLICT" || status === 409) return PPM_FORGEJO_ERROR_MESSAGES.conflict;
+  if (code === "GIT_REPOSITORY_NOT_FOUND" || status === 404) return PPM_FORGEJO_ERROR_MESSAGES.notFound;
+  return message || PPM_FORGEJO_ERROR_MESSAGES.fallback;
+}
+
+function normalizeForgejoError(error: unknown) {
+  if (!isAxiosError(error)) return new PpmGitServiceError(PPM_FORGEJO_ERROR_MESSAGES.fallback);
+  if (!error.response) return new PpmGitServiceError(PPM_FORGEJO_ERROR_MESSAGES.offline);
+  const payload = error.response.data?.error as
+    | { code?: string; message?: string; details?: Record<string, unknown> }
+    | undefined;
+  const status = error.response.status;
+  return new PpmGitServiceError(getPpmForgejoErrorMessage({ code: payload?.code, message: payload?.message, status }), {
+    code: payload?.code,
+    status,
+    details: payload?.details,
+  });
 }
 
 function normalizeGitError(error: unknown) {

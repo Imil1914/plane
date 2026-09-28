@@ -89,7 +89,7 @@ export const PPM_CANVAS_LEGACY_COLOR_MAP = {
 export function normalizePpmCanvasColor(value: unknown, fallback: TPpmCanvasColor): TPpmCanvasColor {
   return isPpmCanvasColor(value) ? value : fallback;
 }
-export const PPM_CANVAS_GIT_PROVIDERS = ["github", "gitlab", "bitbucket", "gitea", "generic"] as const;
+export const PPM_CANVAS_GIT_PROVIDERS = ["github", "forgejo", "gitlab", "bitbucket", "gitea", "generic"] as const;
 export const PPM_CANVAS_GIT_OBJECT_TYPES = ["repository", "branch", "commit", "pull_request"] as const;
 
 const visualSchema = z
