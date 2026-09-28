@@ -24,6 +24,7 @@ const link = (id: string, workItemId: string, patch: Partial<TPpmGitLink> = {}):
   status: "active",
   origin: "provider",
   git_object_id: null,
+  git_object_state: null,
   created_at: "2026-09-20T10:00:00Z",
   updated_at: "2026-09-20T10:00:00Z",
   ...patch,

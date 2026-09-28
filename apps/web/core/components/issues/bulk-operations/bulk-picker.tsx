@@ -49,6 +49,19 @@ type TPpmBulkPickerProps = {
   emptyText: string;
 };
 
+/**
+ * D-2: что делать с клавишей в обёртке Combobox, до общего useDropdownKeyDown. Неактивное меню клавиш не получает.
+ * Меню уже закрыто — Esc не наш: раньше его всё равно глотали (stopPropagation+preventDefault), событие доходило до
+ * document с defaultPrevented=true, и панель (root.tsx:156) не снимала выделение вторым Esc. Отдаём такой Esc панели —
+ * как если бы фокус был не в меню, а на самой панели. Остальные клавиши (Enter открывает меню, стрелки, Tab) всегда
+ * идут в общий обработчик — как раньше, и поведение открытого меню/других выпадающих списков не меняется.
+ */
+export function shouldPpmBulkPickerConsumeKeyDown(key: string, isOpen: boolean, inactive: boolean): boolean {
+  if (inactive) return false;
+  if (key === "Escape") return isOpen;
+  return true;
+}
+
 export function PpmBulkPicker(props: TPpmBulkPickerProps) {
   const {
     id,
@@ -110,7 +123,7 @@ export function PpmBulkPicker(props: TPpmBulkPickerProps) {
     referenceElement?.focus();
   };
   const handleMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (inactive) return;
+    if (!shouldPpmBulkPickerConsumeKeyDown(event.key, isOpen, inactive)) return;
     const isEscape = event.key === "Escape";
     handleKeyDown(event);
     if (isEscape) referenceElement?.focus();

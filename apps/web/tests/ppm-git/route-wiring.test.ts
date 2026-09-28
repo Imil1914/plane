@@ -55,3 +55,31 @@ describe("fix round 1", () => {
     expect(source).not.toContain("Выделите команду вручную");
   });
 });
+
+describe("D-3: «Код» rows show the PR status", () => {
+  it("imports the status helper", () => {
+    expect(source).toMatch(/import\s*\{[^}]*getGitPullRequestStatusLabel[^}]*\}\s*from\s*"\.\/git-provider-labels";/s);
+  });
+
+  it("GitObjectRow shows the status of a pull_request object only, using its own state and is_draft", () => {
+    const start = source.indexOf("function GitObjectRow(");
+    const end = source.indexOf("function GitLinkRow(");
+    expect(start).toBeGreaterThan(-1);
+    const body = source.slice(start, end);
+    expect(body).toMatch(
+      /gitObject\.object_type === "pull_request"\s*\?\s*getGitPullRequestStatusLabel\(gitObject\.state, gitObject\.is_draft\)\s*:\s*null/
+    );
+    expect(body).toContain('{statusLabel ? ` · ${statusLabel}` : ""}');
+  });
+
+  it("GitLinkRow shows the status of a pull_request link only, from git_object_state", () => {
+    const start = source.indexOf("function GitLinkRow(");
+    const end = source.indexOf("function RepositoryDialog(");
+    expect(start).toBeGreaterThan(-1);
+    const body = source.slice(start, end);
+    expect(body).toMatch(
+      /link\.object_type === "pull_request" \? getGitPullRequestStatusLabel\(link\.git_object_state\) : null/
+    );
+    expect(body).toContain('{statusLabel ? ` · ${statusLabel}` : ""}');
+  });
+});

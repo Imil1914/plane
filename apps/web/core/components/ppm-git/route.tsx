@@ -49,6 +49,7 @@ import { DialogActions, FormInput } from "./git-dialog-parts";
 import {
   getActiveGithubInstallation,
   getActiveGithubRepositories,
+  getGitPullRequestStatusLabel,
   getGitSecurityNote,
   getPpmGitServer,
   PPM_GIT_MANUAL_PROVIDERS,
@@ -1127,6 +1128,10 @@ function GitObjectRow({
   workspaceSlug: string;
 }) {
   const Icon = OBJECT_ICONS[gitObject.object_type];
+  // G2.1 D-3: a PR row also names its status («Открыт»/«Черновик»/«Закрыт»/«Слит»); branches and commits have no such
+  // status. No merge timestamp: the API does not send one on this list (git-provider-labels.ts, getGitPullRequestStatusLabel).
+  const statusLabel =
+    gitObject.object_type === "pull_request" ? getGitPullRequestStatusLabel(gitObject.state, gitObject.is_draft) : null;
   return (
     <article className="flex items-center gap-3 border-b border-subtle p-4 last:border-b-0">
       <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-layer-1 text-accent-primary">
@@ -1138,6 +1143,7 @@ function GitObjectRow({
           {OBJECT_LABELS[gitObject.object_type]}
           {gitObject.ref ? ` · ${gitObject.ref}` : ""}
           {repository ? ` · ${repository.name}` : ""}
+          {statusLabel ? ` · ${statusLabel}` : ""}
         </p>
       </div>
       <a
@@ -1176,6 +1182,9 @@ function GitLinkRow({
   workspaceSlug: string;
 }) {
   const Icon = OBJECT_ICONS[link.object_type];
+  // G2.1 D-3: same PR status as GitObjectRow; a link only carries git_object_state (no is_draft), so a draft PR
+  // reads as «Открыт» here — still correct, just less specific than the objects list.
+  const statusLabel = link.object_type === "pull_request" ? getGitPullRequestStatusLabel(link.git_object_state) : null;
   return (
     <article className="flex flex-col gap-3 border-b border-subtle p-4 last:border-b-0 sm:flex-row sm:items-center">
       <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-layer-1 text-accent-primary">
@@ -1186,6 +1195,7 @@ function GitLinkRow({
           <span className="text-11 font-semibold text-accent-primary">{link.work_item.identifier}</span>
           <span className="text-11 text-tertiary">
             {OBJECT_LABELS[link.object_type]} · {link.repository_name}
+            {statusLabel ? ` · ${statusLabel}` : ""}
           </span>
         </div>
         <p className="mt-1 truncate text-13 font-semibold text-primary">{link.title}</p>

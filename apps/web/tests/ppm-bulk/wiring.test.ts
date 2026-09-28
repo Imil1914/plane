@@ -138,6 +138,23 @@ describe("раунд 2: тосты шапки группы по-русски", (
   });
 });
 
+describe("D-4: флажок «прилипшей» шапки группы не перекрыт линией перетаскивания строки", () => {
+  it("верхний индикатор перетаскивания строки (тот, что рядом с шапкой) не перехватывает клик", () => {
+    const source = read(`${LIST}block-root.tsx`);
+    expect(source).toContain("pointer-events-none absolute top-0 z-[2]");
+    expect(source).toContain('isVisible={instruction === "DRAG_OVER"}');
+  });
+
+  it("нижний индикатор (конец списка, DRAG_BELOW) не тронут — перекрытия с шапкой там нет", () => {
+    const source = read(`${LIST}block-root.tsx`);
+    expect(source).toContain('classNames={"absolute z-[2]"} isVisible={instruction === "DRAG_BELOW"}');
+  });
+
+  it("шапка группы остаётся «прилипшей» поверх строк (z-[2]) — индикатор строки её больше не перекрывает", () => {
+    expect(read(`${LIST}list-group.tsx`)).toContain('"sticky top-0 z-[2]"');
+  });
+});
+
 describe("раунд 3: проводка (поведение — в bulk-flow.test.ts и selection.test.ts)", () => {
   it("список пропускает строки свёрнутых групп: обёртки строки block-root нет — строка скрыта", () => {
     const list = read(`${LIST}default.tsx`);

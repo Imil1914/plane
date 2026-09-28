@@ -37,6 +37,27 @@ export function getGitRepositoryOpenLabel(provider: string | null | undefined): 
   return provider === "forgejo" ? "Открыть на Git-сервере" : "Открыть репозиторий";
 }
 
+/**
+ * G2.1 D-3: PR status for a Git object/link row in «Код» — «Открыт» / «Черновик» / «Закрыт» / «Слит». Same for every
+ * provider (GitHub, our Git server, …): the raw `state` is already provider-neutral («open»/«closed»/«merged»,
+ * `providers/github.py:924-934`, `providers/forgejo.py:244-258`). `isDraft` is only known for a `TPpmGitObject`
+ * (`GET .../objects/`); a `TPpmGitLink` row carries just `git_object_state`, so a draft PR shows as «Открыт» there —
+ * still correct, just less specific. Not a PR (branch/commit: `state` is `"committed"`/`"active"`/`"deleted"`, an
+ * unrelated vocabulary) or an unknown/empty state → null, so the row shows nothing extra. The API does not return a
+ * merge timestamp on these list endpoints (`serialize_git_object`/`serialize_link` — no `provider_merged_at`, even
+ * though the field exists on the model), so only the status is shown here — no «слит <дата>» (see task-W-report.md,
+ * «Раунд E»).
+ */
+export function getGitPullRequestStatusLabel(
+  state: string | null | undefined,
+  isDraft?: boolean | null
+): string | null {
+  if (state === "merged") return "Слит";
+  if (state === "closed") return "Закрыт";
+  if (state === "open") return isDraft ? "Черновик" : "Открыт";
+  return null;
+}
+
 const CONNECTION_STATUS_LABELS: Record<TPpmGitConnection["status"], string> = {
   active: "Подключён",
   syncing: "Синхронизация",

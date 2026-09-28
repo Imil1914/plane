@@ -6,7 +6,7 @@ import { getPpmTranslation } from "@ppm/brand";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PpmBulkActionBarView, PpmBulkButton } from "@/components/issues/bulk-operations/action-bar";
-import { PpmBulkPicker } from "@/components/issues/bulk-operations/bulk-picker";
+import { PpmBulkPicker, shouldPpmBulkPickerConsumeKeyDown } from "@/components/issues/bulk-operations/bulk-picker";
 import { formatPpmTemplate } from "@/components/ppm-tasks/format";
 import { hostElements, textOf } from "../ppm-git/element-tree";
 
@@ -175,6 +175,30 @@ describe("меню статуса, исполнителя и спринта", ()
     // Кнопка меню достижима клавишей Tab (Combobox.Button из Headless UI ставил бы tabindex="-1").
     expect(html).not.toContain('tabindex="-1"');
     expect(html).toContain("Исполнитель");
+  });
+});
+
+describe("D-2: второй Esc на кнопке меню (уже закрытого) снимает выделение", () => {
+  it("неактивное меню клавиш не получает — ни Esc, ни другие", () => {
+    expect(shouldPpmBulkPickerConsumeKeyDown("Escape", true, true)).toBe(false);
+    expect(shouldPpmBulkPickerConsumeKeyDown("Escape", false, true)).toBe(false);
+    expect(shouldPpmBulkPickerConsumeKeyDown("Enter", false, true)).toBe(false);
+  });
+
+  it("меню открыто: Esc — наш (закрывает меню, до панели не доходит)", () => {
+    expect(shouldPpmBulkPickerConsumeKeyDown("Escape", true, false)).toBe(true);
+  });
+
+  it("меню уже закрыто: Esc — не наш (D-2 — должен дойти до панели и снять выделение)", () => {
+    expect(shouldPpmBulkPickerConsumeKeyDown("Escape", false, false)).toBe(false);
+  });
+
+  it("остальные клавиши всегда наши, открыто меню или нет (Enter открывает, стрелки листают)", () => {
+    for (const isOpen of [true, false]) {
+      expect(shouldPpmBulkPickerConsumeKeyDown("Enter", isOpen, false)).toBe(true);
+      expect(shouldPpmBulkPickerConsumeKeyDown("ArrowDown", isOpen, false)).toBe(true);
+      expect(shouldPpmBulkPickerConsumeKeyDown("Tab", isOpen, false)).toBe(true);
+    }
   });
 });
 

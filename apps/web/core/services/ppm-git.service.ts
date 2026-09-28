@@ -196,6 +196,9 @@ export type TPpmGitLink = {
   status: "active" | "unlinked";
   origin: "manual" | "provider";
   git_object_id: string | null;
+  /** G2.1 D-3: state of the linked Git object («open», «closed», «merged» for a PR); null without one. Already sent
+   * by the API (`serialize_link`) but missing from this type until now — added so «Код» can show it on PR rows. */
+  git_object_state: string | null;
   created_at: string;
   updated_at: string;
 };

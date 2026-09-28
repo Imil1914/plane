@@ -1,5 +1,10 @@
 // G2.1 (R12): «Как скачать код» — ready `git clone` commands of a repository for both providers, each with its own
 // «Копировать» button. The page (route.tsx) copies with a fallback and marks the copied command for a moment.
+// D-1 fix: the command row's grid used an implicit `auto` column, sized to the `<code>` element's unwrapped
+// (nowrap/truncate) content width instead of the card's available width — the block then overflowed the repository
+// card and the neighbouring card covered «Копировать». `grid-cols-[minmax(0,1fr)]` below caps the column at the
+// container's width (its max is a flexible `1fr`, not open-ended `auto`); `min-w-0` on the per-command wrapper is
+// belt-and-braces so the row (and the button inside it) never depends on a sibling column to be visible.
 import { Check, ChevronDown, Clipboard, Download } from "lucide-react";
 
 export type TPpmGitCloneCommand = {
@@ -62,12 +67,12 @@ export function GitCloneCommands({
           aria-hidden="true"
         />
       </summary>
-      <div className="grid gap-3 border-t border-subtle p-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 border-t border-subtle p-3">
         {commands.map(({ address, command, kind, label }) => {
           const key = gitCloneCopyKey(repository.id, kind);
           const isCopied = copied === key;
           return (
-            <div key={kind}>
+            <div key={kind} className="min-w-0">
               <p className="text-11 font-semibold text-tertiary">{label}</p>
               {command ? (
                 <div className="mt-1 flex items-center gap-2">

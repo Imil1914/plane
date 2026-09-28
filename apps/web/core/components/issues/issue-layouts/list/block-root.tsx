@@ -135,7 +135,10 @@ export const IssueBlockRoot = observer(function IssueBlockRoot(props: Props) {
   const subIssues = subIssuesStore.subIssuesByIssueId(issueId);
   return (
     <div className="relative" ref={issueBlockRef} id={getIssueBlockId(issueId, groupId)}>
-      <DropIndicator classNames={"absolute top-0 z-[2]"} isVisible={instruction === "DRAG_OVER"} />
+      {/* D-4: чисто декоративная линия — не должна перехватывать клик по флажку «прилипшей» шапки группы,
+          с которой она делит z-[2] (list-group.tsx); pointer-events-none не влияет на dropTargetForElements
+          ниже — он привязан к issueBlockRef, а не к этому индикатору, и события у него не перехватывались. */}
+      <DropIndicator classNames={"pointer-events-none absolute top-0 z-[2]"} isVisible={instruction === "DRAG_OVER"} />
       <RenderIfVisible
         key={`${issueId}`}
         root={containerRef}

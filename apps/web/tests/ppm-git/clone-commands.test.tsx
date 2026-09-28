@@ -171,4 +171,20 @@ describe("«Как скачать код»", () => {
     expect(html).not.toContain(">Копировать<");
     expect(html).toContain("нельзя безопасно вставить в терминал");
   });
+
+  // D-1: the block must not overflow the repository card, or the neighbouring card can cover «Копировать» (a real
+  // layout/overflow bug that a node-environment render cannot reproduce — this locks in the two classes the fix
+  // relies on, so the grid track stays capped at the card's width instead of the `<code>` element's full,
+  // unwrapped/truncated command width).
+  it("caps the command grid at the card's own width instead of an implicit content-sized column (D-1)", () => {
+    const html = render(forgejoRepository);
+    expect(html).toContain('class="grid grid-cols-[minmax(0,1fr)] gap-3 border-t border-subtle p-3"');
+  });
+
+  it("keeps each command row shrinkable so the row (and its «Копировать» button) never overflow the grid track (D-1)", () => {
+    const html = render(forgejoRepository);
+    // One per command (HTTPS + SSH here); an exact match so it can't accidentally hit the <code> element's own
+    // longer `min-w-0 flex-1 truncate …` class list.
+    expect(html.match(/<div class="min-w-0">/g)).toHaveLength(2);
+  });
 });

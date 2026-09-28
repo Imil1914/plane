@@ -90,18 +90,30 @@ export function assigneeTexts(translate: (key: TPpmTranslationKey) => string): T
   };
 }
 
-/** «Иван Петров» → «ИП», «ivan.petrov» → «IP»; по кодовым точкам — эмодзи в имени не рвётся пополам. */
-export function assigneeInitials(name: string): string {
-  const words = name
+/** Буквы слова по кодовым точкам (эмодзи не рвётся пополам), без цифр, скобок, прочих знаков и эмодзи. */
+function assigneeWordLetters(word: string): string[] {
+  return Array.from(word).filter((char) => /\p{L}/u.test(char));
+}
+
+/**
+ * «Иван Петров» → «ИП», «ivan.petrov» → «IP», одно слово («олег») → «О»: буква слова — её первая *буква*, а не первый
+ * символ, поэтому «Посторонний (демо)» → «ПД», а не «П(» (у «(демо)» первая буква — «д», скобка не в счёт). Слово без
+ * единой буквы (только цифры/скобки/эмодзи) пропускается и во «первые два слова» не входит — «Сотрудник 1 ROBOT» →
+ * «СR», не «С1». Букв нет вовсе ни в одном слове — первый символ e-mail, если он есть, иначе «?».
+ */
+export function assigneeInitials(name: string, email?: string | null): string {
+  const initials = name
     .trim()
     .split(/[\s._-]+/u)
-    .filter(Boolean);
-  return (
-    words
-      .slice(0, 2)
-      .map((word) => (Array.from(word)[0] ?? "").toLocaleUpperCase())
-      .join("") || "?"
-  );
+    .map(assigneeWordLetters)
+    .filter((letters) => letters.length > 0)
+    .slice(0, 2)
+    .map((letters) => letters[0])
+    .join("")
+    .toLocaleUpperCase();
+  if (initials) return initials;
+  const emailChar = email?.trim().charAt(0);
+  return emailChar ? emailChar.toLocaleUpperCase() : "?";
 }
 
 export function assigneeStack<T>(assignees: readonly T[], limit = PPM_ASSIGNEE_AVATAR_LIMIT) {

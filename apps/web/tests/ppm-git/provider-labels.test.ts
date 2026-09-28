@@ -8,6 +8,7 @@ import {
   getGitCodeSearchConnectHint,
   getGitConnectionStatusLabel,
   getGitProviderLabel,
+  getGitPullRequestStatusLabel,
   getGitRepositoryOpenLabel,
   getGitSecurityNote,
   getPpmGitServer,
@@ -213,6 +214,35 @@ describe("our Git server in the overview", () => {
     expect(safeGitWebUrl("javascript:alert(1)")).toBeNull();
     expect(safeGitWebUrl("not a url")).toBeNull();
     expect(safeGitWebUrl(null)).toBeNull();
+  });
+});
+
+describe("PR status on «Код» rows (D-3)", () => {
+  it("names the four PR states", () => {
+    expect(getGitPullRequestStatusLabel("open", false)).toBe("Открыт");
+    expect(getGitPullRequestStatusLabel("open", true)).toBe("Черновик");
+    expect(getGitPullRequestStatusLabel("closed")).toBe("Закрыт");
+    expect(getGitPullRequestStatusLabel("merged")).toBe("Слит");
+  });
+
+  it("treats an open PR without a known draft flag as «Открыт» (a link row has no is_draft)", () => {
+    expect(getGitPullRequestStatusLabel("open")).toBe("Открыт");
+    expect(getGitPullRequestStatusLabel("open", null)).toBe("Открыт");
+    expect(getGitPullRequestStatusLabel("open", undefined)).toBe("Открыт");
+  });
+
+  it("says nothing for a branch/commit state or an unknown/empty one", () => {
+    expect(getGitPullRequestStatusLabel("committed")).toBeNull();
+    expect(getGitPullRequestStatusLabel("active")).toBeNull();
+    expect(getGitPullRequestStatusLabel("deleted")).toBeNull();
+    expect(getGitPullRequestStatusLabel("")).toBeNull();
+    expect(getGitPullRequestStatusLabel(null)).toBeNull();
+    expect(getGitPullRequestStatusLabel(undefined)).toBeNull();
+  });
+
+  it("is_draft never overrides a closed or merged state", () => {
+    expect(getGitPullRequestStatusLabel("closed", true)).toBe("Закрыт");
+    expect(getGitPullRequestStatusLabel("merged", true)).toBe("Слит");
   });
 });
 
