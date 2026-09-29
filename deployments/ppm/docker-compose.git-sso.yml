@@ -1,0 +1,45 @@
+# Sign-in through PPM — single sign-on to the Git server (G2.2, RUNBOOK §17.14). Added by ppm-lib.sh only when
+# PPM_GIT_SERVER_ENABLED=1 and PPM_GIT_SSO_ENABLED=1. Without this file the Git server runs as in G2.1: its own
+# password form, no login source «PPM», and the API gets none of the keys below (sign-in and access sync off).
+#
+# - PPM is the OpenID Connect provider of exactly one client — Forgejo, through its login source «PPM» that
+#   `ppm-deploy.sh git-bootstrap` creates. Forgejo reads PPM's discovery and exchanges codes at the API's address
+#   inside the network (PPM_OIDC_INTERNAL_URL; the proxy answers 404 to that discovery from outside); the browser
+#   only ever sees public addresses.
+# - Forgejo never creates or links an account itself: before the tokens are issued PPM creates or finds the person's
+#   account (admin token of ppm-bot), so auto-registration and account linking are off, the user name comes from the
+#   `nickname` claim PPM sets, and no avatar is fetched from anywhere.
+# - The password form is off (PPM_GIT_LOCAL_SIGNIN=0); 1 brings it back for the emergency administrator (§17.14.6).
+#   [oauth2] ENABLED (Forgejo as a provider) stays off and Basic authentication stays on — git-bootstrap issues and
+#   revokes ppm-bot's tokens with it (research: Forgejo 15 creates and deletes tokens only for password auth).
+# - Secrets (signing key, client secret, admin token) come only from the env file and only reach the API processes.
+
+x-forgejo-sso-app-env: &forgejo-sso-app-env
+  PPM_GIT_SSO_ENABLED: "1"
+  PPM_OIDC_CLIENT_ID: ${PPM_OIDC_CLIENT_ID:-forgejo}
+  PPM_OIDC_CLIENT_SECRET: ${PPM_OIDC_CLIENT_SECRET:?PPM_OIDC_CLIENT_SECRET is required (ppm-env.sh add-sso)}
+  # RS256 signing key: the PEM in base64 on one line; during a rotation the previous one is published in the JWKS too.
+  PPM_OIDC_PRIVATE_KEY: ${PPM_OIDC_PRIVATE_KEY:?PPM_OIDC_PRIVATE_KEY is required (ppm-env.sh add-sso)}
+  PPM_OIDC_PREVIOUS_PRIVATE_KEY: ${PPM_OIDC_PREVIOUS_PRIVATE_KEY:-}
+  # The API as Forgejo reaches it: the internal discovery points token/userinfo/jwks here.
+  PPM_OIDC_INTERNAL_URL: http://api:8000
+  # Written by `ppm-deploy.sh git-bootstrap`; while empty, sign-in is refused and access sync does nothing.
+  PPM_FORGEJO_ADMIN_TOKEN: ${PPM_FORGEJO_ADMIN_TOKEN:-}
+  PPM_FORGEJO_SSO_SOURCE_ID: ${PPM_FORGEJO_SSO_SOURCE_ID:-}
+
+services:
+  forgejo:
+    environment:
+      FORGEJO__oauth2_client__ENABLE_AUTO_REGISTRATION: "false"
+      FORGEJO__oauth2_client__ACCOUNT_LINKING: disabled
+      FORGEJO__oauth2_client__USERNAME: nickname
+      FORGEJO__oauth2_client__UPDATE_AVATAR: "false"
+      # 0: only the «Войти через PPM» button on the sign-in page (POST /user/login is refused); 1: the form is back.
+      FORGEJO__service__ENABLE_INTERNAL_SIGNIN: ${PPM_GIT_LOCAL_SIGNIN:-0}
+
+  api:
+    environment: *forgejo-sso-app-env
+  worker:
+    environment: *forgejo-sso-app-env
+  beat-worker:
+    environment: *forgejo-sso-app-env

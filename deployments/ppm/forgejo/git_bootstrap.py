@@ -12,14 +12,21 @@ sets ppm-bot a random password that exists only in this process (PATCH /admin/us
 it, and before it exits replaces it with another random password that is never used or shown.
 
 Subcommands (stdin lines in brackets):
-  prepare [--rotate-token]   [temporary token, current PPM_FORGEJO_TOKEN, PPM_FORGEJO_WEBHOOK_SECRET]
+  prepare [--rotate-token] [--admin-token]
+                             [temporary token, current PPM_FORGEJO_TOKEN, PPM_FORGEJO_WEBHOOK_SECRET,
+                              current PPM_FORGEJO_ADMIN_TOKEN]
       ppm-bot must be an active administrator; recreates the system webhook to the PPM receiver; keeps the current
       read-only token while it works and has exactly the read scopes, else (or with --rotate-token) creates a NEW
-      token `ppm-read-<UTC>` and prints `token=<value>`. Revokes nothing: ppm-deploy.sh first saves the new token and
-      restarts the API.
-  finish                     [temporary token, the PPM_FORGEJO_TOKEN now in use]
-      checks that this token works, can only read and has exactly the read scopes, then revokes every other token of
-      ppm-bot (previous PPM tokens, leftovers of interrupted runs, the temporary token).
+      token `ppm-read-<UTC>` and prints `token=<value>`. With --admin-token (sign-in through PPM, G2.2) the same for
+      the admin token of PPM's access module (`ppm-admin-<UTC>`, write:admin, write:organization, read:repository,
+      read:user; proven on the admin API before it is handed out), printed as `admin_token=<value>`; --rotate-token
+      then renews both. Revokes nothing: ppm-deploy.sh first saves the new tokens and restarts the API.
+  finish                     [temporary token, the PPM_FORGEJO_TOKEN now in use, the PPM_FORGEJO_ADMIN_TOKEN now in
+                              use or an empty line]
+      checks that the read-only token works, can only read and has exactly the read scopes (and the admin token, if
+      given, that it works as ppm-bot with exactly the admin scopes), then revokes every other token of ppm-bot
+      (previous PPM tokens, leftovers of interrupted runs, the temporary token — and every admin token when none is
+      given: sign-in through PPM switched off).
   cleanup                    [temporary token]
       after a failure: revokes the temporary tokens (ppm-bootstrap-*) and nothing else.
   reset-password <user>      [temporary token]
@@ -42,6 +49,10 @@ BOT = "ppm-bot"
 TOKEN_PREFIX = "ppm-read"
 BOOT_PREFIX = "ppm-bootstrap-"
 TOKEN_SCOPES = ["read:organization", "read:repository", "read:user"]
+# Sign-in through PPM (G2.2 R8): PPM's access module creates accounts, organizations and teams and reads people's
+# repositories through admin sudo — and nothing else uses this token.
+ADMIN_TOKEN_PREFIX = "ppm-admin"
+ADMIN_TOKEN_SCOPES = ["read:repository", "read:user", "write:admin", "write:organization"]
 # API names: "pull_request_only" is the pull request itself (opened, closed, reopened, edited, merged) — the bare
 # "pull_request" would also subscribe comments, reviews, labels, assignees; "pull_request_sync" adds new commits.
 HOOK_EVENTS = ["push", "pull_request_only", "pull_request_sync", "create", "delete", "repository"]
@@ -156,17 +167,29 @@ def token_works(forgejo, token):
     return isinstance(me, dict) and me.get("login") == BOT
 
 
-def token_entry(tokens, value):
+def token_entry(tokens, value, prefix=TOKEN_PREFIX, scopes=TOKEN_SCOPES):
     """The listed token of PPM that the value belongs to: our name, the same last eight characters, exact scopes."""
     for entry in tokens:
         if (
-            entry.get("name", "").startswith(TOKEN_PREFIX)
+            entry.get("name", "").startswith(prefix)
             and value
             and entry.get("token_last_eight") == value[-8:]
-            and sorted(entry.get("scopes") or []) == sorted(TOKEN_SCOPES)
+            and sorted(entry.get("scopes") or []) == sorted(scopes)
         ):
             return entry
     return None
+
+
+def admin_token_works(forgejo, token):
+    """True when the token signs in as ppm-bot, an administrator, and reaches the admin API (write:admin has read)."""
+    try:
+        me = forgejo.call("GET", "/user", token=token)
+        if not isinstance(me, dict) or me.get("login") != BOT or not me.get("is_admin"):
+            return False
+        forgejo.call("GET", "/admin/users?limit=1", token=token)
+    except BootstrapError:
+        return False
+    return True
 
 
 def read_only(forgejo, token):
@@ -214,45 +237,85 @@ def ensure_webhook(forgejo, hook_url, secret):
         f"{', '.join(sorted(set(hook.get('events') or [])))}); {removed} previous one(s) replaced")
 
 
-def prepare(forgejo, current, secret, rotate, hook_url):
+# The two tokens PPM holds: (kind, name prefix, exact scopes, what it is called in messages).
+READ_TOKEN = ("read", TOKEN_PREFIX, TOKEN_SCOPES, "read-only token")
+ADMIN_TOKEN = ("admin", ADMIN_TOKEN_PREFIX, ADMIN_TOKEN_SCOPES, "admin token")
+
+
+def token_problem(forgejo, kind, created, value, scopes):
+    """Why a token just created cannot be handed out, or None."""
+    if not value:
+        return "Forgejo created the token but returned no value"
+    if sorted(created.get("scopes") or []) != sorted(scopes):
+        return f"the new {kind} token does not carry exactly its scopes"
+    if kind == "read":
+        if not token_works(forgejo, value):
+            return "the new token does not authenticate as ppm-bot"
+        if not read_only(forgejo, value):
+            return "the new token is not read-only (a write was not refused)"
+    elif not admin_token_works(forgejo, value):
+        return "the new admin token does not reach the admin API as ppm-bot"
+    return None
+
+
+def prepare(forgejo, current, secret, rotate, hook_url, admin=False, current_admin=""):
+    """Returns {"read": value, "admin": value} for the tokens issued now (none revoked)."""
     if len(secret) < 20:
         raise BootstrapError("PPM_FORGEJO_WEBHOOK_SECRET is missing or shorter than 20 characters")
     check_admin(forgejo)
     ensure_webhook(forgejo, hook_url, secret)
     tokens = forgejo.paged(f"/users/{BOT}/tokens")
+    wanted = []
     if not rotate and token_entry(tokens, current) and token_works(forgejo, current):
-        say(f"read-only token of PPM kept (still valid, exact scopes)")
-        return None
+        say("read-only token of PPM kept (still valid, exact scopes)")
+    else:
+        wanted.append(READ_TOKEN)
+    if admin:
+        if (not rotate and token_entry(tokens, current_admin, ADMIN_TOKEN_PREFIX, ADMIN_TOKEN_SCOPES)
+                and admin_token_works(forgejo, current_admin)):
+            say("admin token of PPM kept (still valid, exact scopes)")
+        else:
+            wanted.append(ADMIN_TOKEN)
+    if not wanted:
+        return {}
     names = {entry.get("name") for entry in tokens}
-    name = f"{TOKEN_PREFIX}-{datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
-    while name in names:
-        name = f"{name}-{secrets.token_hex(2)}"
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    issued, created_ids = {}, []
     forgejo.set_bot_password("token")
     try:
-        created = forgejo.call("POST", f"/users/{BOT}/tokens", {"name": name, "scopes": TOKEN_SCOPES},
-                               auth="password", expect=(201,))
-        value = (created or {}).get("sha1") or ""
-        problem = None
-        if not value:
-            problem = "Forgejo created the token but returned no value"
-        elif sorted(created.get("scopes") or []) != sorted(TOKEN_SCOPES):
-            problem = "the new token does not carry exactly the read-only scopes"
-        elif not token_works(forgejo, value):
-            problem = "the new token does not authenticate as ppm-bot"
-        elif not read_only(forgejo, value):
-            problem = "the new token is not read-only (a write was not refused)"
-        if problem:
-            if created and created.get("id"):
-                forgejo.call("DELETE", f"/users/{BOT}/tokens/{created['id']}", auth="password", expect=(204, 404))
-            raise BootstrapError(f"{problem}; it was revoked again")
+        for kind, prefix, scopes, label in wanted:
+            name = f"{prefix}-{stamp}"
+            while name in names:
+                name = f"{name}-{secrets.token_hex(2)}"
+            names.add(name)
+            created = forgejo.call("POST", f"/users/{BOT}/tokens", {"name": name, "scopes": scopes},
+                                   auth="password", expect=(201,)) or {}
+            if created.get("id"):
+                created_ids.append(created["id"])
+            value = created.get("sha1") or ""
+            problem = token_problem(forgejo, kind, created, value, scopes)
+            if problem:
+                raise BootstrapError(problem)
+            issued[kind] = (name, label, value)
+    except BootstrapError as error:
+        # Nothing issued in this run is kept: none of it was saved anywhere yet.
+        for token_id in created_ids:
+            try:
+                forgejo.call("DELETE", f"/users/{BOT}/tokens/{token_id}", auth="password", expect=(204, 404))
+            except BootstrapError:
+                pass
+        raise BootstrapError(f"{error}; the token(s) issued in this run were revoked again") from None
     finally:
         forgejo.forget_bot_password()
-    reason = "--rotate-token" if rotate else ("the current one is missing, invalid or has other scopes" if current else "first run")
-    say(f"new read-only token {name} issued ({reason}); nothing revoked yet")
-    return value
+    for kind, (name, label, _) in issued.items():
+        current_value = current if kind == "read" else current_admin
+        reason = "--rotate-token" if rotate else (
+            "the current one is missing, invalid or has other scopes" if current_value else "first run")
+        say(f"new {label} {name} issued ({reason}); nothing revoked yet")
+    return {kind: value for kind, (_, _, value) in issued.items()}
 
 
-def finish(forgejo, current):
+def finish(forgejo, current, current_admin=""):
     check_admin(forgejo)
     tokens = forgejo.paged(f"/users/{BOT}/tokens")
     ours = token_entry(tokens, current)
@@ -260,7 +323,15 @@ def finish(forgejo, current):
         raise BootstrapError("PPM_FORGEJO_TOKEN is not a working read-only token of ppm-bot; nothing was revoked")
     if not read_only(forgejo, current):
         raise BootstrapError("PPM_FORGEJO_TOKEN can write; nothing was revoked")
-    others = [entry for entry in tokens if entry.get("id") != ours.get("id")]
+    kept = [ours]
+    if current_admin:
+        admin = token_entry(tokens, current_admin, ADMIN_TOKEN_PREFIX, ADMIN_TOKEN_SCOPES)
+        if not admin or not admin_token_works(forgejo, current_admin):
+            raise BootstrapError("PPM_FORGEJO_ADMIN_TOKEN is not a working admin token of ppm-bot with exactly its "
+                                 "scopes; nothing was revoked")
+        kept.append(admin)
+    kept_ids = {entry.get("id") for entry in kept}
+    others = [entry for entry in tokens if entry.get("id") not in kept_ids]
     # The temporary token (this run's credential) goes last.
     others.sort(key=lambda entry: entry.get("name", "").startswith(BOOT_PREFIX))
     forgejo.set_bot_password("token")
@@ -270,8 +341,11 @@ def finish(forgejo, current):
     finally:
         forgejo.forget_bot_password()
     stale = sum(1 for entry in others if not entry.get("name", "").startswith(BOOT_PREFIX))
-    say(f"PPM's read-only token {ours.get('name')} is the only token of {BOT}: {stale} previous token(s) and "
-        f"{len(others) - stale} temporary token(s) revoked; its password is random and unknown")
+    admins = sum(1 for entry in others if entry.get("name", "").startswith(ADMIN_TOKEN_PREFIX))
+    say(f"PPM's token(s) {', '.join(entry.get('name', '') for entry in kept)} are the only tokens of {BOT}: "
+        f"{stale} previous token(s)"
+        f"{f' (of them {admins} admin token(s): sign-in through PPM is off)' if admins and not current_admin else ''} "
+        f"and {len(others) - stale} temporary token(s) revoked; its password is random and unknown")
 
 
 def cleanup(forgejo):
@@ -307,32 +381,37 @@ def main(argv):
     if not argv or argv[0] not in ("prepare", "finish", "cleanup", "reset-password"):
         raise BootstrapError(f"unknown subcommand {argv[0] if argv else '(none)'} (prepare, finish, cleanup, reset-password)")
     command, args = argv[0], argv[1:]
-    rotate = False
+    rotate = admin = False
     user = None
     if command == "prepare":
         for arg in args:
-            if arg != "--rotate-token":
+            if arg == "--rotate-token":
+                rotate = True
+            elif arg == "--admin-token":
+                admin = True
+            else:
                 raise BootstrapError(f"unknown argument {arg}")
-            rotate = True
     elif command == "reset-password":
         if len(args) != 1:
             raise BootstrapError("reset-password needs exactly one user name")
         user = args[0]
     elif args:
         raise BootstrapError(f"{command} takes no arguments")
-    lines = sys.stdin.read().split("\n") + ["", "", ""]
-    boot, second, third = lines[0].strip(), lines[1].strip(), lines[2].strip()
+    lines = sys.stdin.read().split("\n") + [""] * 4
+    boot, second, third, fourth = (line.strip() for line in lines[:4])
     if not boot:
         raise BootstrapError("no temporary token of ppm-bot on stdin")
     base = os.environ.get("PPM_FORGEJO_URL", "http://forgejo:3000")
     hook_url = os.environ.get("PPM_FORGEJO_HOOK_URL", "http://api:8000/api/ppm/v1/git/forgejo/webhook/")
     forgejo = Forgejo(base, boot)
     if command == "prepare":
-        token = prepare(forgejo, second, third, rotate, hook_url)
-        if token:
-            sys.stdout.write(f"token={token}\n")
+        issued = prepare(forgejo, second, third, rotate, hook_url, admin=admin, current_admin=fourth)
+        if issued.get("read"):
+            sys.stdout.write(f"token={issued['read']}\n")
+        if issued.get("admin"):
+            sys.stdout.write(f"admin_token={issued['admin']}\n")
     elif command == "finish":
-        finish(forgejo, second)
+        finish(forgejo, second, third)
     elif command == "cleanup":
         cleanup(forgejo)
     else:

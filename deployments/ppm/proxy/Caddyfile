@@ -22,7 +22,8 @@
 		max_header_size 25MB
 	}
 	# Logged URIs never carry a query string (tokens of reset/invitation links, OAuth code/state, presigned-URL
-	# signatures, e-mail addresses): "?REDACTED"; the reset-password uid/token path segments become "REDACTED".
+	# signatures, e-mail addresses): "?REDACTED"; the reset-password uid/token path segments and the one-time id of the
+	# sign-in through PPM (/auth/oidc/continue/<id>/) become "REDACTED".
 	# Error entries (e.g. an upstream is down) carry the request. The global logger is written inline: snippets
 	# defined below are not visible inside the global options block. Keep in sync with (ppm_log_redaction).
 	log default {
@@ -30,7 +31,7 @@
 		format filter {
 			wrap json
 			fields {
-				request>uri regexp "(?i)(/reset-password/)[^/?#]+/[^/?#]+|(\?).*$" "${1}${2}REDACTED"
+				request>uri regexp "(?i)(/reset-password/)[^/?#]+/[^/?#]+|(/auth/oidc/continue/)[^/?#]+|(\?).*$" "${1}${2}${3}REDACTED"
 				request>headers>Cookie delete
 				request>headers>Authorization delete
 				request>headers>Proxy-Authorization delete
@@ -51,7 +52,7 @@
 	format filter {
 		wrap json
 		fields {
-			request>uri regexp "(?i)(/reset-password/)[^/?#]+/[^/?#]+|(\?).*$" "${1}${2}REDACTED"
+			request>uri regexp "(?i)(/reset-password/)[^/?#]+/[^/?#]+|(/auth/oidc/continue/)[^/?#]+|(\?).*$" "${1}${2}${3}REDACTED"
 			request>headers>Cookie delete
 			request>headers>Authorization delete
 			request>headers>Proxy-Authorization delete
@@ -107,6 +108,12 @@
 	}
 	handle /api/* {
 		reverse_proxy api:8000
+	}
+	# Sign-in through PPM (G2.2): the internal discovery of PPM's OpenID Connect provider points the Git server at the
+	# API inside the network (http://api:8000) — it exists only there. The public endpoints /auth/oidc/* go on to the
+	# API below. (Caddy tries the longer path first whatever the order; it stays above /auth/* for the reader.)
+	handle /auth/oidc/internal/* {
+		respond 404
 	}
 	handle /auth/* {
 		reverse_proxy api:8000

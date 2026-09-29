@@ -28,6 +28,8 @@ TOOL = os.environ.get("PPM_GIT_BOOTSTRAP_TOOL") or os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "forgejo", "git_bootstrap.py")
 HOOK_URL = "http://api:8000/api/ppm/v1/git/forgejo/webhook/"
 READ_SCOPES = ["read:organization", "read:repository", "read:user"]
+# Sign-in through PPM (G2.2 R8): the access module's token.
+ADMIN_SCOPES = ["read:repository", "read:user", "write:admin", "write:organization"]
 BOOT_SCOPES = ["read:user", "write:admin"]
 PULL_REQUEST_ALL = ["pull_request", "pull_request_assign", "pull_request_label", "pull_request_milestone",
                     "pull_request_comment", "pull_request_review_approved", "pull_request_review_rejected",
@@ -56,6 +58,7 @@ class State:
         self.requests = []  # (method, path)
         self.passwords_used = set()  # every password sent in a basic-auth header
         self.password_history = []  # every password set on ppm-bot
+        self.admin_api_broken = False  # GET /admin/users answers 500 (a new admin token then fails its check)
 
     def new_id(self):
         self.next_id += 1
@@ -157,6 +160,11 @@ class FakeForgejo(BaseHTTPRequestHandler):
                 return self.reply(403, {"message": "must be an admin"})
             if not scope("write:admin" if method != "GET" else "read:admin"):
                 return self.reply(403, {"message": "token does not have at least one of required scope(s)"})
+        if method == "GET" and path == "/api/v1/admin/users":
+            if STATE.admin_api_broken:
+                return self.reply(500, {"message": "internal server error"})
+            users = [{"login": name, "is_admin": data["admin"]} for name, data in STATE.users.items()]
+            return self.reply(200, users[window])
         if method == "PATCH" and path.startswith("/api/v1/admin/users/"):
             name = path.rsplit("/", 1)[1]
             if name not in STATE.users:
@@ -358,6 +366,71 @@ def main():
           run.rc == 0 and not token_alive(boot["value"]) and token_alive(rotated) and token_alive(writer["value"]),
           run.stderr.strip()[-200:])
     check("  ... no secret anywhere", not leaks(run), str(leaks(run)))
+
+    # --- sign-in through PPM (G2.2 R8): the admin token of ppm-bot, issued and revoked in the same safe order
+    boot = boot_token()
+    run = run_tool(base, [boot["value"], rotated, secret, ""], "prepare", "--admin-token")
+    admin = run.value("admin_token")
+    issued = [t for t in STATE.bot_tokens() if t["value"] == admin]
+    check("prepare --admin-token issues the admin token (admin_token=… only), the working read-only token is kept",
+          run.rc == 0 and len(admin) == 40 and run.value("token") == "" and token_alive(rotated),
+          run.stderr.strip()[-200:])
+    check("  ... named ppm-admin-<UTC>, exactly write:admin, write:organization, read:repository, read:user",
+          len(issued) == 1 and issued[0]["name"].startswith("ppm-admin-")
+          and sorted(issued[0]["scopes"]) == ADMIN_SCOPES,
+          str([(t["name"], t["scopes"]) for t in issued]))
+    check("  ... proven to reach the admin API as ppm-bot before it is handed out",
+          ("GET", "/api/v1/admin/users") in STATE.requests)
+    check("  ... nothing is revoked by prepare", token_alive(boot["value"]) and token_alive(writer["value"]))
+    check("  ... no secret on its command line, stderr or stdout (the new token only as admin_token=)",
+          not leaks(run, ("admin_token",)), str(leaks(run, ("admin_token",))))
+    run = run_tool(base, [boot["value"], rotated, admin], "finish")
+    check("finish with both tokens in use keeps exactly the read-only and the admin token",
+          run.rc == 0 and sorted(t["value"] for t in STATE.bot_tokens()) == sorted([rotated, admin]),
+          run.stderr.strip()[-200:])
+    check("  ... prints nothing on stdout and no secret anywhere", run.stdout == "" and not leaks(run), str(leaks(run)))
+    boot = boot_token()
+    run = run_tool(base, [boot["value"], rotated, secret, admin], "prepare", "--admin-token")
+    check("prepare --admin-token with a working admin token keeps it (stdout empty, nothing created)",
+          run.rc == 0 and run.stdout == ""
+          and len([t for t in STATE.bot_tokens() if t["name"].startswith("ppm-admin")]) == 1, run.stderr.strip()[-200:])
+    run = run_tool(base, [boot["value"], rotated, secret, admin], "prepare", "--admin-token", "--rotate-token")
+    new_read, new_admin = run.value("token"), run.value("admin_token")
+    check("--rotate-token with --admin-token issues both anew; the old pair keeps working until finish",
+          run.rc == 0 and new_read and new_admin and new_read != rotated and new_admin != admin
+          and token_alive(rotated) and token_alive(admin), run.stderr.strip()[-200:])
+    check("  ... no secret on its command line or stderr", not leaks(run, ("token", "admin_token")),
+          str(leaks(run, ("token", "admin_token"))))
+    run = run_tool(base, [boot["value"], new_read, new_admin], "finish")
+    check("  ... finish with the new pair revokes the old pair",
+          run.rc == 0 and not token_alive(rotated) and not token_alive(admin) and token_alive(new_read)
+          and token_alive(new_admin), run.stderr.strip()[-200:])
+    boot = boot_token()
+    run = run_tool(base, [boot["value"], new_read, "0" * 40], "finish")
+    check("finish with an admin token Forgejo does not know revokes nothing (exit 1)",
+          run.rc == 1 and token_alive(boot["value"]) and token_alive(new_admin) and "nothing" in run.stderr.lower(),
+          run.stderr.strip()[-200:])
+    wrong = STATE.add_token("ppm-admin-by-hand", ["all"])
+    run = run_tool(base, [boot["value"], new_read, secret, wrong["value"]], "prepare", "--admin-token")
+    replaced = run.value("admin_token")
+    check("an admin token with other scopes is not kept: a new one with exactly the admin scopes is issued",
+          run.rc == 0 and replaced and replaced != wrong["value"]
+          and sorted(next(t["scopes"] for t in STATE.bot_tokens() if t["value"] == replaced)) == ADMIN_SCOPES,
+          run.stderr.strip()[-200:])
+    run = run_tool(base, [boot["value"], new_read, ""], "finish")
+    check("finish without an admin token (sign-in through PPM off) revokes every admin token, keeps the read-only one",
+          run.rc == 0 and [t["value"] for t in STATE.bot_tokens()] == [new_read], run.stderr.strip()[-200:])
+    boot = boot_token()
+    before = {t["value"] for t in STATE.bot_tokens()}
+    STATE.admin_api_broken = True
+    run = run_tool(base, [boot["value"], new_read, secret, ""], "prepare", "--admin-token", "--rotate-token")
+    STATE.admin_api_broken = False
+    check("a new admin token that fails its check: prepare fails and revokes every token of this run, the read one too",
+          run.rc == 1 and "revoked again" in run.stderr and run.stdout == ""
+          and {t["value"] for t in STATE.bot_tokens()} == before, run.stderr.strip()[-200:])
+    check("  ... no secret on its command line, stderr or stdout", not leaks(run), str(leaks(run)))
+    run = run_tool(base, [boot["value"], new_read, ""], "finish")
+    rotated = new_read  # the read-only token in use from here on
 
     # --- one-time password for the owner
     boot = boot_token()

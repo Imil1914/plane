@@ -25,6 +25,9 @@
 # started again right after, also when the backup fails (a run killed in between leaves a marker: the next run
 # starts Forgejo and warns). With the Git server switched off, its database and data volume — kept on the server —
 # are still copied; a copy that cannot be made is a WARNING on every run.
+# Every completion (success or failure, from wherever the script stops) writes a result marker
+# .runtime/<project>/last-backup.txt (mode 600; status/finished_at/archive only, no secrets) that ppm-monitor.sh
+# reads for the "was the last backup run OK" check (RUNBOOK §14); it never leaves the server and is not backed up.
 set -euo pipefail
 umask 077
 
@@ -45,19 +48,19 @@ source "$bundle_dir/ppm-lib.sh"
 [[ -n "$env_file_arg" ]] || die "pass --env-file explicitly (the backup names the deployment it copies)"
 ppm_resolve_env_file "$env_file_arg"
 ppm_init_context
-
-passphrase_file="$(ppm_passphrase_file)"
-[[ -f "$passphrase_file" ]] || die "backup passphrase file $passphrase_file is missing (restore it from the password manager)"
-passphrase_file="$(abs_path "$passphrase_file")"
-keep="${keep:-$(env_get PPM_BACKUP_KEEP)}"; keep="${keep:-7}"
-[[ "$keep" =~ ^[1-9][0-9]*$ ]] || die "PPM_BACKUP_KEEP must be a positive number"
-output_dir="${output_dir:-$(env_get PPM_BACKUP_DIR)}"; output_dir="${output_dir:-$runtime_dir/backups}"
-mkdir -p "$output_dir"; chmod 700 "$output_dir"
-output_dir="$(cd "$output_dir" && pwd)"
 name="$project-$(date -u +%Y%m%dT%H%M%SZ)"
-# Plain data lives only in a private working directory under the runtime state (never in the backup directory that
-# is copied off the server); it is removed right after encryption, and by the trap on any failure.
-work="$(ppm_workdir backup)"
+# Result marker (O-1.4 of the monitoring line): status/time/archive name only, no secrets, so ppm-monitor.sh can
+# tell a stale backup from a failed one without re-deriving anything from the (possibly off-site) backup directory.
+# Written by the EXIT trap below on every completion, success or failure, from wherever the script stops.
+marker_file="$state_dir/last-backup.txt"
+write_backup_marker() { # exit_code
+  local code="$1" status="ok" archive=""
+  ((code == 0)) || status=error
+  ((code == 0)) && archive="$name.tar.gz.gpg"
+  { echo "status=$status"; echo "finished_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"; echo "archive=$archive"; } >"$marker_file.tmp" \
+    && mv -f "$marker_file.tmp" "$marker_file" && chmod 600 "$marker_file"
+}
+work=""
 # The Git server's stop for its copy is marked on disk (pid inside): a run killed in between is detected next time.
 forgejo_marker="$state_dir/forgejo-stopped-by-backup"
 forgejo_stopped=0
@@ -67,10 +70,24 @@ start_forgejo_again() {
   return 1
 }
 cleanup() {
-  rm -rf -- "$work"
+  local exit_code=$?
+  [[ -n "$work" ]] && rm -rf -- "$work"
   if ((forgejo_stopped)); then start_forgejo_again || true; fi
+  write_backup_marker "$exit_code"
 }
 trap cleanup EXIT
+
+passphrase_file="$(ppm_passphrase_file)"
+[[ -f "$passphrase_file" ]] || die "backup passphrase file $passphrase_file is missing (restore it from the password manager)"
+passphrase_file="$(abs_path "$passphrase_file")"
+keep="${keep:-$(env_get PPM_BACKUP_KEEP)}"; keep="${keep:-7}"
+[[ "$keep" =~ ^[1-9][0-9]*$ ]] || die "PPM_BACKUP_KEEP must be a positive number"
+output_dir="${output_dir:-$(env_get PPM_BACKUP_DIR)}"; output_dir="${output_dir:-$runtime_dir/backups}"
+mkdir -p "$output_dir"; chmod 700 "$output_dir"
+output_dir="$(cd "$output_dir" && pwd)"
+# Plain data lives only in a private working directory under the runtime state (never in the backup directory that
+# is copied off the server); it is removed right after encryption, and by the trap on any failure.
+work="$(ppm_workdir backup)"
 if [[ -f "$forgejo_marker" ]]; then
   marker_pid="$(tr -dc '0-9' <"$forgejo_marker")"
   if [[ -n "$marker_pid" ]] && kill -0 "$marker_pid" 2>/dev/null; then

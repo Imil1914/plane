@@ -1,8 +1,9 @@
 # Git server of PPM: Forgejo 15 LTS (rootless) on its own origin PPM_GIT_DOMAIN (git.<PPM domain>), RUNBOOK §17.
 #
 # Added by ppm-lib.sh only when the env has PPM_GIT_SERVER_ENABLED=1 (git SSH on top of it: docker-compose.git-ssh.yml
-# when PPM_GIT_SSH_ENABLED=1). Without this file nothing of the Git server exists: no service, no Caddy site, no
-# PPM_FORGEJO_* in the API — an RC.1 env keeps working as before.
+# when PPM_GIT_SSH_ENABLED=1; sign-in through PPM: docker-compose.git-sso.yml when PPM_GIT_SSO_ENABLED=1). Without
+# this file nothing of the Git server exists: no service, no Caddy site, no PPM_FORGEJO_* in the API — an RC.1 env
+# keeps working as before.
 #
 # - Forgejo is reached only through the proxy (HTTPS, git.<domain>) and, if enabled, its own SSH port; port 3000
 #   is published nowhere. Its database `forgejo` (role `forgejo`) lives in the same PostgreSQL as PPM, created and
@@ -85,7 +86,9 @@ services:
       FORGEJO__security__DISABLE_QUERY_AUTH_TOKEN: "true"
       FORGEJO__security__MIN_PASSWORD_LENGTH: "12"
       FORGEJO__security__PASSWORD_CHECK_PWN: "false"
-      # Sign-in through PPM comes with G2.2; the secret also signs Forgejo's own tokens (CSRF, links), so it is set.
+      # Forgejo as an OAuth2 *provider* stays off (it also keeps /user/link_account closed); sign-in through PPM is
+      # Forgejo as a *client* (docker-compose.git-sso.yml) and works with this off. The secret also signs Forgejo's own
+      # tokens (CSRF, links), so it is set.
       FORGEJO__oauth2__ENABLED: "false"
       FORGEJO__oauth2__JWT_SECRET: ${FORGEJO_JWT_SECRET:?FORGEJO_JWT_SECRET is required (ppm-env.sh add-git)}
       FORGEJO__service__DISABLE_REGISTRATION: "true"

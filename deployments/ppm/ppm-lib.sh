@@ -1,7 +1,7 @@
 # shellcheck shell=bash disable=SC2154  # bundle_dir and env_file are set by the sourcing script
 # Shared helpers for ppm-deploy.sh, ppm-backup.sh and ppm-restore.sh (sourced, not executed).
-# Expects: bundle_dir, env_file. Defines: project, runtime_dir, state_dir, compose_files, git_enabled, dc(), env_get(),
-# die().
+# Expects: bundle_dir, env_file. Defines: project, runtime_dir, state_dir, compose_files, git_enabled, sso_enabled,
+# dc(), env_get(), die().
 
 die() { echo "${PPM_SCRIPT_NAME:-ppm}: $*" >&2; exit 1; }
 note() { echo "${PPM_SCRIPT_NAME:-ppm}: $*" >&2; }
@@ -66,14 +66,26 @@ ppm_init_context() {
     compose_files+=(-f "$bundle_dir/docker-compose.internal-tls.yml")
   fi
   # Git server (Forgejo): only with PPM_GIT_SERVER_ENABLED=1 (absent in an RC.1 env = off, see ppm-env.sh check).
-  git_enabled=0
+  git_enabled=0 sso_enabled=0
   if [[ "$(env_get PPM_GIT_SERVER_ENABLED)" == 1 ]]; then
     git_enabled=1
     compose_files+=(-f "$bundle_dir/docker-compose.git.yml")
     [[ "$(env_get PPM_GIT_SSH_ENABLED)" == 1 ]] && compose_files+=(-f "$bundle_dir/docker-compose.git-ssh.yml")
+    # Sign-in through PPM (G2.2): only on top of the Git server; absent in an RC.2 env = off (the G2.1 sign-in).
+    if [[ "$(env_get PPM_GIT_SSO_ENABLED)" == 1 ]]; then
+      sso_enabled=1
+      compose_files+=(-f "$bundle_dir/docker-compose.git-sso.yml")
+    fi
   fi
   [[ -f "$state_dir/no-workers" ]] && ppm_git_drill_exports
-  note "project $project, env $env_file (${env_file_source:-given})$( ((git_enabled)) && echo "; Git server $(env_get PPM_GIT_PUBLIC_URL)")"
+  # Services every project is expected to run: single source of truth for ppm-deploy.sh (wait/status) and
+  # ppm-monitor.sh (O-1.1) alike, so a service added to the Compose files is never missed by one of the two.
+  # shellcheck disable=SC2034  # used by the sourcing scripts
+  HEALTHY_SERVICES=(plane-db plane-redis plane-mq plane-minio proxy api worker beat-worker live web admin space)
+  # shellcheck disable=SC2034  # used by the sourcing scripts
+  ONESHOT_SERVICES=(minio-init migrator)
+  if ((git_enabled)); then HEALTHY_SERVICES+=(forgejo); ONESHOT_SERVICES+=(forgejo-db-init); fi
+  note "project $project, env $env_file (${env_file_source:-given})$( ((git_enabled)) && echo "; Git server $(env_get PPM_GIT_PUBLIC_URL)$( ((sso_enabled)) && echo " with sign-in through PPM")")"
 }
 
 dc() { docker compose -p "$project" --env-file "$env_file" "${compose_files[@]}" "$@"; }
@@ -149,4 +161,27 @@ wait_healthy() { # service... — waits for health (or running when no healthche
     ((SECONDS > deadline)) && die "timeout waiting for: ${pending[*]}"
     sleep 3
   done
+}
+
+# One-shot snapshot of a service's first container, no waiting/retrying (see wait_healthy for that): its health
+# state ("healthy"/"unhealthy"/"starting"), or its run state when the service has no healthcheck ("running" is
+# then the good outcome, exactly as wait_healthy already treats it), or "absent" when no container exists. Used by
+# ppm-monitor.sh (O-1.1): a live poll must return quickly, never block for minutes on a stuck service.
+ppm_service_status() { # service
+  local id state
+  id="$(dc ps -q "$1" 2>/dev/null | head -n1)"
+  [[ -n "$id" ]] || { echo absent; return 0; }
+  state="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id" 2>/dev/null)" \
+    || { echo absent; return 0; }
+  echo "${state:-absent}"
+}
+
+# RestartCount of a service's first container ("" when the container is absent): Compose/Docker restarts it in
+# place on crash (restart: unless-stopped) without recreating the container, so this keeps climbing across polls
+# while a service is crash-looping even if it is briefly "healthy" between restarts (ppm-monitor.sh O-1.1).
+ppm_service_restart_count() { # service
+  local id
+  id="$(dc ps -q "$1" 2>/dev/null | head -n1)"
+  [[ -n "$id" ]] || return 0
+  docker inspect -f '{{.RestartCount}}' "$id" 2>/dev/null || true
 }

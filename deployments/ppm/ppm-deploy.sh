@@ -7,15 +7,20 @@
 #   up [--no-workers]        start or update the stack, wait until healthy, run preflight; --no-workers keeps
 #                            worker/beat-worker off (restore-drill copies: no e-mails/webhooks from copied data) and
 #                            is remembered for the project: later up/restart/release keep them off too (a drill
-#                            copy's Git server also sends nothing out and runs no migrations)
+#                            copy's Git server also sends nothing out and runs no migrations). With sign-in through
+#                            PPM off, PPM's OAuth2 client of the Git server is removed (ppm_oidc_client --disable)
 #   wait                     wait until every service is healthy / one-shots finished
 #   preflight                ppm_backend_preflight --verify-storage-write (DB, Redis, broker, S3 + I/O, realtime);
-#                            with the Git server also Forgejo inside the network and through the proxy (HTTPS)
+#                            with the Git server also Forgejo inside the network and through the proxy (HTTPS); with
+#                            sign-in through PPM also its discovery, login source and admin token
 #   git-bootstrap [--rotate-token]
 #                            Git server (Forgejo), idempotent: service account ppm-bot (administrator; a random
 #                            password that is never stored), PPM's read-only token (→ PPM_FORGEJO_TOKEN in the env
 #                            file, 600; --rotate-token revokes the old one), system webhook to the PPM API; then
-#                            restarts only api/worker/beat-worker when the token changed (RUNBOOK §17.3)
+#                            restarts only api/worker/beat-worker when the token changed (RUNBOOK §17.3). With
+#                            sign-in through PPM (RUNBOOK §17.14): PPM's OpenID Connect client, the login source
+#                            «PPM» in Forgejo (Forgejo restarts only when it changed), its id and the admin token of
+#                            ppm-bot (→ ppm.env; --rotate-token renews both tokens), then a first full sync of access
 #   git-admin --username U --email E [--reset-password]
 #                            Forgejo administrator for the owner: random one-time password (changed at the first
 #                            sign-in), written only to .runtime/<project>/forgejo-admin-credentials.txt (600)
@@ -46,7 +51,7 @@ set -euo pipefail
 
 bundle_dir="$(cd "$(dirname "$0")" && pwd)"
 PPM_SCRIPT_NAME=ppm-deploy
-usage() { sed -n '2,44p' "$0"; }
+usage() { awk 'NR == 1 { next } /^#/ { print; next } { exit }' "$0"; }  # the comment block above
 fail() { echo "ppm-deploy: $*" >&2; exit 2; }
 
 # ---- argument parsing -------------------------------------------------------------------------------------
@@ -151,13 +156,12 @@ ppm_init_context
 [[ -f "$state_dir/no-workers" ]] && no_workers=1
 ((no_workers)) && ppm_git_drill_exports
 
-HEALTHY_SERVICES=(plane-db plane-redis plane-mq plane-minio proxy api worker beat-worker live web admin space)
-ONESHOT_SERVICES=(minio-init migrator)
-if ((git_enabled)); then HEALTHY_SERVICES+=(forgejo); ONESHOT_SERVICES+=(forgejo-db-init); fi
+# HEALTHY_SERVICES / ONESHOT_SERVICES: set by ppm_init_context (ppm-lib.sh) — shared with ppm-monitor.sh.
 SECRET_KEYS=(SECRET_KEY LIVE_SERVER_SECRET_KEY POSTGRES_PASSWORD RABBITMQ_PASSWORD MINIO_ACCESS_KEY MINIO_SECRET_KEY
   PPM_GITHUB_APP_CLIENT_SECRET PPM_GITHUB_APP_PRIVATE_KEY PPM_GITHUB_WEBHOOK_SECRET
   FORGEJO_DB_PASSWORD FORGEJO_SECRET_KEY FORGEJO_INTERNAL_TOKEN FORGEJO_JWT_SECRET FORGEJO_LFS_JWT_SECRET
-  PPM_FORGEJO_WEBHOOK_SECRET PPM_FORGEJO_TOKEN)
+  PPM_FORGEJO_WEBHOOK_SECRET PPM_FORGEJO_TOKEN PPM_ALERT_TELEGRAM_BOT_TOKEN PPM_ALERT_SMTP_PASSWORD
+  PPM_OIDC_PRIVATE_KEY PPM_OIDC_PREVIOUS_PRIVATE_KEY PPM_OIDC_CLIENT_SECRET PPM_FORGEJO_ADMIN_TOKEN)
 
 check_images() {
   local repo release image missing=0
@@ -228,11 +232,17 @@ cmd_preflight() {
 # (PPM_FORGEJO_URL) and at the public HTTPS address through the proxy (Caddy site, certificate, network alias), and
 # whether PPM's read-only token signs in as ppm-bot. No value is printed. A proxy image without the Git site (a
 # release before RC.2, switched to with --allow-git-site-loss) is reported, not failed: that loss was accepted.
+# With sign-in through PPM (the API has PPM_GIT_SSO_ENABLED=1) also: git_sso_discovery — the internal discovery
+# Forgejo reads names the PUBLIC issuer (PPM address + /auth/oidc) and internal token endpoint; git_sso_hidden — the
+# proxy answers 404 to it from outside; git_sso_source — Forgejo's login source «PPM» is there, active, with the id of
+# ppm.env and the settings git-bootstrap gives it (checked here, in bash); git_admin_token — the admin token signs in
+# as ppm-bot, an administrator, and reaches the admin API. "missing (run git-bootstrap)" is not a failure.
 git_preflight() {
-  local site=1
+  local site=1 source_state=""
   dc exec -T proxy test -f /etc/caddy/git-server-1.caddy >/dev/null 2>&1 || site=0
-  dc exec -T -e "PPM_GIT_SITE=$site" api python - <<'PY'
-import json, os, ssl, sys, urllib.request
+  ((sso_enabled)) && source_state="$(sso_source_state)"
+  dc exec -T -e "PPM_GIT_SITE=$site" -e "PPM_GIT_SSO_SOURCE=$source_state" api python - <<'PY'
+import json, os, ssl, sys, urllib.error, urllib.request
 
 checks = {}
 context = ssl.create_default_context()
@@ -264,6 +274,53 @@ else:
         checks["git_token"] = "ok" if json.loads(body).get("login") == "ppm-bot" else "fail (not ppm-bot)"
     except Exception as error:  # noqa: BLE001
         checks["git_token"] = f"fail ({error.__class__.__name__})"
+
+if os.environ.get("PPM_GIT_SSO_ENABLED") == "1":  # sign-in through PPM (docker-compose.git-sso.yml)
+    issuer = os.environ.get("WEB_URL", "").rstrip("/") + "/auth/oidc"
+    internal = os.environ.get("PPM_OIDC_INTERNAL_URL", "http://api:8000").rstrip("/") + "/auth/oidc"
+    try:
+        status, body = get(internal + "/internal/.well-known/openid-configuration")
+        document = json.loads(body)
+        if document.get("issuer") != issuer:
+            checks["git_sso_discovery"] = "fail (its issuer is not the public address of PPM + /auth/oidc)"
+        elif not str(document.get("authorization_endpoint", "")).startswith(issuer + "/"):
+            checks["git_sso_discovery"] = "fail (its authorization endpoint is not the public one)"
+        elif not str(document.get("token_endpoint", "")).startswith(internal + "/"):
+            checks["git_sso_discovery"] = "fail (its token endpoint is not the internal one)"
+        else:
+            checks["git_sso_discovery"] = "ok"
+    except urllib.error.HTTPError as error:
+        checks["git_sso_discovery"] = (f"fail (HTTP {error.code}: the API does not serve sign-in through PPM — "
+                                       "manage ppm_oidc_client --status)")
+    except Exception as error:  # noqa: BLE001
+        checks["git_sso_discovery"] = f"fail ({error.__class__.__name__})"
+    try:
+        get(os.environ.get("WEB_URL", "").rstrip("/") + "/auth/oidc/internal/.well-known/openid-configuration")
+        checks["git_sso_hidden"] = "fail (the proxy lets the internal discovery out)"
+    except urllib.error.HTTPError as error:
+        checks["git_sso_hidden"] = "ok" if error.code == 404 else f"fail (HTTP {error.code} instead of 404)"
+    except Exception as error:  # noqa: BLE001
+        checks["git_sso_hidden"] = f"fail ({error.__class__.__name__})"
+    checks["git_sso_source"] = os.environ.get("PPM_GIT_SSO_SOURCE") or "fail (not checked)"
+    admin = os.environ.get("PPM_FORGEJO_ADMIN_TOKEN", "")
+    if not admin:
+        checks["git_admin_token"] = "missing (run git-bootstrap)"
+    else:
+        base = os.environ.get("PPM_FORGEJO_URL", "").rstrip("/") + "/api/v1"
+        try:
+            status, body = get(base + "/user", {"Authorization": f"token {admin}"})
+            me = json.loads(body)
+            if me.get("login") != "ppm-bot":
+                checks["git_admin_token"] = "fail (not ppm-bot)"
+            elif not me.get("is_admin"):
+                checks["git_admin_token"] = "fail (ppm-bot is not an administrator of the Git server)"
+            else:
+                get(base + "/admin/users?limit=1", {"Authorization": f"token {admin}"})
+                checks["git_admin_token"] = "ok"
+        except urllib.error.HTTPError as error:
+            checks["git_admin_token"] = f"fail (HTTP {error.code}: run git-bootstrap --rotate-token)"
+        except Exception as error:  # noqa: BLE001
+            checks["git_admin_token"] = f"fail ({error.__class__.__name__})"
 failed = any(value.startswith("fail") for value in checks.values())
 print(json.dumps({"checks": checks, "status": "fail" if failed else "ok"}, sort_keys=True))
 sys.exit(1 if failed else 0)
@@ -275,12 +332,20 @@ cmd_up() {
   check_images
   dc_up
   cmd_wait
+  # R26: sign-in through PPM off (switched off, or never set up) — PPM keeps no OAuth2 client for the Git server.
+  ((sso_enabled)) || sso_disable_client
   cmd_preflight
   echo "ppm-deploy: $project is up at $(env_get PPM_PUBLIC_URL) (release $(env_get PPM_RELEASE), $([[ "$(env_get PPM_BIND_ADDRESS)" == 127.0.0.1 ]] && echo "PRIVATE: ports on 127.0.0.1 only" || echo "public"))."
   if ((git_enabled)); then
-    echo "ppm-deploy: Git server at $(env_get PPM_GIT_PUBLIC_URL)$([[ "$(env_get PPM_GIT_SSH_ENABLED)" == 1 ]] && echo ", git over SSH on port $(env_get PPM_GIT_SSH_PORT)")."
-    [[ -n "$(env_get PPM_FORGEJO_TOKEN)" ]] \
-      || echo "ppm-deploy: next for the Git server: ./ppm-deploy.sh --env-file $env_file git-bootstrap (RUNBOOK §17.3)"
+    echo "ppm-deploy: Git server at $(env_get PPM_GIT_PUBLIC_URL)$([[ "$(env_get PPM_GIT_SSH_ENABLED)" == 1 ]] && echo ", git over SSH on port $(env_get PPM_GIT_SSH_PORT)")$( ((sso_enabled)) && echo ", sign-in through PPM")."
+    if [[ -z "$(env_get PPM_FORGEJO_TOKEN)" ]]; then
+      echo "ppm-deploy: next for the Git server: ./ppm-deploy.sh --env-file $env_file git-bootstrap (RUNBOOK §17.3)"
+    elif ((sso_enabled)) && [[ -z "$(env_get PPM_FORGEJO_ADMIN_TOKEN)" || -z "$(env_get PPM_FORGEJO_SSO_SOURCE_ID)" ]]; then
+      echo "ppm-deploy: next for sign-in through PPM: ./ppm-deploy.sh --env-file $env_file git-bootstrap (RUNBOOK §17.14.2)"
+    fi
+    if ((sso_enabled)) && [[ "$(env_get PPM_GIT_LOCAL_SIGNIN)" == 1 ]]; then
+      note "ВНИМАНИЕ: на Git-сервере включена форма входа по паролю (PPM_GIT_LOCAL_SIGNIN=1, аварийный вход). Когда закончите: ./ppm-env.sh set $env_file PPM_GIT_LOCAL_SIGNIN 0 и up (RUNBOOK §17.14.6)"
+    fi
   fi
 }
 
@@ -436,6 +501,8 @@ SCAN_PATTERNS=(
   'http-url-with-credentials|https?://[^/:@[:space:]"]+:[^@*/[:space:]"][^@/[:space:]"]*@'
   # Forgejo 15 names its session cookie `session` (16 hex); PPM's is session-id (above).
   'forgejo-session-cookie|(^|[^A-Za-z0-9_-])session=[0-9a-f]{16}'
+  # Sign-in through PPM: the one-time id of an anonymous sign-in, in the path (the proxy masks it as REDACTED).
+  'oidc-continue-path|/auth/oidc/continue/[A-Za-z0-9_-]{16,}'
 )
 
 scan_file() { # $1 = log file; prints counts, returns 1 when anything sensitive is found
@@ -502,6 +569,7 @@ cmd_scan_self_test() {
     echo 'db postgresql://plane:realpassword@plane-db:5432/plane'
     echo 'git push https://developer:0123456789abcdef0123456789abcdef01234567@git.example.test/team/app.git'
     echo 'Cookie: session=0123456789abcdef; lang=ru-RU'
+    echo 'GET /auth/oidc/continue/Q2xpZW50LXRva2VuLTAxMjM0NTY3ODkwYWJj/ 302'
   } >"$planted"
   {
     echo 'GET /uploads/x?X-Amz-Credential=REDACTED&X-Amz-Signature=REDACTED&X-Amz-Expires=300'
@@ -514,6 +582,8 @@ cmd_scan_self_test() {
     echo '"uri":"/team/app.git/info/refs?REDACTED","host":"git.example.test:8443"'
     echo 'clone ssh://git@git.example.test:2222/team/app.git or https://git.example.test:8443/team/app.git'
     echo 'webhook http://api:8000/api/ppm/v1/git/forgejo/webhook/ delivered: 404'
+    echo '"uri":"/auth/oidc/continue/REDACTED/","status":302'
+    echo '"uri":"/auth/oidc/authorize/?REDACTED","status":302'
   } >"$redacted"
   echo "ppm-deploy: self-test — planted values (every row must be > 0):"
   local report; report="$(scan_file "$planted" || true)"
@@ -603,7 +673,7 @@ git_boot_begin() {
   git_boot_token="$(printf '%s\n' "$out" | grep -E '^[0-9a-f]{40}$' | tail -n1)"
   out=""
   [[ -n "$git_boot_token" ]] || die "Forgejo returned no temporary token for ppm-bot; nothing was changed"
-  trap git_boot_end EXIT
+  trap git_on_exit EXIT
 }
 git_boot_end() { # revokes the temporary token if a step failed before the tool could revoke it
   [[ -n "$git_boot_token" ]] || return 0
@@ -615,45 +685,424 @@ git_boot_end() { # revokes the temporary token if a step failed before the tool 
   git_boot_token=""
 }
 
+# One git-bootstrap or git-admin at a time per project: both issue and revoke ppm-bot's tokens (git-bootstrap's last
+# step revokes every token it does not know) and git-bootstrap changes the login source «PPM». A lock whose process is
+# gone (a killed run) is taken over. Released by the EXIT trap together with the temporary token.
+git_lock_held=0
+git_lock() {
+  local lock="$state_dir/git-bootstrap.lock" pid
+  if ! mkdir "$lock" 2>/dev/null; then
+    pid="$(cat "$lock/pid" 2>/dev/null || true)"
+    if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+      die "another git-bootstrap or git-admin of project $project is running (pid $pid): wait until it ends, then try again; nothing was changed"
+    fi
+    rm -rf -- "$lock"
+    mkdir "$lock" 2>/dev/null || die "could not take the lock $lock (another run started just now?): try again; nothing was changed"
+    note "the lock of an interrupted git-bootstrap/git-admin (pid ${pid:-unknown}) was taken over"
+  fi
+  echo "$$" >"$lock/pid"
+  git_lock_held=1
+  trap git_on_exit EXIT
+}
+git_on_exit() {
+  git_boot_end
+  if ((git_lock_held)); then rm -rf -- "$state_dir/git-bootstrap.lock"; git_lock_held=0; fi
+}
+
 cmd_git_bootstrap() {
   git_require
   "$bundle_dir/ppm-env.sh" check "$env_file" >/dev/null || die "env file is invalid: ppm-env.sh check $env_file"
   forgejo_require_running
-  local out token args=() services=(api worker beat-worker) restarted=""
+  git_lock
+  local out token admin_token args=() services=(api worker beat-worker) restarted="" saved=() source_id_changed=0
+  local restart_services=0
   ((rotate_token)) && args+=(--rotate-token)
   ((no_workers)) && services=(api)
+  # 0. Sign-in through PPM (RUNBOOK §17.14): PPM's OpenID Connect client, then Forgejo's login source «PPM» (Forgejo
+  #    restarts only when it changed) and its id in the env file. Switched off: PPM's client is removed (R26).
+  wait_healthy api
+  sso_require_running_api
+  if ((sso_enabled)); then
+    args+=(--admin-token)
+    sso_ensure_client
+    sso_ensure_source
+    # Also when an earlier run changed the source and was interrupted before this restart (the marker says so).
+    if ((sso_source_changed)) || sso_restart_is_pending; then
+      note "restarting the Git server: it reads its login sources only when it starts"
+      dc restart forgejo >/dev/null \
+        || die "the login source PPM is changed, but the Git server did not restart (see: ppm-deploy.sh logs forgejo); it keeps the previous settings until it does — ./ppm-deploy.sh --env-file $env_file compose restart forgejo, or run git-bootstrap again"
+      wait_healthy forgejo
+      rm -f -- "$SSO_RESTART_MARK"
+    fi
+    if [[ "$(env_get PPM_FORGEJO_SSO_SOURCE_ID)" != "$sso_source_id" ]]; then
+      "$bundle_dir/ppm-env.sh" set "$env_file" PPM_FORGEJO_SSO_SOURCE_ID "$sso_source_id" >/dev/null \
+        || die "could not write PPM_FORGEJO_SSO_SOURCE_ID to $env_file; run git-bootstrap again"
+      source_id_changed=1
+    fi
+  else
+    sso_disable_client
+  fi
   git_boot_begin
-  # 1. Webhook, and a new read-only token when needed (the tool revokes nothing yet).
-  out="$(printf '%s\n%s\n%s\n' "$git_boot_token" "$(env_get PPM_FORGEJO_TOKEN)" "$(env_get PPM_FORGEJO_WEBHOOK_SECRET)" \
-    | dc run --rm -T forgejo-bootstrap prepare ${args[@]+"${args[@]}"})" \
-    || die "git-bootstrap stopped (reason above): $env_file was not changed and PPM's current token still works"
+  # 1. Webhook, and a new read-only token (and admin token) when needed (the tool revokes nothing yet).
+  out="$(printf '%s\n%s\n%s\n%s\n' "$git_boot_token" "$(env_get PPM_FORGEJO_TOKEN)" "$(env_get PPM_FORGEJO_WEBHOOK_SECRET)" \
+    "$( ((sso_enabled)) && env_get PPM_FORGEJO_ADMIN_TOKEN)" | dc run --rm -T forgejo-bootstrap prepare ${args[@]+"${args[@]}"})" \
+    || die "git-bootstrap stopped (reason above): $env_file was not changed and PPM's current tokens still work"
   token="$(printf '%s\n' "$out" | sed -n 's/^token=//p')"
+  admin_token="$(printf '%s\n' "$out" | sed -n 's/^admin_token=//p')"
   out=""
-  # 2. A new token is saved first (600) and put to work (only the services that read PPM_FORGEJO_*), and only
-  #    then are the old ones revoked: at no moment does PPM hold a revoked token.
+  # 2. New tokens are saved first (600) and put to work (only the services that read PPM_FORGEJO_*), and only then
+  #    are the old ones revoked: at no moment does PPM hold a revoked token.
   if [[ -n "$token" ]]; then
     printf '%s\n' "$token" | "$bundle_dir/ppm-env.sh" set-secret "$env_file" PPM_FORGEJO_TOKEN >/dev/null \
       || die "Forgejo issued a new token but it could not be written to $env_file; the previous token still works — run git-bootstrap again"
     token=""
-    note "new read-only token saved in $env_file (PPM_FORGEJO_TOKEN, mode 600): save the new copy of the file in the password manager"
+    saved+=("read-only token (PPM_FORGEJO_TOKEN)")
+  fi
+  if [[ -n "$admin_token" ]]; then
+    printf '%s\n' "$admin_token" | "$bundle_dir/ppm-env.sh" set-secret "$env_file" PPM_FORGEJO_ADMIN_TOKEN >/dev/null \
+      || die "Forgejo issued a new admin token but it could not be written to $env_file; the previous tokens still work — run git-bootstrap again"
+    admin_token=""
+    saved+=("admin token (PPM_FORGEJO_ADMIN_TOKEN)")
+  fi
+  if ((${#saved[@]})); then
+    note "new ${saved[0]}$( ((${#saved[@]} > 1)) && echo " and ${saved[1]}") saved in $env_file (mode 600): save the new copy of the file in the password manager"
+  fi
+  ((${#saved[@]} || source_id_changed)) && restart_services=1
+  if ((!restart_services)) && ! services_match_env "${services[@]}"; then
+    note "${services[*]} run with other tokens or login source id than $env_file (an earlier run was interrupted, or the file changed without up): restarting them before anything is revoked"
+    restart_services=1
+  fi
+  if ((restart_services)); then
     { dc up -d --no-deps "${services[@]}" && (cmd_wait) && git_preflight; } \
-      || die "the new token is saved in $env_file, but ${services[*]} did not come up healthy with it (above); the previous tokens are still valid — fix it and run git-bootstrap again"
+      || die "$env_file is updated, but ${services[*]} did not come up healthy with it (above); the previous tokens are still valid — fix it and run git-bootstrap again"
     restarted="${services[*]}"
   fi
-  # 3. Every other token of ppm-bot (previous PPM tokens, the temporary one) is revoked; its password ends unknown.
-  printf '%s\n%s\n' "$git_boot_token" "$(env_get PPM_FORGEJO_TOKEN)" | dc run --rm -T forgejo-bootstrap finish \
-    || die "PPM works with the token in $env_file, but revoking the other tokens of ppm-bot failed (reason above) — run git-bootstrap again"
+  # 3. Every other token of ppm-bot (previous PPM tokens, the temporary one — and the admin token when sign-in through
+  #    PPM is off) is revoked; its password ends unknown.
+  printf '%s\n%s\n%s\n' "$git_boot_token" "$(env_get PPM_FORGEJO_TOKEN)" "$( ((sso_enabled)) && env_get PPM_FORGEJO_ADMIN_TOKEN)" \
+    | dc run --rm -T forgejo-bootstrap finish \
+    || die "PPM works with the tokens in $env_file, but revoking the other tokens of ppm-bot failed (reason above) — run git-bootstrap again"
   git_boot_token=""
-  if [[ -n "$restarted" ]]; then
-    echo "ppm-deploy: Git server ready at $(env_get PPM_GIT_PUBLIC_URL); $restarted restarted with the new read-only token, the previous tokens revoked."
-  else
-    echo "ppm-deploy: Git server ready at $(env_get PPM_GIT_PUBLIC_URL); PPM_FORGEJO_TOKEN unchanged, nothing restarted."
+  if ((!sso_enabled)) && [[ -n "$(env_get PPM_FORGEJO_ADMIN_TOKEN)" ]]; then
+    if printf '\n' | "$bundle_dir/ppm-env.sh" set-secret "$env_file" PPM_FORGEJO_ADMIN_TOKEN >/dev/null; then
+      note "sign-in through PPM is off: its admin token was revoked in the Git server and removed from $env_file"
+    else
+      note "WARNING: the admin token was revoked in the Git server, but could not be removed from $env_file"
+    fi
   fi
+  if [[ -n "$restarted" ]]; then
+    echo "ppm-deploy: Git server ready at $(env_get PPM_GIT_PUBLIC_URL); $restarted restarted with the new settings, the previous tokens revoked."
+  else
+    echo "ppm-deploy: Git server ready at $(env_get PPM_GIT_PUBLIC_URL); tokens unchanged, PPM's services not restarted."
+  fi
+  # 4. Sign-in through PPM: the first full synchronization of accounts, organizations and teams (then every 10 min).
+  ((sso_enabled)) && sso_first_sync
+  return 0
+}
+
+# ---- Sign-in through PPM (single sign-on to the Git server, G2.2, RUNBOOK §17.14) ---------------------------------
+#
+# PPM is the OpenID Connect provider of one client, Forgejo, which signs people in through its login source named
+# exactly «PPM» (the name is in the button «Войти через PPM», in Forgejo's callback URL and in the redirect URI PPM
+# registers). The client secret never appears on a command line: Forgejo's CLI takes it only as an argument (visible
+# to the host in /proc while it runs), so the CLI creates and changes the source WITHOUT it, and the secret is written
+# into the source's configuration in Forgejo's database from psql's stdin (sso_source_write_secret).
+
+SSO_DISCOVERY_URL=http://api:8000/auth/oidc/internal/.well-known/openid-configuration
+# `--scopes` takes a comma-separated list; Forgejo stores it as four scopes (a space-separated string would be ONE).
+SSO_SCOPES=openid,profile,email,groups
+# A change of the login source reaches Forgejo's web process only with its restart. The marker holds the start time of
+# the Forgejo container when the change was made: while that container has not restarted since, a restart is owed —
+# also after a git-bootstrap that was interrupted in between (preflight reports it; the next git-bootstrap restarts).
+SSO_RESTART_MARK="$state_dir/forgejo-restart-pending"
+
+# Forgejo's CLI in its container (uid 1000, its app.ini). No secret passes through here.
+#   version                       `forgejo --version`
+#   list                          `forgejo admin auth list` (parsed on the host: sso_source_listed)
+#   discovery <url>               the HTTP status Forgejo gets for PPM's discovery (000: unreachable)
+#   add <client_id> <url> <scopes> creates the source (OpenID Connect, discovery, scopes, local 2FA skipped)
+#   update <id> <flag>...         changes only the given flags
+# shellcheck disable=SC2016  # expanded inside the container
+FORGEJO_SSO_SCRIPT='set -euo pipefail
+action="$1"; shift
+case "$action" in
+  version) forgejo --version ;;
+  list) forgejo admin auth list ;;
+  discovery) curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$1" 2>/dev/null || true ;;
+  add) forgejo admin auth add-oauth --name PPM --provider openidConnect --key "$1" --auto-discover-url "$2" \
+         --skip-local-2fa --scopes "$3" ;;
+  update) id="$1"; shift; forgejo admin auth update-oauth --id "$id" "$@" ;;
+  *) echo "unknown action $action" >&2; exit 2 ;;
+esac'
+
+# The running API must have been started from this env file as it is now (sign-in on or off, the same client
+# secret): otherwise PPM and the Git server would end up with different secrets. The secret goes to the check on
+# stdin and is compared inside the container; nothing is printed.
+sso_require_running_api() {
+  local rc=0
+  # shellcheck disable=SC2016  # expanded inside the container
+  printf '%s\n' "$(env_get PPM_OIDC_CLIENT_SECRET)" | dc exec -T api sh -c '
+IFS= read -r secret || true
+[ "${PPM_GIT_SSO_ENABLED:-0}" = "$1" ] || exit 3
+[ "$1" != 1 ] || [ "$secret" = "${PPM_OIDC_CLIENT_SECRET:-}" ] || exit 4' sso-check "$sso_enabled" || rc=$?
+  case "$rc" in
+    0) ;;
+    3) die "$env_file switches sign-in through PPM $( ((sso_enabled)) && echo on || echo off), but the running API was started with it $( ((sso_enabled)) && echo off || echo on): run ./ppm-deploy.sh --env-file $env_file up first, then git-bootstrap; nothing was changed" ;;
+    4) die "the running API has another PPM_OIDC_CLIENT_SECRET than $env_file (changed without up?): run ./ppm-deploy.sh --env-file $env_file up first, then git-bootstrap; nothing was changed" ;;
+    *) die "could not check the running API (exit $rc): is the stack up? ./ppm-deploy.sh --env-file $env_file up; nothing was changed" ;;
+  esac
+}
+
+# The services that read PPM_FORGEJO_* must run with what the env file holds now: git-bootstrap writes new tokens and
+# the login source id into the file first and they reach the services only with their restart — a run interrupted in
+# between, or a file edited without up, leaves the services behind (and the next run would revoke a token they still
+# use). The values go to each check on stdin and are compared inside the container; nothing is printed.
+# shellcheck disable=SC2016  # expanded inside the container
+SERVICE_ENV_CHECK_SCRIPT='for key in "$@"; do IFS= read -r want || want=""; [ "$want" = "$(printenv "$key" || true)" ] || exit 5; done'
+services_match_env() { # service...
+  local service key keys=(PPM_FORGEJO_TOKEN)
+  ((sso_enabled)) && keys+=(PPM_FORGEJO_ADMIN_TOKEN PPM_FORGEJO_SSO_SOURCE_ID)
+  for service in "$@"; do
+    for key in "${keys[@]}"; do printf '%s\n' "$(env_get "$key")"; done \
+      | dc exec -T "$service" sh -c "$SERVICE_ENV_CHECK_SCRIPT" env-check "${keys[@]}" >/dev/null 2>&1 || return 1
+  done
+}
+
+forgejo_started_at() { docker inspect -f '{{.State.StartedAt}}' "$(dc ps -q forgejo 2>/dev/null | head -n1)" 2>/dev/null || true; }
+sso_restart_pending_mark() { forgejo_started_at >"$SSO_RESTART_MARK"; }  # before every change of the source
+sso_restart_is_pending() { # true while the Forgejo container has not restarted since the source changed
+  [[ -s "$SSO_RESTART_MARK" ]] || return 1
+  [[ "$(cat "$SSO_RESTART_MARK")" == "$(forgejo_started_at)" ]] && return 0
+  rm -f -- "$SSO_RESTART_MARK"  # restarted since by other means (compose restart, up, a reboot)
+  return 1
+}
+
+# git-bootstrap writes the client secret into the login source in Forgejo's database: a format verified on Forgejo
+# 15.x. Another version is refused before anything of the sign-in changes.
+sso_require_forgejo_15() {
+  local version
+  version="$(forgejo_script "$FORGEJO_SSO_SCRIPT" version 2>/dev/null | head -n 1)" || version=""
+  [[ "$version" =~ version\ 15\.[0-9]+ ]] \
+    || die "the Git server runs «${version:-an unknown version}», and git-bootstrap keeps sign-in through PPM only on Forgejo 15.x (it writes the client secret of the login source into Forgejo's database, a format verified on 15.x): go back to a 15.x digest (RUNBOOK §17.9) or have this version checked first; nothing was changed"
+}
+
+# PPM's OAuth2 client of the Git server, brought in line with the env (idempotent; prints no secret).
+sso_ensure_client() {
+  local out rc=0
+  out="$(dc exec -T api python manage.py ppm_oidc_client --ensure 2>&1)" || rc=$?
+  [[ -z "$out" ]] || printf '%s\n' "$out" | sed 's/^/git-bootstrap: PPM: /' >&2
+  ((rc == 0)) \
+    || die "PPM could not set up its OpenID Connect client for the Git server (reason above; ./ppm-deploy.sh --env-file $env_file manage ppm_oidc_client --status shows what is missing); nothing in the Git server was changed"
+}
+
+# R26: sign-in through PPM off — PPM's OAuth2 client of the Git server goes with its codes and tokens. A release
+# without the command (before G2.2) has nothing to remove; any other failure is only reported: the sign-in endpoints
+# answer 404 anyway while PPM_GIT_SSO_ENABLED is not 1.
+sso_disable_client() {
+  local out rc=0
+  out="$(dc exec -T api python manage.py ppm_oidc_client --disable 2>&1)" || rc=$?
+  if ((rc == 0)); then
+    [[ -z "$out" ]] || note "sign-in through PPM is off: $(printf '%s\n' "$out" | tail -n 1)"
+  elif [[ "$out" != *"Unknown command"* ]]; then
+    note "WARNING: sign-in through PPM is off, but its OAuth2 client could not be removed (manage ppm_oidc_client --disable failed; the endpoints stay closed anyway) — run git-bootstrap later"
+  fi
+}
+
+# "<id> <type> <active>" of the login source named exactly PPM, from `forgejo admin auth list` (a header line, then
+# ID, Name, Type, Enabled separated by tabs); nothing when there is none.
+sso_source_listed() {
+  local out
+  out="$(forgejo_script "$FORGEJO_SSO_SCRIPT" list)" || return 1
+  printf '%s\n' "$out" | tr -d '\r' | awk -F '\t+' 'NR > 1 && $2 == "PPM" { print $1, $3, $4; exit }'
+}
+
+# The source's configuration as Forgejo stored it (JSON in login_source.cfg of its database), one key=value line per
+# setting git-bootstrap keeps; the client secret only as its SHA-256 (compared, never shown).
+sso_source_config() { # id
+  [[ "$1" =~ ^[0-9]+$ ]] || return 1
+  dc exec -T plane-db psql -X -U plane -d forgejo -tA -v ON_ERROR_STOP=1 -c "
+select k || '=' || coalesce(v, '') from login_source s, lateral (values
+  ('provider', s.cfg::jsonb ->> 'Provider'),
+  ('client_id', s.cfg::jsonb ->> 'ClientID'),
+  ('secret_sha256', encode(sha256(convert_to(coalesce(s.cfg::jsonb ->> 'ClientSecret', ''), 'UTF8')), 'hex')),
+  ('discovery', s.cfg::jsonb ->> 'OpenIDConnectAutoDiscoveryURL'),
+  ('scopes', (s.cfg::jsonb -> 'Scopes')::text),
+  ('skip_local_2fa', coalesce(s.cfg::jsonb ->> 'SkipLocalTwoFA', 'false')),
+  ('group_claim_name', s.cfg::jsonb ->> 'GroupClaimName'),
+  ('admin_group', s.cfg::jsonb ->> 'AdminGroup'),
+  ('restricted_group', s.cfg::jsonb ->> 'RestrictedGroup'),
+  ('group_team_map', s.cfg::jsonb ->> 'GroupTeamMap'),
+  ('group_team_map_removal', coalesce(s.cfg::jsonb ->> 'GroupTeamMapRemoval', 'false')),
+  ('required_claim_name', s.cfg::jsonb ->> 'RequiredClaimName'),
+  ('allow_username_change', coalesce(s.cfg::jsonb ->> 'AllowUsernameChange', 'false'))
+) as f(k, v) where s.id = $1" | tr -d '\r'
+}
+
+# What differs from the settings git-bootstrap gives the source: sets `sso_drift` (names) and `sso_update_flags`
+# (the update-oauth flags that fix them); the client secret and «skip local 2FA» (which update-oauth cannot change)
+# set `sso_write_secret`.
+sso_source_compare() { # id
+  local config want_sha
+  sso_drift=() sso_update_flags=() sso_write_secret=0
+  config="$(sso_source_config "$1")" || return 1
+  want_sha="$(printf '%s' "$(env_get PPM_OIDC_CLIENT_SECRET)" | sha256_file - | awk '{ print $1 }')"
+  sso_setting() { printf '%s\n' "$config" | sed -n "s/^$1=//p" | head -n 1; }
+  [[ "$(sso_setting provider)" == openidConnect ]] || { sso_drift+=(provider); sso_update_flags+=(--provider openidConnect); }
+  [[ "$(sso_setting client_id)" == "$(env_get PPM_OIDC_CLIENT_ID)" ]] \
+    || { sso_drift+=(client_id); sso_update_flags+=(--key "$(env_get PPM_OIDC_CLIENT_ID)"); }
+  [[ "$(sso_setting discovery)" == "$SSO_DISCOVERY_URL" ]] \
+    || { sso_drift+=(discovery); sso_update_flags+=(--auto-discover-url "$SSO_DISCOVERY_URL"); }
+  [[ "$(sso_setting scopes)" == '["openid", "profile", "email", "groups"]' ]] \
+    || { sso_drift+=(scopes); sso_update_flags+=(--scopes "$SSO_SCOPES"); }
+  # PPM keeps administrators, teams and names itself (R10, R12, R14): no group mapping, no required claim, no renames.
+  [[ -z "$(sso_setting group_claim_name)" ]] || { sso_drift+=(group_claim_name); sso_update_flags+=(--group-claim-name ""); }
+  [[ -z "$(sso_setting admin_group)" ]] || { sso_drift+=(admin_group); sso_update_flags+=(--admin-group ""); }
+  [[ -z "$(sso_setting restricted_group)" ]] || { sso_drift+=(restricted_group); sso_update_flags+=(--restricted-group ""); }
+  [[ -z "$(sso_setting group_team_map)" ]] || { sso_drift+=(group_team_map); sso_update_flags+=(--group-team-map ""); }
+  [[ "$(sso_setting group_team_map_removal)" == false ]] \
+    || { sso_drift+=(group_team_map_removal); sso_update_flags+=(--group-team-map-removal=false); }
+  [[ -z "$(sso_setting required_claim_name)" ]] \
+    || { sso_drift+=(required_claim); sso_update_flags+=(--required-claim-name "" --required-claim-value ""); }
+  [[ "$(sso_setting allow_username_change)" == false ]] \
+    || { sso_drift+=(allow_username_change); sso_update_flags+=(--allow-username-change=false); }
+  [[ "$(sso_setting secret_sha256)" == "$want_sha" ]] || { sso_drift+=(client_secret); sso_write_secret=1; }
+  [[ "$(sso_setting skip_local_2fa)" == true ]] || { sso_drift+=(skip_local_2fa); sso_write_secret=1; }
+  config="" want_sha=""
+}
+
+# Writes the client secret (and «skip local 2FA», which update-oauth ignores) into the source's configuration: the
+# secret reaches psql as a psql variable on stdin, never on a command line, and this session logs no statement
+# (the guards of forgejo/db-init.sql). Fails closed: only the row of this id named PPM, of type OAuth2 (6) and with a
+# ClientSecret field in its JSON is changed, and anything else than exactly that one row is a failure. Prints nothing.
+sso_source_write_secret() { # id
+  local out
+  [[ "$1" =~ ^[0-9]+$ ]] || return 1
+  out="$({
+    printf '%s\n' "SET log_statement = 'none';" "SET log_min_error_statement = 'panic';" \
+      "SET log_min_duration_statement = -1;" "SET log_min_duration_sample = -1;" "SET log_transaction_sample_rate = 0;"
+    printf '\\set sso_secret %s\n' "$(env_get PPM_OIDC_CLIENT_SECRET)"
+    printf '%s\n' "UPDATE login_source SET cfg = jsonb_set(jsonb_set(cfg::jsonb, '{ClientSecret}', to_jsonb(:'sso_secret'::text)), '{SkipLocalTwoFA}', 'true'::jsonb)::text WHERE id = $1 AND name = 'PPM' AND type = 6 AND cfg::jsonb ? 'ClientSecret' RETURNING id;"
+  } | dc exec -T plane-db psql -X -q -tA -v ON_ERROR_STOP=1 -U plane -d forgejo 2>&1)" || { out=""; return 1; }
+  [[ "$(printf '%s\n' "$out" | tr -d '\r' | sed '/^$/d')" == "$1" ]]
+}
+
+# Forgejo's login source «PPM» as sign-in through PPM needs it: created when missing, brought in line when it drifted.
+# Sets sso_source_id and sso_source_changed (the Git server must restart to use a change).
+sso_require_numeric_id() { # id — it goes into SQL and into update-oauth --id
+  [[ "$1" =~ ^[0-9]+$ ]] \
+    || die "unexpected answer of forgejo admin auth list for the login source PPM (id «$1»): git-bootstrap stops before touching Forgejo's database"
+}
+
+sso_ensure_source() {
+  local code listed id type active
+  sso_source_changed=0 sso_source_id=""
+  sso_require_forgejo_15
+  # add-oauth reads the discovery right away (and fails without it); Forgejo reads it at every start.
+  code="$(forgejo_script "$FORGEJO_SSO_SCRIPT" discovery "$SSO_DISCOVERY_URL")" || code=000
+  [[ "$code" == 200 ]] \
+    || die "the Git server cannot read PPM's discovery at $SSO_DISCOVERY_URL (HTTP $code): see ./ppm-deploy.sh --env-file $env_file manage ppm_oidc_client --status and logs api; nothing in the Git server was changed"
+  listed="$(sso_source_listed)" || die "could not list the login sources of the Git server (forgejo admin auth list; see logs forgejo)"
+  if [[ -z "$listed" ]]; then
+    sso_restart_pending_mark
+    forgejo_script "$FORGEJO_SSO_SCRIPT" add "$(env_get PPM_OIDC_CLIENT_ID)" "$SSO_DISCOVERY_URL" "$SSO_SCOPES" >/dev/null \
+      || die "the Git server did not create the login source PPM (forgejo admin auth add-oauth; reason above)"
+    listed="$(sso_source_listed)" || true
+    [[ -n "$listed" ]] || die "the login source PPM was created but the Git server does not list it (see logs forgejo)"
+    read -r id type active <<<"$listed"
+    sso_require_numeric_id "$id"
+    sso_source_changed=1
+    sso_source_write_secret "$id" \
+      || die "the login source PPM (id $id) was created, but its client secret could not be written — run git-bootstrap again"
+    # Read back what Forgejo stored: the source must now be exactly what git-bootstrap keeps.
+    if ! sso_source_compare "$id" || ((${#sso_drift[@]})); then
+      die "the login source PPM (id $id) was created, but Forgejo stored other settings (${sso_drift[*]:-unreadable}) — run git-bootstrap again"
+    fi
+    note "login source PPM created in the Git server (id $id): OpenID Connect, discovery $SSO_DISCOVERY_URL, scopes openid profile email groups, local 2FA skipped"
+  else
+    read -r id type active <<<"$listed"
+    sso_require_numeric_id "$id"
+    [[ "$type" == OAuth2 ]] \
+      || die "the Git server has a login source named PPM of another type ($type): rename or delete it (Панель управления → Идентификация и доступ → Аутентификация), then run git-bootstrap again"
+    [[ "$active" == true ]] \
+      || die "the login source PPM (id $id) is switched off in the Git server: switch it on (Панель управления → Идентификация и доступ → Аутентификация → PPM → «Источник аутентификации активирован» → «Обновить источник аутентификации») or switch sign-in through PPM off in $env_file (PPM_GIT_SSO_ENABLED 0 and up), then run git-bootstrap again"
+    sso_source_compare "$id" || die "could not read the settings of the login source PPM (id $id) in the Git server's database"
+    ((${#sso_update_flags[@]} == 0 && !sso_write_secret)) || sso_restart_pending_mark
+    if ((${#sso_update_flags[@]})); then
+      forgejo_script "$FORGEJO_SSO_SCRIPT" update "$id" "${sso_update_flags[@]}" >/dev/null \
+        || die "the Git server did not update the login source PPM (forgejo admin auth update-oauth; reason above)"
+    fi
+    if ((sso_write_secret)); then
+      sso_source_write_secret "$id" || die "could not write the client secret of the login source PPM (id $id) — run git-bootstrap again"
+    fi
+    if ((${#sso_drift[@]})); then
+      note "login source PPM (id $id) brought in line with $env_file: ${sso_drift[*]}"
+      sso_source_changed=1
+    else
+      note "login source PPM (id $id) already in line with $env_file"
+    fi
+  fi
+  sso_source_id="$id"
+}
+
+# For preflight: the login source «PPM» against ppm.env — ok / missing (run git-bootstrap) / fail (why).
+sso_source_state() {
+  local want listed id type active
+  want="$(env_get PPM_FORGEJO_SSO_SOURCE_ID)"
+  [[ -n "$want" ]] || { echo "missing (run git-bootstrap)"; return 0; }
+  listed="$(sso_source_listed 2>/dev/null)" || { echo "fail (the Git server did not list its login sources)"; return 0; }
+  [[ -n "$listed" ]] || { echo "fail (the Git server has no login source PPM: run git-bootstrap)"; return 0; }
+  read -r id type active <<<"$listed"
+  if [[ ! "$id" =~ ^[0-9]+$ ]]; then echo "fail (unexpected answer of forgejo admin auth list)"
+  elif [[ "$id" != "$want" ]]; then echo "fail (login source PPM has id $id, ppm.env says $want: run git-bootstrap)"
+  elif [[ "$type" != OAuth2 ]]; then echo "fail (the login source PPM is not OpenID Connect)"
+  elif [[ "$active" != true ]]; then echo "fail (the login source PPM is switched off in the Git server)"
+  elif sso_restart_is_pending; then echo "fail (a change of the login source PPM waits for a restart of the Git server: run git-bootstrap)"
+  elif ! sso_source_compare "$id" 2>/dev/null; then echo "fail (its settings could not be read)"
+  elif ((${#sso_drift[@]})); then echo "fail (differs from ppm.env: ${sso_drift[*]} — run git-bootstrap)"
+  else echo ok; fi
+}
+
+# The first full synchronization of code access (accounts, organizations, teams, repositories), right away and in
+# the API container, so the operator sees its result; afterwards beat runs it every 10 minutes. A problem is reported,
+# not fatal: sign-in through PPM is set up either way and the next run repeats the work.
+SSO_SYNC_PY='import json
+from plane.ppm_git import tasks
+from plane.ppm_git.models import PpmForgejoSyncRun
+run_id = tasks.reconcile_forgejo_access()
+run = PpmForgejoSyncRun.objects.filter(pk=run_id).first() if run_id else None
+if run is None:
+    print("status=skipped")
+else:
+    print("status=" + run.status)
+    print("seconds=%d" % max(0, (run.finished_at - run.started_at).total_seconds()))
+    print("counts=" + json.dumps(run.counts or {}, ensure_ascii=False, sort_keys=True))
+    for problem in (run.problems or [])[:5]:
+        print("problem=" + " ".join(str(problem.get("message", "")).split()))
+    print("problems=%d" % len(run.problems or []))'
+sso_first_sync() {
+  local out rc=0 status
+  note "first full synchronization of code access (accounts, organizations, teams) — may take a minute"
+  out="$(dc exec -T api python manage.py shell -v 0 -c "$SSO_SYNC_PY" 2>&1)" || rc=$?
+  status="$(printf '%s\n' "$out" | sed -n 's/^status=//p' | tail -n 1)"
+  case "$rc:$status" in
+    0:ok)
+      echo "ppm-deploy: code access synchronized in $(printf '%s\n' "$out" | sed -n 's/^seconds=//p')s ($(printf '%s\n' "$out" | sed -n 's/^counts=//p')); from now on every 10 minutes and after every change in PPM." ;;
+    0:partial | 0:error)
+      note "WARNING: the first synchronization of code access ended «$status» with $(printf '%s\n' "$out" | sed -n 's/^problems=//p') problem(s):"
+      printf '%s\n' "$out" | sed -n 's/^problem=/  - /p' >&2
+      note "sign-in through PPM is set up; details and «Синхронизировать сейчас» — PPM admin center → «Git-сервер» (RUNBOOK §17.14.9)" ;;
+    0:skipped)
+      note "the synchronization did not start now (another one is running, or the API does not see sign-in through PPM as set up); it runs every 10 minutes by itself — state: PPM admin center → «Git-сервер»" ;;
+    *)
+      printf '%s\n' "$out" | tail -n 5 >&2
+      note "WARNING: the first synchronization of code access could not run (above); sign-in through PPM is set up, and the synchronization repeats every 10 minutes — see logs api" ;;
+  esac
 }
 
 cmd_git_admin() {
   git_require
   forgejo_require_running
+  git_lock
   local creds="$state_dir/forgejo-admin-credentials.txt" password="" rc=0 action out
   if ((git_admin_reset)); then
     action="password reset"
