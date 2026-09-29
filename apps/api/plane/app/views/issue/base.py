@@ -61,6 +61,7 @@ from plane.db.models import (
     ProjectMember,
     UserRecentVisit,
 )
+from plane.ppm_realtime.publish import issue_memberships, publish_issue_event, publish_issue_instances
 from plane.utils.filters import ComplexFilterBackend, IssueFilterSet
 from plane.utils.global_paginator import paginate
 from plane.utils.grouper import (
@@ -782,6 +783,11 @@ class BulkDeleteIssuesEndpoint(BaseAPIView):
 
         total_issues = len(issues)
 
+        # PPM UX2.1: the soft deletes below are queryset updates that send no model signals. Remember the items and
+        # their sprints and directions (whose numbers change) before the links go, announce them after commit.
+        realtime_creators = {issue.id: issue.created_by_id for issue in issues}
+        realtime_cycle_ids, realtime_module_ids = issue_memberships(list(realtime_creators))
+
         # First, delete all related cycle issues
         CycleIssue.objects.filter(issue__in=issues).delete()
 
@@ -790,6 +796,15 @@ class BulkDeleteIssuesEndpoint(BaseAPIView):
 
         # Finally, delete the issues themselves
         issues.delete()
+
+        publish_issue_event(
+            project_id,
+            "deleted",
+            list(realtime_creators),
+            cycle_ids=realtime_cycle_ids,
+            module_ids=realtime_module_ids,
+            visibility=realtime_creators,
+        )
 
         return Response(
             {"message": f"{total_issues} issues were deleted"},
@@ -1179,6 +1194,8 @@ class IssueBulkUpdateDateEndpoint(BaseAPIView):
 
         # Bulk update issues
         Issue.objects.bulk_update(issues_to_update, ["start_date", "target_date"])
+        # PPM UX2.1: bulk_update sends no model signals — one event for the batch after commit.
+        publish_issue_instances("updated", issues_to_update)
 
         return Response({"message": "Issues updated successfully"}, status=status.HTTP_200_OK)
 

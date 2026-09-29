@@ -23,6 +23,7 @@ from plane.app.serializers import (
 from plane.app.views.base import BaseAPIView
 from plane.db.models import Project, ProjectMember, WorkspaceMember, DraftIssue
 from plane.ppm_core.permissions import is_ppm_global_admin
+from plane.ppm_realtime.publish import publish_projects_updated
 from plane.utils.cache import invalidate_cache
 
 from .. import BaseViewSet
@@ -100,6 +101,12 @@ class WorkSpaceMemberViewSet(BaseViewSet):
         # If a user is moved to a guest role he can't have any other role in projects
         if "role" in request.data and int(request.data.get("role")) == 5:
             ProjectMember.objects.filter(workspace__slug=slug, member_id=workspace_member.member_id).update(role=5)
+            # PPM UX2.1: a queryset update sends no model signals — the person's projects re-read access at once.
+            publish_projects_updated(
+                ProjectMember.objects.filter(workspace__slug=slug, member_id=workspace_member.member_id).values_list(
+                    "project_id", flat=True
+                )
+            )
 
         serializer = WorkSpaceMemberSerializer(workspace_member, data=request.data, partial=True)
 
@@ -166,6 +173,12 @@ class WorkSpaceMemberViewSet(BaseViewSet):
 
         workspace_member.is_active = False
         workspace_member.save()
+        # PPM UX2.1: queryset updates send no model signals — the person's event sockets end at once.
+        publish_projects_updated(
+            ProjectMember.objects.filter(workspace__slug=slug, member_id=workspace_member.member_id).values_list(
+                "project_id", flat=True
+            )
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @invalidate_cache(
@@ -219,6 +232,12 @@ class WorkSpaceMemberViewSet(BaseViewSet):
         # # Deactivate the user
         workspace_member.is_active = False
         workspace_member.save()
+        # PPM UX2.1: queryset updates send no model signals — the person's event sockets end at once.
+        publish_projects_updated(
+            ProjectMember.objects.filter(workspace__slug=slug, member_id=workspace_member.member_id).values_list(
+                "project_id", flat=True
+            )
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

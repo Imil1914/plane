@@ -54,6 +54,7 @@ from plane.db.models import (
 )
 from plane.utils.analytics_plot import burndown_plot
 from plane.bgtasks.recent_visited_task import recent_visited_task
+from plane.ppm_realtime.publish import cycle_work_item_ids, publish_issue_event
 from plane.utils.host import base_host
 from plane.utils.cycle_transfer_issues import transfer_cycle_issues
 from .. import BaseAPIView, BaseViewSet
@@ -499,6 +500,8 @@ class CycleViewSet(BaseViewSet):
         )
         # TODO: Soft delete the cycle break the onetoone relationship with cycle issue
         cycle.delete()
+        # PPM UX2.1: the sprint's own event comes from its model signal; its items leave it in a background task.
+        publish_issue_event(project_id, "moved", cycle_issues)
 
         # Delete the user favorite cycle
         UserFavorite.objects.filter(
@@ -602,6 +605,9 @@ class TransferCycleIssueEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # PPM UX2.1: the transfer is a bulk_update without model signals — what it moved is announced after commit.
+        realtime_items_before = cycle_work_item_ids(cycle_id)
+
         # Transfer cycle issues and create progress snapshot
         result = transfer_cycle_issues(
             slug=slug,
@@ -619,6 +625,12 @@ class TransferCycleIssueEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        publish_issue_event(
+            project_id,
+            "moved",
+            [issue_id for issue_id in cycle_work_item_ids(new_cycle_id) if issue_id in realtime_items_before],
+            cycle_ids=[cycle_id, new_cycle_id],
+        )
         return Response({"message": "Success"}, status=status.HTTP_200_OK)
 
 

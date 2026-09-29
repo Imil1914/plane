@@ -23,6 +23,7 @@ from .. import BaseViewSet
 from plane.app.serializers import CycleIssueSerializer
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models import Cycle, CycleIssue, Issue, FileAsset, IssueLink
+from plane.ppm_realtime.publish import publish_issue_event
 from plane.utils.grouper import (
     issue_group_values,
     issue_on_results,
@@ -297,6 +298,14 @@ class CycleIssueViewSet(BaseViewSet):
 
         # Update the cycle issues
         CycleIssue.objects.bulk_update(updated_records, ["cycle_id"], batch_size=100)
+        # PPM UX2.1: bulk_create/bulk_update send no model signals — one event for the batch after commit, with the
+        # sprint the items entered and the sprints they left.
+        publish_issue_event(
+            project_id,
+            "moved",
+            [*new_issues, *(record["issue_id"] for record in update_cycle_issue_activity)],
+            cycle_ids=[cycle_id, *(record["old_cycle_id"] for record in update_cycle_issue_activity)],
+        )
         # Capture Issue Activity
         issue_activity.delay(
             type="cycle.activity.created",
@@ -341,4 +350,6 @@ class CycleIssueViewSet(BaseViewSet):
             origin=base_host(request=request, is_app=True),
         )
         cycle_issue.delete()
+        # PPM UX2.1: a queryset soft delete sends no model signals.
+        publish_issue_event(project_id, "moved", [issue_id], cycle_ids=[cycle_id])
         return Response(status=status.HTTP_204_NO_CONTENT)

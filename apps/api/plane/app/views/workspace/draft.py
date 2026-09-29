@@ -39,6 +39,7 @@ from plane.db.models import (
 )
 from .. import BaseViewSet
 from plane.bgtasks.issue_activities_task import issue_activity
+from plane.ppm_realtime.publish import publish_issue_event
 from plane.utils.issue_filters import issue_filters
 from plane.utils.host import base_host
 
@@ -278,6 +279,13 @@ class WorkspaceDraftIssueViewSet(BaseViewSet):
                         for module in request.data.get("module_ids", [])
                     ],
                     batch_size=10,
+                )
+                # PPM UX2.1: bulk_create sends no model signals — the directions of the new item after commit.
+                publish_issue_event(
+                    draft_issue.project_id,
+                    "moved",
+                    [serializer.data.get("id", None)],
+                    module_ids=request.data.get("module_ids", []),
                 )
                 # Update the activity
                 _ = [

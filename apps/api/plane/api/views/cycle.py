@@ -46,6 +46,7 @@ from plane.db.models import (
     ProjectMember,
     UserFavorite,
 )
+from plane.ppm_realtime.publish import cycle_work_item_ids, publish_issue_event
 from plane.utils.cycle_transfer_issues import transfer_cycle_issues
 from plane.utils.order_queryset import CYCLE_ORDER_BY_ALLOWLIST, ISSUE_ORDER_BY_ALLOWLIST, sanitize_order_by
 from plane.utils.host import base_host
@@ -1041,6 +1042,13 @@ class CycleIssueListCreateAPIEndpoint(BaseAPIView):
 
         # Update the cycle issues
         CycleIssue.objects.bulk_update(updated_records, ["cycle_id"], batch_size=100)
+        # PPM UX2.1: bulk writes send no model signals — one realtime event for the batch after commit.
+        publish_issue_event(
+            project_id,
+            "moved",
+            [*new_issues, *(record["issue_id"] for record in update_cycle_issue_activity)],
+            cycle_ids=[cycle_id, *(record["old_cycle_id"] for record in update_cycle_issue_activity)],
+        )
 
         # Capture Issue Activity
         issue_activity.delay(
@@ -1246,6 +1254,9 @@ class TransferCycleIssueAPIEndpoint(BaseAPIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # PPM UX2.1: the transfer is a bulk_update without model signals — what it moved is announced after commit.
+        realtime_items_before = cycle_work_item_ids(cycle_id)
+
         # Call the utility function to handle the transfer
         result = transfer_cycle_issues(
             slug=slug,
@@ -1258,6 +1269,12 @@ class TransferCycleIssueAPIEndpoint(BaseAPIView):
 
         # Handle the result
         if result.get("success"):
+            publish_issue_event(
+                project_id,
+                "moved",
+                [issue_id for issue_id in cycle_work_item_ids(new_cycle_id) if issue_id in realtime_items_before],
+                cycle_ids=[cycle_id, new_cycle_id],
+            )
             return Response({"message": "Success"}, status=status.HTTP_200_OK)
         else:
             return Response(

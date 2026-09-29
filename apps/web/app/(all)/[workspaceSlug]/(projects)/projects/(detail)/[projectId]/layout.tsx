@@ -11,6 +11,7 @@ import { Header, Row } from "@plane/ui";
 import { cn } from "@plane/utils";
 // components
 import { TabNavigationRoot } from "@/components/navigation/tab-navigation-root";
+import { usePpmRealtimeProjectSync } from "@/components/ppm-realtime/use-ppm-realtime";
 import { AppSidebarToggleButton } from "@/components/sidebar/sidebar-toggle-button";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
@@ -27,6 +28,9 @@ function ProjectLayout({ params }: Route.ComponentProps) {
   const { sidebarCollapsed } = useAppTheme();
   // preferences
   const { preferences: projectPreferences } = useProjectNavigationPreferences();
+  // PPM line U-Web (UX2.1 U6): one realtime subscription for every screen under this project (list/board, card,
+  // cycles/modules, overview) — no-op today unless PPM_REALTIME_EVENTS_ENABLED is on.
+  usePpmRealtimeProjectSync(workspaceSlug, projectId);
 
   return (
     <>

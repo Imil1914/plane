@@ -16,6 +16,7 @@ from django.utils import timezone
 # Module imports
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.db.models import Issue, Project, State
+from plane.ppm_realtime.publish import publish_issue_instances
 from plane.utils.exception_logger import log_exception
 
 
@@ -66,6 +67,8 @@ def archive_old_issues():
                 # Bulk Update the issues and log the activity
                 if issues_to_update:
                     Issue.objects.bulk_update(issues_to_update, ["archived_at"], batch_size=100)
+                    # PPM UX2.1: bulk_update sends no model signals — one event per project and batch.
+                    publish_issue_instances("moved", issues_to_update, with_memberships=True)
                     _ = [
                         issue_activity.delay(
                             type="issue.activity.updated",
@@ -129,6 +132,8 @@ def close_old_issues():
                 # Bulk Update the issues and log the activity
                 if issues_to_update:
                     Issue.objects.bulk_update(issues_to_update, ["state"], batch_size=100)
+                    # PPM UX2.1: bulk_update sends no model signals — one event per project and batch.
+                    publish_issue_instances("updated", issues_to_update, with_memberships=True)
                     [
                         issue_activity.delay(
                             type="issue.activity.updated",

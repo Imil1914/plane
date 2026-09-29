@@ -69,6 +69,15 @@ export type TLiveStatsScheduler = {
   notify: (subjects: readonly TLiveStatsSubject[]) => void;
   /** No panel is watched: no timer, no listener. */
   isIdle: () => boolean;
+  /**
+   * PPM line U-Web (UX2.1 U8, revised in review round 2): while a realtime events channel is live, this overrides the
+   * 30 s poll interval with a much slower one (the channel is best-effort, not a guaranteed-complete stream — bulk,
+   * admin, or public-API writes can bypass the instrumented publish points, per U-API's own review — so the poll
+   * never fully stops, only slows down). `intervalMs` replaces `timings.pollMs` for scheduling; `undefined` restores
+   * the normal cadence. Re-arms the poll timer immediately with the new interval. Does not affect `notify()` or the
+   * tab-return refresh, which keep their normal timings regardless of this override.
+   */
+  setPollIntervalOverride: (intervalMs: number | undefined) => void;
 };
 
 type TEntry = {
@@ -114,6 +123,9 @@ export function createLiveStatsScheduler(
   let changeTimer: unknown;
   let firstChangeAt: number | undefined;
   let pollTimer: unknown;
+  // PPM line U-Web (U8, review round 2): overrides `timings.pollMs` while a realtime channel is live; see
+  // `setPollIntervalOverride`. `undefined` means "use the normal 30s cadence".
+  let pollIntervalOverrideMs: number | undefined;
   let lastReturnAt = Number.NEGATIVE_INFINITY;
   let unsubscribeReturn: (() => void) | undefined;
   let nextSubscriberId = 1;
@@ -175,11 +187,12 @@ export function createLiveStatsScheduler(
   const schedulePoll = () => {
     clearPollTimer();
     if (entries.size === 0 || !env.isVisible()) return;
+    const interval = pollIntervalOverrideMs ?? timings.pollMs;
     pollTimer = env.setTimer(() => {
       pollTimer = undefined;
       if (entries.size > 0 && env.isVisible()) refreshAll("poll");
       schedulePoll();
-    }, timings.pollMs);
+    }, interval);
   };
 
   const handleReturn = () => {
@@ -254,7 +267,14 @@ export function createLiveStatsScheduler(
     changeTimer = env.setTimer(flushChanges, wait);
   };
 
-  return { watch, notify, isIdle: () => entries.size === 0 };
+  const setPollIntervalOverride: TLiveStatsScheduler["setPollIntervalOverride"] = (intervalMs) => {
+    if (pollIntervalOverrideMs === intervalMs) return;
+    pollIntervalOverrideMs = intervalMs;
+    // Re-arms with the new interval; safe with no panels or a hidden tab (`schedulePoll` no-ops then).
+    schedulePoll();
+  };
+
+  return { watch, notify, isIdle: () => entries.size === 0, setPollIntervalOverride };
 }
 
 type TLiveStatsEventTarget = {

@@ -60,6 +60,7 @@ from plane.db.models import (
     Project,
     UserRecentVisit,
 )
+from plane.ppm_realtime.publish import publish_issue_event
 from plane.utils.analytics_plot import burndown_plot
 from plane.utils.timezone_converter import user_timezone_converter
 from plane.bgtasks.webhook_task import model_activity
@@ -742,6 +743,8 @@ class ModuleViewSet(BaseViewSet):
         module.delete()
         # Delete the module issues
         ModuleIssue.objects.filter(module=pk, project_id=project_id).delete()
+        # PPM UX2.1: the direction's own event comes from its model signal; the soft delete of its links sends none.
+        publish_issue_event(project_id, "moved", module_issues)
         # Delete the user favorite module
         UserFavorite.objects.filter(
             user=request.user,

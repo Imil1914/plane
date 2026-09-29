@@ -28,6 +28,7 @@ from plane.db.models import (
     Project,
     CycleIssue,
 )
+from plane.ppm_realtime.publish import publish_issue_event
 from plane.utils.grouper import (
     issue_group_values,
     issue_on_results,
@@ -236,6 +237,8 @@ class ModuleIssueViewSet(BaseViewSet):
             batch_size=10,
             ignore_conflicts=True,
         )
+        # PPM UX2.1: bulk_create sends no model signals — one event for the batch after commit.
+        publish_issue_event(project_id, "moved", issues, module_ids=[module_id])
         # Bulk Update the activity
         _ = [
             issue_activity.delay(
@@ -320,6 +323,8 @@ class ModuleIssueViewSet(BaseViewSet):
             )
             module_issue.delete()
 
+        # PPM UX2.1: bulk_create and queryset soft deletes send no model signals.
+        publish_issue_event(project_id, "moved", [issue_id], module_ids=[*(modules or []), *(removed_modules or [])])
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
@@ -342,4 +347,6 @@ class ModuleIssueViewSet(BaseViewSet):
             origin=base_host(request=request, is_app=True),
         )
         module_issue.delete()
+        # PPM UX2.1: a queryset soft delete sends no model signals.
+        publish_issue_event(project_id, "moved", [issue_id], module_ids=[module_id])
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -13,8 +13,14 @@ from django.db.models.fields.related import OneToOneRel
 # Third party imports
 from celery import shared_task
 
+# Module imports
+from plane.ppm_realtime.batch import in_publication_batch
+
 
 @shared_task
+# PPM UX2.1: the cascade saves every link, assignee and sub-item one by one — their realtime announcements are merged
+# into one message per project, sent when the whole cascade is done.
+@in_publication_batch
 def soft_delete_related_objects(app_label, model_name, instance_pk, using=None):
     """
     Soft delete related objects for a given model instance

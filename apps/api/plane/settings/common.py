@@ -115,6 +115,7 @@ INSTALLED_APPS = [
     "plane.ppm_brain",
     "plane.ppm_canvas",
     "plane.ppm_git",
+    "plane.ppm_realtime",
     "plane.ppm_vault",
     # Third-party things
     "rest_framework",
@@ -214,6 +215,8 @@ PPM_CANVAS_MULTIBOARD_ENABLED = os.environ.get("PPM_CANVAS_MULTIBOARD_ENABLED", 
 PPM_GLOBAL_ADMIN_ENABLED = os.environ.get("PPM_GLOBAL_ADMIN_ENABLED", "1") == "1"
 PPM_ADMIN_CENTER_ENABLED = os.environ.get("PPM_ADMIN_CENTER_ENABLED", "1") == "1"
 PPM_ADMIN_REAUTH_TTL_SECONDS = int(os.environ.get("PPM_ADMIN_REAUTH_TTL_SECONDS", "600"))
+# UX2.1: project events socket /ws/ppm/v1/workspaces/<slug>/events/ and their publication after commit.
+PPM_REALTIME_EVENTS_ENABLED = os.environ.get("PPM_REALTIME_EVENTS_ENABLED", "1") == "1"
 PPM_VAULT_MARKDOWN_MAX_BYTES = int(os.environ.get("PPM_VAULT_MARKDOWN_MAX_BYTES", "1048576"))
 PPM_VAULT_PDF_MAX_BYTES = int(os.environ.get("PPM_VAULT_PDF_MAX_BYTES", os.environ.get("FILE_SIZE_LIMIT", "5242880")))
 PPM_VAULT_STORAGE_ROOT = os.environ.get("PPM_VAULT_STORAGE_ROOT")

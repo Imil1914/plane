@@ -42,6 +42,8 @@ export type TLiveStatsRuntime = {
   /** Work items of these subjects were changed in this tab (only watched subjects are refreshed). */
   notify: (subjects: readonly TLiveStatsSubject[]) => void;
   isIdle: () => boolean;
+  /** PPM line U-Web (U8, review round 2): see `TLiveStatsScheduler.setPollIntervalOverride` — passed straight through. */
+  setPollIntervalOverride: (intervalMs: number | undefined) => void;
 };
 
 const rangeOf = (store: TLiveStatsStore, subject: TLiveStatsSubject) => {
@@ -105,6 +107,7 @@ export function createLiveStatsRuntime(store: TLiveStatsStore, env: TLiveStatsEn
     watch,
     notify: (subjects) => scheduler.notify(subjects),
     isIdle: () => scheduler.isIdle() && !disposeReaction,
+    setPollIntervalOverride: (intervalMs) => scheduler.setPollIntervalOverride(intervalMs),
   };
 }
 
@@ -121,6 +124,30 @@ export function getLiveStatsRuntime(
     runtimes.set(store, runtime);
   }
   return runtime;
+}
+
+/**
+ * PPM line U-Web (UX2.1 U8): called by the realtime events client whenever its connection to the workspace events
+ * socket goes up or down, so line S's own 30 s poll slows down while the channel is live and returns to normal the
+ * moment it is not (disabled, denied, or still reconnecting). Building the runtime here (rather than only reading it)
+ * means a channel that comes up before any sprint/module panel is mounted still leaves the right override for the
+ * panel that watches later. Never throws: the caller is a connection-status callback, not a store action, and a
+ * failure here must not be mistaken for a socket problem — the panels simply keep their existing 30 s poll.
+ *
+ * Review round 2: the poll is never fully suspended, even while the channel is live — the events channel is
+ * best-effort (bulk/admin/public-API writes can bypass the instrumented publish points on the server), so `intervalMs`
+ * is a *slower* fallback rate, not "off". Pass `undefined` for the normal 30 s cadence.
+ */
+export function setLiveStatsPollInterval(
+  store: TLiveStatsStore,
+  intervalMs: number | undefined,
+  createEnv: () => TLiveStatsEnv = createBrowserLiveStatsEnv
+): void {
+  try {
+    getLiveStatsRuntime(store, createEnv).setPollIntervalOverride(intervalMs);
+  } catch {
+    // best effort; line S falls back to its own normal poll cadence if this fails
+  }
 }
 
 /**

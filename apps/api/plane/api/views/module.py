@@ -42,6 +42,7 @@ from plane.db.models import (
 
 from .base import BaseAPIView
 from plane.bgtasks.webhook_task import model_activity
+from plane.ppm_realtime.publish import publish_issue_event
 from plane.utils.host import base_host
 from plane.utils.order_queryset import ISSUE_ORDER_BY_ALLOWLIST, MODULE_ORDER_BY_ALLOWLIST, sanitize_order_by
 from plane.utils.openapi import (
@@ -578,6 +579,8 @@ class ModuleDetailAPIEndpoint(BaseAPIView):
         module.delete()
         # Delete the module issues
         ModuleIssue.objects.filter(module=pk, project_id=project_id).delete()
+        # PPM UX2.1: the direction's own event comes from its model signal; the soft delete of its links sends none.
+        publish_issue_event(project_id, "moved", module_issues)
         # Delete the user favorite module
         UserFavorite.objects.filter(entity_type="module", entity_identifier=pk, project_id=project_id).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -759,6 +762,13 @@ class ModuleIssueListCreateAPIEndpoint(BaseAPIView):
         ModuleIssue.objects.bulk_create(record_to_create, batch_size=10, ignore_conflicts=True)
 
         ModuleIssue.objects.bulk_update(records_to_update, ["module"], batch_size=10)
+        # PPM UX2.1: bulk writes send no model signals — one realtime event for the batch after commit.
+        publish_issue_event(
+            project_id,
+            "moved",
+            list(issues),
+            module_ids=[module_id, *(record["old_module_id"] for record in update_module_issue_activity)],
+        )
 
         # Capture Issue Activity
         issue_activity.delay(

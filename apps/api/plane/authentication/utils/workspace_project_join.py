@@ -95,6 +95,12 @@ def process_workspace_project_invitations(user):
 
         schedule_access_sync(user_ids=[user.id], project_ids=invited_project_ids)
 
+    # PPM UX2.1: new project members without model signals — the projects' event sockets re-read access, overviews
+    # refresh.
+    from plane.ppm_realtime.publish import publish_projects_updated
+
+    publish_projects_updated(invite.project_id for invite in project_member_invites)
+
     # Delete all the invites
     workspace_member_invites.delete()
     project_member_invites.delete()

@@ -168,6 +168,10 @@ class ProjectMemberViewSet(BaseViewSet):
         from plane.ppm_git.forgejo_access import schedule_access_sync
 
         schedule_access_sync(project_ids=[project_id])
+        # PPM UX2.1: the same bulk writes — the project's event sockets re-read access and the overview refreshes.
+        from plane.ppm_realtime.publish import publish_project_event
+
+        publish_project_event(project_id, "project", "updated", [project_id])
 
         project_members = ProjectMember.objects.filter(
             project_id=project_id,

@@ -13,6 +13,7 @@ import { PROFILE_VIEWER_TAB, PROFILE_ADMINS_TAB, EUserPermissions, EUserPermissi
 import { useTranslation } from "@plane/i18n";
 import { AppHeader } from "@/components/core/app-header";
 import { ContentWrapper } from "@/components/core/content-wrapper";
+import { usePpmRealtimeProfileSync } from "@/components/ppm-realtime/use-ppm-realtime";
 import { ProfileSidebar } from "@/components/profile/sidebar";
 // constants
 import { USER_PROFILE_PROJECT_SEGREGATION } from "@plane/constants";
@@ -43,6 +44,9 @@ function UseProfileLayout({ params }: Route.ComponentProps) {
 
   const windowSize = useSize();
   const isSmallerScreen = windowSize[0] >= 768;
+  // PPM line U-Web (UX2.1 U6): "Мои задачи" subscribes every project the user belongs to in this workspace — no-op
+  // today unless PPM_REALTIME_EVENTS_ENABLED is on.
+  usePpmRealtimeProfileSync(workspaceSlug, userId);
 
   const { data: userProjectsData } = useSWR(USER_PROFILE_PROJECT_SEGREGATION(workspaceSlug, userId), () =>
     userService.getUserProfileProjectsSegregation(workspaceSlug, userId)

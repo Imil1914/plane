@@ -24,6 +24,7 @@ from plane.app.serializers import (
 )
 from plane.utils.cache import invalidate_cache
 from plane.bgtasks.issue_activities_task import issue_activity
+from plane.ppm_realtime.publish import publish_issue_event, work_item_ids
 
 
 def generate_random_name(length=10):
@@ -199,6 +200,10 @@ class EstimatePointEndpoint(BaseViewSet):
         estimate_points = EstimatePoint.objects.filter(
             estimate_id=estimate_id, project_id=project_id, workspace__slug=slug
         )
+        # PPM UX2.1: the items that lose this estimate point, read before the queryset update below.
+        realtime_issue_ids = work_item_ids(
+            Issue.objects.filter(project_id=project_id, workspace__slug=slug, estimate_point_id=estimate_point_id)
+        )
         # update all the issues with the new estimate
         if new_estimate_id:
             issues = Issue.objects.filter(
@@ -237,6 +242,9 @@ class EstimatePointEndpoint(BaseViewSet):
                     ),
                     epoch=int(timezone.now().timestamp()),
                 )
+        # PPM UX2.1: their estimates change by a queryset update (or the cascade) without model signals — the items and
+        # the numbers of their sprints and directions after commit.
+        publish_issue_event(project_id, "updated", realtime_issue_ids, with_memberships=True)
 
         # delete the estimate point — scope to this estimate/project/workspace to prevent cross-tenant key manipulation
         old_estimate_point = EstimatePoint.objects.filter(

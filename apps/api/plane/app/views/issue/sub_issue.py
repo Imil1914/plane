@@ -24,6 +24,7 @@ from plane.app.serializers import IssueSerializer
 from plane.app.permissions import ProjectEntityPermission
 from plane.db.models import Issue, IssueLink, FileAsset, CycleIssue, IssueLabel, IssueAssignee, ModuleIssue
 from plane.bgtasks.issue_activities_task import issue_activity
+from plane.ppm_realtime.publish import publish_issue_instances
 from plane.utils.timezone_converter import user_timezone_converter
 from collections import defaultdict
 from plane.utils.host import base_host
@@ -218,6 +219,8 @@ class SubIssuesEndpoint(BaseAPIView):
             sub_issue.parent = parent_issue
 
         _ = Issue.objects.bulk_update(sub_issues, ["parent"], batch_size=10)
+        # PPM UX2.1: bulk_update sends no model signals — the sub-items and the parent (its count) after commit.
+        publish_issue_instances("updated", [parent_issue, *sub_issues])
 
         updated_sub_issues = Issue.issue_objects.filter(id__in=sub_issue_ids).annotate(state_group=F("state__group"))
 

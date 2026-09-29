@@ -41,6 +41,7 @@ from plane.utils.issue_filters import issue_filters
 from plane.utils.order_queryset import order_issue_queryset
 from plane.utils.paginator import GroupedOffsetPaginator, SubGroupedOffsetPaginator
 from plane.app.permissions import allow_permission, ROLE
+from plane.ppm_realtime.publish import publish_issue_instances
 from plane.utils.error_codes import ERROR_CODES
 from plane.utils.host import base_host
 
@@ -339,5 +340,7 @@ class BulkArchiveIssuesEndpoint(BaseAPIView):
             issue.archived_at = timezone.now().date()
             bulk_archive_issues.append(issue)
         Issue.objects.bulk_update(bulk_archive_issues, ["archived_at"])
+        # PPM UX2.1: bulk_update sends no model signals — one event for the batch after commit.
+        publish_issue_instances("moved", bulk_archive_issues, with_memberships=True)
 
         return Response({"archived_at": str(timezone.now().date())}, status=status.HTTP_200_OK)
