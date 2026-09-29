@@ -21,6 +21,19 @@ describe("PPM_REALTIME_EVENTS_ENABLED wiring (U5 web mirror)", () => {
   it(".env.example documents it", () => {
     expect(read("../../.env.example")).toMatch(/^PPM_REALTIME_EVENTS_ENABLED="1"$/m);
   });
+
+  it("Dockerfile.web declares the build ARG/ENV pair, next to the other PPM rollout flags (round 3 addendum)", () => {
+    const dockerfile = read("../../Dockerfile.web");
+    expect(dockerfile).toContain('ARG PPM_REALTIME_EVENTS_ENABLED="1"');
+    expect(dockerfile).toContain("ENV PPM_REALTIME_EVENTS_ENABLED=$PPM_REALTIME_EVENTS_ENABLED");
+    // right after PPM_CANVAS_AUTOMERGE, inside the "PPM: build-time rollout flags" block — not a stray pair elsewhere
+    const automerge = dockerfile.indexOf('ARG PPM_CANVAS_AUTOMERGE="1"');
+    const ours = dockerfile.indexOf('ARG PPM_REALTIME_EVENTS_ENABLED="1"');
+    const telemetry = dockerfile.indexOf("ENV NEXT_TELEMETRY_DISABLED");
+    expect(automerge).toBeGreaterThan(-1);
+    expect(ours).toBeGreaterThan(automerge);
+    expect(ours).toBeLessThan(telemetry);
+  });
 });
 
 describe("project layout subscribes the open project (U6)", () => {
