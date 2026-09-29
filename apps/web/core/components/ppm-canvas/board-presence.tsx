@@ -401,7 +401,14 @@ export function PpmBoardPresence({ presence }: { presence: TPpmBoardPresenceCont
           : "Подключение к совместной доске";
 
   return (
-    <div className="ppm-canvas-presence" data-status={status} aria-label={label} title={label}>
+    <div
+      className="ppm-canvas-presence"
+      data-status={status}
+      // v2 прячет счётчик, когда на доске только вы: инициалы и «1» («● PR 1») читались как «1 пулл-реквест».
+      data-solo={(online && participants.length <= 1) || undefined}
+      aria-label={label}
+      title={label}
+    >
       <span className="ppm-canvas-presence__status" aria-hidden="true" />
       {online && participants.length > 0 ? (
         <span className="ppm-canvas-presence__avatars" aria-hidden="true">
@@ -414,7 +421,7 @@ export function PpmBoardPresence({ presence }: { presence: TPpmBoardPresenceCont
       ) : (
         <Users aria-hidden="true" />
       )}
-      <span>{online ? Math.max(participants.length, 1) : "—"}</span>
+      <span className="ppm-canvas-presence__count">{online ? Math.max(participants.length, 1) : "—"}</span>
     </div>
   );
 }

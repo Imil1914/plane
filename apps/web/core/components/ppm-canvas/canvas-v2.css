@@ -852,3 +852,367 @@
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* C1 · Шапка холста: вкладки-папки (2026-09-28, вариант B). Полоса — цвет доски, сдвинутый на 5 % к тексту (темнее в
+   светлой теме, светлее в тёмной); активная вкладка окрашена цветом доски, без нижней линии и с плавными «юбками»
+   внизу — она продолжается в холст. Подписи вкладок и кнопки справа стоят на одной средней линии; кнопки одной высоты
+   и без рамок, рамку получает только поле «Команды холста». Нижняя линия полосы — inset-тень, чтобы активная вкладка
+   закрывала её своим фоном, а не отрицательным отступом (полоса вкладок прокручивается и обрезала бы его). */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-workspace__header {
+  --ppm-canvas-strip: color-mix(
+    in srgb,
+    var(--ppm-color-board, var(--bg-surface-1)) 95%,
+    var(--ppm-color-text, var(--txt-primary))
+  );
+  gap: 0.25rem;
+  padding: 0.5rem 0.5rem 0 0.5rem;
+  border-bottom: 0;
+  background: var(--ppm-canvas-strip, var(--bg-surface-1));
+  box-shadow: inset 0 -1px 0 var(--ppm-color-border, var(--border-subtle));
+  backdrop-filter: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-board-switcher,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-command-trigger,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-brain-trigger,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-board-copy,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tabs__new {
+  height: var(--ppm-control-height, 2rem);
+  border: 1px solid transparent;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  font-size: var(--ppm-text-ui-size, 0.8125rem);
+  font-weight: 500;
+  transition:
+    background-color var(--ppm-motion-fast, 120ms) ease-out,
+    border-color var(--ppm-motion-fast, 120ms) ease-out,
+    color var(--ppm-motion-fast, 120ms) ease-out;
+}
+
+/* Проект ▾ — открывает список досок. Имя доски не повторяется: оно во вкладке (на узком экране — наоборот). */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-board-switcher {
+  gap: 0.25rem;
+  padding: 0 0.375rem 0 0.5rem;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  background: transparent;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-board-switcher > span {
+  display: inline;
+  max-width: 14rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-board-switcher > strong,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-board-switcher > svg:first-of-type {
+  display: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-board-switcher > svg:last-of-type {
+  color: var(--ppm-color-icon-subtle, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-board-switcher:hover,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-board-switcher[aria-expanded="true"],
+:where(html[data-ppm-design="v2"]) .ppm-canvas-board-copy:hover,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tabs__new:hover {
+  border-color: transparent;
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-alpha-hover, var(--bg-layer-1-hover));
+}
+
+/* Полоса вкладок: высотой во всю шапку (ниже отступа сверху), по ширине — по вкладкам, «+» сразу за последней.
+   Боковой отступ — место под «юбки» крайней вкладки, иначе прокрутка их обрежет. */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tabs {
+  align-self: stretch;
+  flex: 0 1 auto;
+  gap: 0.125rem;
+  padding-inline: 0.375rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab {
+  position: relative;
+  min-width: 4rem;
+  max-width: 13rem;
+  height: var(--ppm-control-height, 2rem);
+  border: 1px solid transparent;
+  border-radius: var(--ppm-radius-sm, 0.375rem);
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  background: transparent;
+  box-shadow: none;
+  transition:
+    background-color var(--ppm-motion-fast, 120ms) ease-out,
+    color var(--ppm-motion-fast, 120ms) ease-out;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab:hover {
+  border-color: transparent;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  background: var(--ppm-color-alpha-hover, var(--bg-layer-1-hover));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab[data-active] {
+  align-self: stretch;
+  flex-shrink: 0;
+  height: auto;
+  border-color: var(--ppm-color-border, var(--border-subtle));
+  border-bottom-width: 0;
+  border-radius: var(--ppm-radius-md, 0.5rem) var(--ppm-radius-md, 0.5rem) 0 0;
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-board, var(--bg-surface-1));
+  box-shadow: none;
+}
+
+/* «Юбки»: вогнутые уголки у основания активной вкладки. Центр круга — во внешнем верхнем углу уголка; внутри —
+   полоса, кольцо 1 px на радиусе 5,5 px — линия, снаружи — цвет доски. Уголок (от края рамки, left/right: -6px от
+   padding box) заходит на 1 px под боковую рамку: сверху кольцо продолжает её, снизу — нижнюю линию полосы. */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab[data-active]::before,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab[data-active]::after {
+  position: absolute;
+  bottom: 0;
+  width: 6px;
+  height: 6px;
+  content: "";
+  pointer-events: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab[data-active]::before {
+  left: -6px;
+  background: radial-gradient(
+    circle at 0 0,
+    transparent 4.75px,
+    var(--ppm-color-border, var(--border-subtle)) 5.25px,
+    var(--ppm-color-border, var(--border-subtle)) 5.75px,
+    var(--ppm-color-board, var(--bg-surface-1)) 6.25px
+  );
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab[data-active]::after {
+  right: -6px;
+  background: radial-gradient(
+    circle at 100% 0,
+    transparent 4.75px,
+    var(--ppm-color-border, var(--border-subtle)) 5.25px,
+    var(--ppm-color-border, var(--border-subtle)) 5.75px,
+    var(--ppm-color-board, var(--bg-surface-1)) 6.25px
+  );
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab > button:first-child {
+  gap: 0.375rem;
+  padding: 0 0.25rem 0 0.75rem;
+  font-size: var(--ppm-text-ui-size, 0.8125rem);
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab > button:only-child {
+  padding-right: 0.75rem;
+}
+
+/* Одно кольцо фокуса на всю вкладку вместо двух кусков на подписи и крестике; у крестика — своё. */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab > button:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab:has(> button:first-child:focus-visible) {
+  outline: 2px solid var(--ppm-color-focus, var(--border-accent-strong));
+  outline-offset: -2px;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab > .ppm-canvas-tab__close:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--ppm-color-focus, var(--border-accent-strong));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab__close {
+  width: 1.375rem;
+  height: 1.375rem;
+  margin-right: 0.375rem;
+  border-radius: var(--ppm-radius-xs, 0.25rem);
+  color: var(--ppm-color-icon-subtle, var(--txt-tertiary));
+  opacity: 0;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab[data-active] .ppm-canvas-tab__close,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab:hover .ppm-canvas-tab__close,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab:focus-within .ppm-canvas-tab__close {
+  opacity: 1;
+}
+
+/* Неактивная вкладка не держит место под крестик: он появляется поверх конца подписи, подпись под ним растворяется.
+   Так вкладки не пустеют справа и не прыгают по ширине при наведении; у активной крестик стоит на своём месте. */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab:not([data-active]) > button:first-child {
+  padding-right: 0.75rem;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab:not([data-active]) .ppm-canvas-tab__close {
+  position: absolute;
+  top: 50%;
+  right: 0.3125rem;
+  margin: 0;
+  translate: 0 -50%;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab:not([data-active]):hover > button:first-child,
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab:not([data-active]):focus-within > button:first-child {
+  mask-image: linear-gradient(to left, transparent 1.75rem, #000 2.75rem);
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tab__close:hover {
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-alpha-active, var(--bg-layer-2));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tabs__new {
+  width: var(--ppm-control-height-sm, 1.75rem);
+  height: var(--ppm-control-height-sm, 1.75rem);
+  margin-left: -0.25rem;
+  color: var(--ppm-color-icon-subtle, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-tabs__new svg {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+/* Справа: поле «Команды холста ⌘K», кто на доске, ссылка на доску, «Найти в проекте». */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-command-trigger {
+  min-width: 13rem;
+  gap: 0.5rem;
+  margin-right: 0.25rem;
+  padding: 0 0.3125rem 0 0.625rem;
+  border-color: var(--ppm-color-border, var(--border-subtle));
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  background: var(--ppm-color-layer-1, var(--bg-layer-1));
+  font-weight: 400;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-command-trigger > span {
+  flex: 1;
+  text-align: left;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-command-trigger:hover {
+  border-color: var(--ppm-color-border-strong, var(--border-strong));
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  background: var(--ppm-color-layer-1, var(--bg-layer-1));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-command-trigger kbd {
+  padding: 0 0.3125rem;
+  border-color: var(--ppm-color-border, var(--border-subtle));
+  border-radius: var(--ppm-radius-xs, 0.25rem);
+  color: var(--ppm-color-text-muted, var(--txt-tertiary));
+  background: transparent;
+  font-size: 0.6875rem;
+  line-height: 1.125rem;
+}
+
+/* Кто на доске: аватары со статусом-точкой на первом; число — только когда вас больше одного. */
+:where(html[data-ppm-design="v2"]) .ppm-canvas-presence {
+  position: relative;
+  height: var(--ppm-control-height, 2rem);
+  gap: 0.25rem;
+  padding: 0 0.25rem;
+  border: 0;
+  color: var(--ppm-color-text-secondary, var(--txt-secondary));
+  background: transparent;
+  font-size: var(--ppm-text-meta-size, 0.75rem);
+  font-weight: 500;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-presence__avatars {
+  padding-left: 0;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-presence__avatars > span {
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-left: -0.375rem;
+  border-color: var(--ppm-canvas-strip, var(--bg-surface-1));
+  color: var(--ppm-color-text, var(--txt-primary));
+  background: var(--ppm-color-layer-3, var(--bg-layer-2));
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-presence__avatars > span:first-child {
+  margin-left: 0;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-presence[data-status="online"] .ppm-canvas-presence__status {
+  position: absolute;
+  top: calc(50% + 0.25rem);
+  left: 1.25rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  box-shadow: 0 0 0 2px var(--ppm-canvas-strip, var(--bg-surface-1));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-presence[data-solo] .ppm-canvas-presence__count {
+  display: none;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-board-copy {
+  width: var(--ppm-control-height, 2rem);
+  color: var(--ppm-color-icon-subtle, var(--txt-tertiary));
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-brain-trigger {
+  gap: 0.375rem;
+  padding: 0 0.625rem;
+  color: var(--ppm-color-accent-text, var(--txt-accent-primary));
+  background: transparent;
+}
+
+:where(html[data-ppm-design="v2"]) .ppm-canvas-brain-trigger:hover {
+  border-color: transparent;
+  color: var(--ppm-color-accent-text-hover, var(--txt-accent-primary));
+  background: color-mix(in srgb, var(--ppm-color-accent, var(--bg-accent-primary)) 12%, transparent);
+}
+
+/* До 1200 px поле команд сворачивается в «лупа ⌘K» (подпись — в aria-label): место отдаётся вкладкам. */
+@media (max-width: 1200px) {
+  :where(html[data-ppm-design="v2"]) .ppm-canvas-command-trigger {
+    min-width: 0;
+    margin-right: 0;
+  }
+
+  :where(html[data-ppm-design="v2"]) .ppm-canvas-command-trigger > span {
+    display: none;
+  }
+}
+
+@media (max-width: 980px) {
+  :where(html[data-ppm-design="v2"]) .ppm-canvas-board-switcher > span {
+    display: inline;
+    max-width: 8rem;
+  }
+}
+
+/* Узко: вкладок нет — в «Проект ▾» снова видно имя доски, а не проекта. */
+@media (max-width: 680px) {
+  :where(html[data-ppm-design="v2"]) .ppm-canvas-workspace__header {
+    padding: 0 0.375rem;
+  }
+
+  :where(html[data-ppm-design="v2"]) .ppm-canvas-board-switcher > span {
+    display: none;
+  }
+
+  :where(html[data-ppm-design="v2"]) .ppm-canvas-board-switcher > strong {
+    display: inline;
+    max-width: 8rem;
+  }
+
+  :where(html[data-ppm-design="v2"]) .ppm-canvas-command-trigger,
+  :where(html[data-ppm-design="v2"]) .ppm-canvas-brain-trigger {
+    width: var(--ppm-control-height, 2rem);
+    justify-content: center;
+    padding: 0;
+  }
+
+  /* Аватаров здесь нет (canvas.css) — точка статуса возвращается в строку, а не висит над соседней кнопкой. */
+  :where(html[data-ppm-design="v2"]) .ppm-canvas-presence[data-status="online"] .ppm-canvas-presence__status {
+    position: static;
+    box-shadow: none;
+  }
+}

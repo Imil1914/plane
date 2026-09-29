@@ -14,12 +14,14 @@ import {
   ArrowDown,
   ArrowUp,
   BrainCircuit,
+  Check,
   ChevronDown,
   ChevronRight,
   CircleDot,
   Copy,
   Focus,
   Frame,
+  Link2,
   LoaderCircle,
   LockKeyhole,
   Minus,
@@ -297,6 +299,18 @@ export default function PpmCanvasWorkspace({
       window.history.replaceState(window.history.state, "", url);
     }
   }, [activeBoardId, boardTabScope, boardTabScopeKey, loadedBoardTabScopeKey, loading, openBoardIds]);
+
+  // Полоса вкладок прокручивается: активная вкладка (с крестиком и «юбками» v2) всегда целиком в поле зрения.
+  useEffect(() => {
+    const tab = activeBoardId ? boardTabRefs.current[activeBoardId]?.parentElement : undefined;
+    const list = tab?.parentElement;
+    if (!tab || !list || list.scrollWidth <= list.clientWidth) return;
+    const inset = 6;
+    const tabBox = tab.getBoundingClientRect();
+    const listBox = list.getBoundingClientRect();
+    if (tabBox.left < listBox.left + inset) list.scrollLeft -= listBox.left + inset - tabBox.left;
+    else if (tabBox.right > listBox.right - inset) list.scrollLeft += tabBox.right - (listBox.right - inset);
+  }, [activeBoardId, loading, openBoardIds]);
 
   useEffect(() => {
     if (!capabilities.manage_canvas || !showArchived) return;
@@ -900,24 +914,15 @@ export default function PpmCanvasWorkspace({
           className="ppm-canvas-board-switcher"
           aria-label={`${projectName}: ${activeBoard.name}`}
           aria-expanded={boardMenuOpen}
+          title={ppmT("canvas.boards")}
           onClick={() => setBoardMenuOpen((current) => !current)}
         >
           <span>{projectName}</span>
           <ChevronRight aria-hidden="true" />
+          {/* v2: имя доски уже во вкладке, здесь его видно только на узком экране, где вкладок нет. */}
           <strong>{activeBoard.name}</strong>
           <ChevronDown aria-hidden="true" />
         </button>
-        {designV2 && (
-          <button
-            type="button"
-            className="ppm-canvas-board-copy"
-            aria-label={ppmT(boardLinkCopied ? "canvas.board_link_copied" : "canvas.copy_board_link")}
-            title={ppmT(boardLinkCopied ? "canvas.board_link_copied" : "canvas.copy_board_link")}
-            onClick={() => void copyBoardLink()}
-          >
-            <Copy aria-hidden="true" />
-          </button>
-        )}
         <div
           className="ppm-canvas-tabs"
           role="tablist"
@@ -987,6 +992,17 @@ export default function PpmCanvasWorkspace({
           <kbd>{CANVAS_COMMAND_SHORTCUT}</kbd>
         </button>
         <PpmBoardPresence presence={presence} />
+        {designV2 && (
+          <button
+            type="button"
+            className="ppm-canvas-board-copy"
+            aria-label={ppmT(boardLinkCopied ? "canvas.board_link_copied" : "canvas.copy_board_link")}
+            title={ppmT(boardLinkCopied ? "canvas.board_link_copied" : "canvas.copy_board_link")}
+            onClick={() => void copyBoardLink()}
+          >
+            {boardLinkCopied ? <Check aria-hidden="true" /> : <Link2 aria-hidden="true" />}
+          </button>
+        )}
         <button
           ref={brainTriggerRef}
           type="button"
