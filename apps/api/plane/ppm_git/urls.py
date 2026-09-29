@@ -1,6 +1,8 @@
 from django.urls import path
 
 from .views import (
+    PpmForgejoAccessStatusView,
+    PpmForgejoAccessSyncView,
     PpmForgejoRepositoriesView,
     PpmForgejoWebhookView,
     PpmGitCodeIndexPolicyView,
@@ -33,6 +35,9 @@ urlpatterns = [
     path("git/github/webhook/", PpmGitHubWebhookView.as_view(), name="ppm-github-webhook"),
     # G2.1: the system webhook of PPM's own Git server (Forgejo calls http://api:8000/api/ppm/v1/git/forgejo/webhook/).
     path("git/forgejo/webhook/", PpmForgejoWebhookView.as_view(), name="ppm-forgejo-webhook"),
+    # G2.2 R18–R19: the «Git-сервер» tab of the admin centre (PPM global administrators only).
+    path("git/forgejo/access/status/", PpmForgejoAccessStatusView.as_view(), name="ppm-forgejo-access-status"),
+    path("git/forgejo/access/sync/", PpmForgejoAccessSyncView.as_view(), name="ppm-forgejo-access-sync"),
     path(PROJECT, PpmGitOverviewView.as_view(), name="ppm-project-git"),
     path(
         f"{PROJECT}providers/github/start/",

@@ -190,6 +190,8 @@ def test_member_links_work_item_guest_is_read_only_and_outsider_is_denied(api_cl
         "manage_write_actions": True,
         # G2.1 (HTTP contract of «Код»): only a PPM global administrator manages PPM's own Git server.
         "manage_git_server": False,
+        # G2.2 R17: a member never connects repositories of the Git server (a project administrator may, with SSO).
+        "connect_git_server_repositories": False,
     }
     assert member_repo_write.status_code == status.HTTP_403_FORBIDDEN
     assert linked.status_code == status.HTTP_201_CREATED

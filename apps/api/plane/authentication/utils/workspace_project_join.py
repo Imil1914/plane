@@ -86,6 +86,15 @@ def process_workspace_project_invitations(user):
         ignore_conflicts=True,
     )
 
+    # G2.2 R16: bulk writes send no model signals — code access on PPM's Git server follows the new project
+    # memberships (after the commit, ≈5 s later; a no-op unless single sign-on is configured). Only when there were
+    # invitations to projects: a sign-in without them changes no team.
+    invited_project_ids = [invite.project_id for invite in project_member_invites if invite.project_id]
+    if invited_project_ids:
+        from plane.ppm_git.forgejo_access import schedule_access_sync
+
+        schedule_access_sync(user_ids=[user.id], project_ids=invited_project_ids)
+
     # Delete all the invites
     workspace_member_invites.delete()
     project_member_invites.delete()

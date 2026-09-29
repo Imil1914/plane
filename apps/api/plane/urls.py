@@ -15,6 +15,12 @@ from drf_spectacular.views import (
 
 handler404 = "plane.app.views.error_404.custom_404_view"
 
+# G2.2: PPM's OpenID Connect provider for its Git server — mounted only where django-oauth-toolkit is installed
+# (plane.ppm_oidc is an installed app then); PPM_GIT_SSO_ENABLED is checked by its views (404 while off).
+ppm_oidc_urlpatterns = (
+    [path("auth/oidc/", include("plane.ppm_oidc.urls"))] if apps.is_installed("plane.ppm_oidc") else []
+)
+
 urlpatterns = [
     path("api/", include("plane.app.urls")),
     path("api/public/", include("plane.space.urls")),
@@ -25,6 +31,7 @@ urlpatterns = [
     path("api/ppm/v1/", include("plane.ppm_canvas.urls")),
     path("api/ppm/v1/", include("plane.ppm_git.urls")),
     path("api/ppm/v1/", include("plane.ppm_vault.urls")),
+    *ppm_oidc_urlpatterns,
     path("auth/", include("plane.authentication.urls")),
     path("", include("plane.web.urls")),
 ]

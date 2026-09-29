@@ -163,6 +163,12 @@ class ProjectMemberViewSet(BaseViewSet):
 
         _ = ProjectUserProperty.objects.bulk_create(bulk_issue_props, batch_size=10, ignore_conflicts=True)
 
+        # G2.2 R16: bulk writes send no model signals — code access on PPM's Git server follows the project's members
+        # (after the commit, ≈5 s later; a no-op unless single sign-on is configured).
+        from plane.ppm_git.forgejo_access import schedule_access_sync
+
+        schedule_access_sync(project_ids=[project_id])
+
         project_members = ProjectMember.objects.filter(
             project_id=project_id,
             member_id__in=[member.get("member_id") for member in members],

@@ -4,6 +4,7 @@ from django.utils import timezone
 
 from .models import PpmGitConnection, PpmGitConnectionStatus, PpmGitDelivery, PpmGitDeliveryStatus
 from .code_indexing import synchronize_repository_code
+from .forgejo_access import forgejo_sso_is_configured, run_access_sync, run_full_reconcile
 from .services import PpmGitError
 from .provider_services import SYNC_HALT_KEY, process_delivery, purge_old_deliveries, synchronize_connection
 from .providers.base import PpmGitProviderError, PpmGitProviderRateLimited
@@ -86,3 +87,24 @@ def reconcile_active_git_connections():
 
     # G2.1 A2 fix round 1: handled receipts older than 30 days go (every provider; nothing cleaned them before).
     purge_old_deliveries(now=now)
+
+
+@shared_task
+def sync_forgejo_access_task(scope=None):
+    """G2.2 R16: the delayed synchronization of code access on PPM's Git server — ``scope`` plus the people, projects
+    and workspaces pending in the cache. No-op without single sign-on. Forgejo errors are recorded on the run and the
+    scope is retried later (``forgejo_access.run_access_sync``): the task itself never fails the queue for them."""
+    if not forgejo_sso_is_configured():
+        return None
+    run = run_access_sync(scope or {})
+    return str(run.id) if run is not None else None
+
+
+@shared_task
+def reconcile_forgejo_access():
+    """G2.2 R16: the full reconciliation of code access on PPM's Git server (beat ``ppm-git-forgejo-access-reconcile``,
+    every 10 minutes). No-op without single sign-on; one at a time (a cache lock)."""
+    if not forgejo_sso_is_configured():
+        return None
+    run = run_full_reconcile()
+    return str(run.id) if run is not None else None

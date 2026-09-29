@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime, timedelta, timezone as datetime_timezone
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import status as http_status
@@ -13,7 +14,11 @@ from rest_framework import status as http_status
 from plane.db.models import Issue, Project, User
 from plane.ppm_core.permissions import PpmProjectAccess
 
+from .forgejo_access import forgejo_sso_is_configured, forgejo_username_for
+from .forgejo_admin import ForgejoAdminClient
 from .models import (
+    PpmForgejoAccount,
+    PpmForgejoOrganization,
     PpmGitCodeIndexPolicy,
     PpmGitConnection,
     PpmGitConnectionStatus,
@@ -43,6 +48,11 @@ from .providers import (
     github_app_is_configured,
 )
 from .providers.base import REPOSITORY_MOVED_CODES, PpmGitProviderError, PpmGitProviderRateLimited
+from .providers.forgejo import (
+    PAGE_SIZE as FORGEJO_PAGE_SIZE,
+    REQUEST_TIMEOUT as FORGEJO_REQUEST_TIMEOUT,
+    normalize_forgejo_repository,
+)
 from .services import (
     PpmGitError,
     create_repository,
@@ -90,6 +100,30 @@ DELIVERY_PURGE_BATCH = 1000
 # What a receipt of a repository PPM does not follow keeps (fix round 1): the system webhook of the Git server sends
 # every repository of the server, and PPM stores none of their content.
 UNFOLLOWED_DELIVERY_KEYS = ("event", "action", "installation_id", "repository_id")
+# G2.2: the sign-in source of PPM on the Git server is named exactly this (plan «G2.2»): it is part of the button text,
+# of the redirect URI registered in PPM and of the one-click sign-in link `/user/oauth2/PPM`.
+FORGEJO_SSO_SOURCE_NAME = "PPM"
+# G2.2 R17: one page of a project administrator's connect dialog (their listing is read whole and paged here).
+FORGEJO_LISTING_PAGE_SIZE = FORGEJO_PAGE_SIZE
+# The person's listing is read as that person at most this many pages (of 50: 1 000 repositories) and kept this many
+# seconds per person — searching and paging the dialog do not ask the Git server again. A connect never uses it.
+FORGEJO_LISTING_MAX_PAGES = 20
+FORGEJO_LISTING_CACHE_SECONDS = 60
+FORGEJO_LISTING_CACHE_PREFIX = "ppm:git:forgejo-administered:"
+FORGEJO_TOO_MANY_REPOSITORIES = (
+    "FORGEJO_TOO_MANY_REPOSITORIES",
+    "На Git-сервере вам доступно слишком много репозиториев — список не показать. Попросите администратора PPM "
+    "подключить нужный репозиторий.",
+)
+FORGEJO_ACCOUNT_REQUIRED = (
+    "FORGEJO_ACCOUNT_REQUIRED",
+    "Сначала войдите на Git-сервер кнопкой «Войти через PPM» — здесь появятся ваши репозитории.",
+)
+FORGEJO_NOT_ADMINISTERED = (
+    "GIT_PERMISSION_DENIED",
+    "Подключить можно только репозиторий организации пространства, где у вас права администратора на Git-сервере.",
+)
+FORGEJO_REPOSITORY_NOT_FOUND = ("GIT_REPOSITORY_NOT_FOUND", "Репозиторий не найден на Git-сервере.")
 
 
 def sync_halted(connection):
@@ -128,11 +162,24 @@ def provider_summary():
     }
 
 
-def providers_summary():
-    """G2.1 R9: which Git providers this PPM is set up for — never a secret (the token and the webhook secret stay)."""
+def providers_summary(*, user=None):
+    """G2.1 R9: which Git providers this PPM is set up for — never a secret (the token and the webhook secret stay).
+
+    G2.2: single sign-on on PPM's Git server, the viewer's name there and the one-click sign-in link. The name comes
+    from PPM's own record (``PpmForgejoAccount``): the overview never asks the Git server, and without single sign-on no
+    access table is read at all.
+    """
+    public_url = forgejo_public_url()
+    sso = forgejo_sso_is_configured()
     return {
         "github": {"configured": github_app_is_configured()},
-        "forgejo": {"configured": forgejo_is_configured(), "public_url": forgejo_public_url() or None},
+        "forgejo": {
+            "configured": forgejo_is_configured(),
+            "public_url": public_url or None,
+            "sso_enabled": sso,
+            "username": forgejo_username_for(user) if sso and user is not None else None,
+            "sso_login_url": f"{public_url}/user/oauth2/{FORGEJO_SSO_SOURCE_NAME}" if sso and public_url else None,
+        },
     }
 
 
@@ -151,6 +198,17 @@ def list_forgejo_repositories(*, workspace_id, project_id, search="", page=1, cl
         )
     except PpmGitProviderError as exc:
         raise _provider_error(exc) from exc
+    return _forgejo_repository_page(
+        answer["items"],
+        workspace_id=workspace_id,
+        project_id=project_id,
+        page=answer["page"],
+        has_next=answer["has_next"],
+    )
+
+
+def _forgejo_repository_page(items, *, workspace_id, project_id, page, has_next):
+    """One page of the connect dialog (G2.1 shape), each repository marked when it is already connected here."""
     connections = {
         connection.provider_repository_id: connection
         for connection in PpmGitConnection.objects.select_related("repository").filter(
@@ -180,11 +238,143 @@ def list_forgejo_repositories(*, workspace_id, project_id, search="", page=1, cl
                     full_name=item["full_name"],
                 ),
             }
-            for item in answer["items"]
+            for item in items
         ],
-        "page": answer["page"],
-        "has_next": answer["has_next"],
+        "page": page,
+        "has_next": has_next,
     }
+
+
+# --- G2.2 R17: a project administrator connects the repositories they administer on the Git server --------------------
+
+
+def list_administered_forgejo_repositories(*, user, workspace_id, project_id, search="", page=1, client=None):
+    """The connect dialog of a project administrator (single sign-on): the repositories of the workspace's organization
+    their Git server account administers — created by them (Forgejo makes the creator of an organization repository its
+    admin collaborator) or reached through their ``<KEY>-admin`` team. G2.1 shape; filtered, searched by name, sorted
+    and paged here from the person's listing (``_administered_repositories``: at most 20 pages, kept 60 s)."""
+    _require_forgejo_configured()
+    query = search.strip()[:FORGEJO_SEARCH_MAX_LENGTH].casefold() if isinstance(search, str) else ""
+    page_number = _page_number(page)
+    username, organization = _forgejo_person(user=user, workspace_id=workspace_id)
+    items = []
+    if organization is not None:
+        items = [
+            item
+            for item in _administered_repositories(user=user, username=username, client=client)
+            if item["owner"].casefold() == organization.casefold() and (not query or query in item["name"].casefold())
+        ]
+    items.sort(key=lambda item: (item["full_name"].casefold(), item["provider_repository_id"]))
+    start = (page_number - 1) * FORGEJO_LISTING_PAGE_SIZE
+    return _forgejo_repository_page(
+        items[start : start + FORGEJO_LISTING_PAGE_SIZE],
+        workspace_id=workspace_id,
+        project_id=project_id,
+        page=page_number,
+        has_next=start + FORGEJO_LISTING_PAGE_SIZE < len(items),
+    )
+
+
+def require_administered_forgejo_repository(*, user, workspace_id, provider_repository_id, client=None):
+    """Before a project administrator connects a repository, the right is checked on the Git server itself — never taken
+    from the client or from the dialog's cached listing: the repository by id (the service account sees every one) and
+    the person's permission on it (``…/collaborators/{name}/permission``, teams included). No access — «not found»
+    (404, as a missing one); read or write only, or a repository outside the workspace's organization — refused (403);
+    admin (or owner) of a repository of the organization — allowed. Neither refusal names the repository."""
+    _require_forgejo_configured()
+    repository_id = _forgejo_repository_id(provider_repository_id)
+    username, organization = _forgejo_person(user=user, workspace_id=workspace_id)
+    client = client or ForgejoAdminClient()
+    try:
+        repository = client.get_repository(repository_id)
+        permission = "none" if repository is None else client.repository_permission(repository["full_name"], username)
+    except PpmGitProviderError as exc:
+        if exc.code == "GIT_PROVIDER_NOT_FOUND":
+            # The repository was just found by id: it is the person's account that is gone on the Git server (deleted
+            # or renamed there) — the next sign-in brings it back.
+            raise PpmGitError(*FORGEJO_ACCOUNT_REQUIRED) from exc
+        raise _provider_error(exc) from exc
+    if permission not in {"read", "write", "admin", "owner"}:
+        raise PpmGitError(*FORGEJO_REPOSITORY_NOT_FOUND)
+    in_organization = organization is not None and repository["owner"].casefold() == organization.casefold()
+    if not in_organization or permission not in {"admin", "owner"}:
+        raise PpmGitError(*FORGEJO_NOT_ADMINISTERED)
+
+
+def _forgejo_person(*, user, workspace_id):
+    """The person's name on the Git server (409 ``FORGEJO_ACCOUNT_REQUIRED`` before their first sign-in there) and the
+    name of the workspace's organization (None until the access engine created or adopted it)."""
+    username = PpmForgejoAccount.objects.filter(user_id=user.id).values_list("username", flat=True).first()
+    if username is None:
+        raise PpmGitError(*FORGEJO_ACCOUNT_REQUIRED)
+    organization = (
+        PpmForgejoOrganization.objects.filter(workspace_id=workspace_id).values_list("name", flat=True).first()
+    )
+    return username, organization
+
+
+class _ListingPages:
+    """``ForgejoAdminClient.request_timeout`` for the dialog's listing — the client's hook that gives the timeout of the
+    next request or raises to stop before it: the usual timeouts, and no page past the limit."""
+
+    def __init__(self, pages):
+        self.left = pages
+
+    def __call__(self):
+        if self.left <= 0:
+            raise PpmGitProviderError(*FORGEJO_TOO_MANY_REPOSITORIES)
+        self.left -= 1
+        return FORGEJO_REQUEST_TIMEOUT
+
+
+def _administered_repositories(*, user, username, client=None):
+    """Every repository the person administers on the Git server (any owner), as the dialog lists it. Read as that
+    person (admin sudo — ``ForgejoAdminClient.list_repositories_as``, at most ``FORGEJO_LISTING_MAX_PAGES`` pages) and
+    kept ``FORGEJO_LISTING_CACHE_SECONDS`` per person, so searching and paging the dialog do not ask the Git server
+    again; a repository created a moment ago shows up within that minute. Failures are not kept."""
+    key = f"{FORGEJO_LISTING_CACHE_PREFIX}{user.id}:{username.casefold()}"
+    cached = cache.get(key)
+    if isinstance(cached, list):
+        return cached
+    client = client or ForgejoAdminClient()
+    client.request_timeout = _ListingPages(FORGEJO_LISTING_MAX_PAGES)
+    try:
+        payloads = client.list_repositories_as(username)
+    except PpmGitProviderError as exc:
+        if exc.code == "GIT_PROVIDER_NOT_FOUND":
+            # The account is gone on the Git server (deleted or renamed there): the next sign-in brings it back.
+            raise PpmGitError(*FORGEJO_ACCOUNT_REQUIRED) from exc
+        raise _provider_error(exc) from exc
+    items = [
+        _listed_forgejo_repository(payload)
+        for payload in payloads
+        if isinstance(payload.get("permissions"), dict) and payload["permissions"].get("admin") is True
+    ]
+    cache.set(key, items, timeout=FORGEJO_LISTING_CACHE_SECONDS)
+    return items
+
+
+def _listed_forgejo_repository(payload):
+    """A repository of the person's listing as ``ForgejoClient.search_repositories`` lists it for G2.1."""
+    try:
+        repository = normalize_forgejo_repository(payload)
+    except PpmGitProviderError as exc:
+        raise _provider_error(exc) from exc
+    return {
+        **repository,
+        "description": _clean_text(payload.get("description"), maximum=2048),
+        "private": payload.get("private") is True,
+    }
+
+
+def _forgejo_repository_id(value):
+    try:
+        repository_id = int(value)
+    except (TypeError, ValueError) as exc:
+        raise PpmGitError("GIT_REPOSITORY_INVALID", "Выберите репозиторий Git-сервера.") from exc
+    if repository_id <= 0:
+        raise PpmGitError("GIT_REPOSITORY_INVALID", "Выберите репозиторий Git-сервера.")
+    return repository_id
 
 
 def forgejo_connection_is_current(connection, *, full_name):
@@ -204,7 +394,9 @@ def forgejo_connection_is_current(connection, *, full_name):
 
 
 def connect_forgejo_repository(*, workspace_id, project_id, provider_repository_id, user_id, client=None):
-    """G2.1 R7: connect a repository of PPM's Git server to the project (the view checks ``manage_git_server``).
+    """G2.1 R7: connect a repository of PPM's Git server to the project (the view checks
+    ``connect_git_server_repositories``, and for a project administrator — G2.2 R17 — also
+    ``require_administered_forgejo_repository``).
 
     The project's Forgejo installation row (ppm-bot, installation id 1), the repository — matched with a manual G0.1
     record by its canonical URL, as GitHub does — and the active connection. A connection that is not current
@@ -212,12 +404,7 @@ def connect_forgejo_repository(*, workspace_id, project_id, provider_repository_
     back with its history (fix round 1). Returns ``(repository, connection)``.
     """
     _require_forgejo_configured()
-    try:
-        provider_repository_id = int(provider_repository_id)
-    except (TypeError, ValueError) as exc:
-        raise PpmGitError("GIT_REPOSITORY_INVALID", "Выберите репозиторий Git-сервера.") from exc
-    if provider_repository_id <= 0:
-        raise PpmGitError("GIT_REPOSITORY_INVALID", "Выберите репозиторий Git-сервера.")
+    provider_repository_id = _forgejo_repository_id(provider_repository_id)
     client = client or get_provider_client(PpmGitProvider.FORGEJO)
     try:
         provider_data = client.get_repository(FORGEJO_INSTALLATION_ID, provider_repository_id)

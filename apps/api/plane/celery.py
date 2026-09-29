@@ -57,6 +57,17 @@ app.conf.beat_schedule = {
         "task": "plane.ppm_git.tasks.reconcile_active_git_connections",
         "schedule": schedule(run_every=timedelta(minutes=15)),
     },
+    # G2.2 R16: the full reconciliation of code access on PPM's Git server (a no-op without single sign-on).
+    "ppm-git-forgejo-access-reconcile": {
+        "task": "plane.ppm_git.tasks.reconcile_forgejo_access",
+        "schedule": schedule(run_every=timedelta(minutes=10)),
+    },
+    # G2.2 R1: expired OAuth2 codes and tokens of the Git server client go every day («skipped» where
+    # django-oauth-toolkit is not installed — the task is registered in every worker through CELERY_IMPORTS).
+    "ppm-oidc-clear-expired-tokens": {
+        "task": "plane.ppm_oidc.tasks.clear_expired_oidc_tokens",
+        "schedule": crontab(hour=4, minute=0),  # UTC 04:00
+    },
     "ppm-brain-recover-jobs": {
         "task": "plane.ppm_brain.tasks.recover_brain_index_jobs",
         "schedule": schedule(run_every=timedelta(minutes=2)),

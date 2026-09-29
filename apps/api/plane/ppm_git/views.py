@@ -5,17 +5,20 @@ from django.conf import settings
 from django.db import transaction
 from django.http import HttpResponseRedirect
 from rest_framework import status
-from rest_framework.exceptions import AuthenticationFailed, NotAuthenticated
+from rest_framework.exceptions import AuthenticationFailed, NotAuthenticated, NotFound
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from plane.authentication.session import BaseSessionAuthentication
+from plane.ppm_canvas.models import PpmGlobalAdmin, PpmGlobalAdminAudit
 from plane.ppm_canvas.responses import get_request_id, ppm_error_response
 from plane.db.models import Project, Workspace
-from plane.ppm_core.permissions import PpmProjectAccess
+from plane.ppm_core.permissions import PpmProjectAccess, is_ppm_global_admin
 
+from . import forgejo_access_status
+from .forgejo_access import forgejo_sso_is_configured, schedule_access_sync
 from .models import (
     PpmGitAudit,
     PpmGitConnection,
@@ -39,11 +42,13 @@ from .provider_services import (
     connect_github_repository,
     create_delivery,
     disconnect_github_connection,
+    list_administered_forgejo_repositories,
     list_forgejo_repositories,
     list_github_repositories,
     provider_summary,
     providers_summary,
     refresh_github_installation,
+    require_administered_forgejo_repository,
     resume_connection_sync,
     start_github_connect,
     unfollowed_delivery_payload,
@@ -221,9 +226,11 @@ def error_status(code):
         "GIT_WRITE_DECISION_FINAL",
         "GIT_WRITE_SOURCE_CHANGED",
         "GIT_DELIVERY_CONFLICT",
+        # G2.2 R17: a project administrator has no account on the Git server yet (the first sign-in creates it).
+        "FORGEJO_ACCOUNT_REQUIRED",
     }:
         return status.HTTP_409_CONFLICT
-    if code in {"GITHUB_RATE_LIMITED", "GIT_PROVIDER_RATE_LIMITED"}:
+    if code in {"GITHUB_RATE_LIMITED", "GIT_PROVIDER_RATE_LIMITED", "GIT_SYNC_RATE_LIMITED"}:
         return status.HTTP_429_TOO_MANY_REQUESTS
     # G2.1: the Git server did not answer as it should (the HTTP contract of «Код»).
     if code in {
@@ -401,7 +408,8 @@ class PpmGitOverviewView(PpmGitAPIView):
                 "capabilities": capabilities,
                 "provider": provider_summary(),
                 # G2.1 R9: GitHub and PPM's own Git server — configured or not, and the server's public address.
-                "providers": providers_summary(),
+                # G2.2: single sign-on, the viewer's name on the Git server, the one-click sign-in link.
+                "providers": providers_summary(user=request.user),
                 "repositories": [serialize_repository(repository) for repository in repositories],
                 "installations": [serialize_installation(installation) for installation in installations],
                 "connections": [serialize_connection(connection) for connection in connections],
@@ -636,9 +644,10 @@ class PpmGitRepositoryDetailView(PpmGitAPIView):
         repository = self.get_repository(workspace_id=workspace_id, project_id=project_id, repository_id=repository_id)
         with transaction.atomic():
             PpmGitRepository.objects.select_for_update().filter(id=repository.id).first()
-            # G2.1 A2 fix round 1: a repository of PPM's own Git server is removed from a project only by a PPM global
-            # administrator (it connected it); removing it also disconnects it, so nothing is synchronized into an
-            # archived record. Records of other providers keep their RC.1 behaviour.
+            # G2.1 A2 fix round 1: a repository of PPM's own Git server is removed from a project only by whoever may
+            # connect it — a PPM global administrator, and with single sign-on the project administrator (G2.2 R17);
+            # removing it also disconnects it, so nothing is synchronized into an archived record. Records of other
+            # providers keep their RC.1 behaviour.
             git_server_connection = (
                 PpmGitConnection.objects.select_for_update()
                 .select_related("installation")
@@ -646,7 +655,7 @@ class PpmGitRepositoryDetailView(PpmGitAPIView):
                 .exclude(status__in=[PpmGitConnectionStatus.DISCONNECTED, PpmGitConnectionStatus.REVOKED])
                 .first()
             )
-            if git_server_connection is not None and not capabilities["manage_git_server"]:
+            if git_server_connection is not None and not capabilities["connect_git_server_repositories"]:
                 return ppm_error_response(
                     request,
                     code="GIT_SERVER_ADMIN_REQUIRED",
@@ -664,6 +673,8 @@ class PpmGitRepositoryDetailView(PpmGitAPIView):
                     target_id=git_server_connection.id,
                     metadata={"reason": "repository.archive"},
                 )
+                # G2.2 R13: the repository leaves the project's teams on the Git server (after the commit).
+                schedule_access_sync(project_ids=[project_id])
             repository = archive_repository(repository=repository, user_id=request.user.id)
         self.audit(
             request,
@@ -981,18 +992,17 @@ class PpmGitConnectionDetailView(PpmGitAPIView):
         capabilities, denied = self.require_capability(request, workspace_id, project_id)
         if denied:
             return denied
-        if not (capabilities["manage_provider"] or capabilities["manage_git_server"]):
+        if not (capabilities["manage_provider"] or capabilities["connect_git_server_repositories"]):
             return self.permission_denied_response(request)
         connection = self.get_connection(
             workspace_id=workspace_id,
             project_id=project_id,
             connection_id=connection_id,
         )
-        # G2.1 R7: a repository of PPM's Git server is disconnected only by a PPM global administrator.
-        needed = (
-            "manage_git_server" if connection.installation.provider == PpmGitProvider.FORGEJO else "manage_provider"
-        )
-        if not capabilities[needed]:
+        # G2.1 R7 / G2.2 R17: a repository of PPM's Git server is disconnected by whoever may connect it — a PPM global
+        # administrator, and with single sign-on the project administrator.
+        git_server = connection.installation.provider == PpmGitProvider.FORGEJO
+        if not capabilities["connect_git_server_repositories" if git_server else "manage_provider"]:
             return self.permission_denied_response(request)
         connection = disconnect_github_connection(connection=connection, user_id=request.user.id)
         self.audit(
@@ -1003,33 +1013,55 @@ class PpmGitConnectionDetailView(PpmGitAPIView):
             target_type="connection",
             target_id=connection.id,
         )
+        if git_server:
+            # G2.2 R13: the repository leaves the project's teams on the Git server.
+            schedule_access_sync(project_ids=[project_id])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class PpmForgejoRepositoriesView(PpmGitAPIView):
-    """G2.1 R7: repositories of PPM's own Git server — listed and connected only by a PPM global administrator."""
+    """G2.1 R7 / G2.2 R17: repositories of PPM's own Git server for the connect dialog of «Код».
+
+    A PPM global administrator lists (Forgejo's search, the read-only token) and connects any of them, as in G2.1.
+    With single sign-on a project administrator lists and connects the repositories of the workspace's organization
+    their Git server account administers — asked as that person (admin sudo), and checked again there for every
+    connect; without an account yet — 409 ``FORGEJO_ACCOUNT_REQUIRED``. The answers keep the G2.1 shape.
+    """
 
     def get(self, request, workspace_id, project_id):
-        _, denied = self.require_capability(request, workspace_id, project_id, "manage_git_server")
+        capabilities, denied = self.require_capability(
+            request, workspace_id, project_id, "connect_git_server_repositories"
+        )
         if denied:
             return denied
-        return Response(
-            list_forgejo_repositories(
-                workspace_id=workspace_id,
-                project_id=project_id,
-                search=request.query_params.get("search", ""),
-                page=request.query_params.get("page", "1"),
-            )
-        )
+        options = {
+            "workspace_id": workspace_id,
+            "project_id": project_id,
+            "search": request.query_params.get("search", ""),
+            "page": request.query_params.get("page", "1"),
+        }
+        if capabilities["manage_git_server"]:
+            return Response(list_forgejo_repositories(**options))
+        return Response(list_administered_forgejo_repositories(user=request.user, **options))
 
     def post(self, request, workspace_id, project_id):
-        _, denied = self.require_capability(request, workspace_id, project_id, "manage_git_server")
+        capabilities, denied = self.require_capability(
+            request, workspace_id, project_id, "connect_git_server_repositories"
+        )
         if denied:
             return denied
+        provider_repository_id = request.data.get("provider_repository_id")
+        if not capabilities["manage_git_server"]:
+            # The project administrator: the right is checked on the Git server, never taken from the client.
+            require_administered_forgejo_repository(
+                user=request.user,
+                workspace_id=workspace_id,
+                provider_repository_id=provider_repository_id,
+            )
         repository, connection = connect_forgejo_repository(
             workspace_id=workspace_id,
             project_id=project_id,
-            provider_repository_id=request.data.get("provider_repository_id"),
+            provider_repository_id=provider_repository_id,
             user_id=request.user.id,
         )
         self.audit(
@@ -1043,10 +1075,89 @@ class PpmForgejoRepositoriesView(PpmGitAPIView):
         )
         connection_id = str(connection.id)
         transaction.on_commit(lambda: reconcile_git_connection_task.delay(connection_id))
+        # G2.2 R13: the repository goes into the project's teams on the Git server (≈5 s after the commit).
+        schedule_access_sync(project_ids=[project_id])
         return Response(
             {"repository": serialize_repository(repository), "connection": serialize_connection(connection)},
             status=status.HTTP_201_CREATED,
         )
+
+
+# --- G2.2 R18–R19: the «Git-сервер» tab of the admin centre (the logic — `forgejo_access_status`) ---------------------
+
+ADMIN_ONLY_MESSAGE = "Раздел «Git-сервер» доступен только глобальному администратору PPM."
+
+
+class PpmForgejoAccessAPIView(PpmGitAPIView):
+    """The admin centre's «Git-сервер» tab: PPM global administrators only (403 ``GIT_PERMISSION_DENIED``), and — as the
+    rest of the admin centre (``PpmAdminAPIView``) — nothing at all while the centre is switched off (404)."""
+
+    def initial(self, request, *args, **kwargs):
+        if not getattr(settings, "PPM_ADMIN_CENTER_ENABLED", True):
+            raise NotFound("Центр администратора временно отключён.")
+        super().initial(request, *args, **kwargs)
+
+    @staticmethod
+    def admin_only_response(request):
+        return ppm_error_response(
+            request,
+            code="GIT_PERMISSION_DENIED",
+            message=ADMIN_ONLY_MESSAGE,
+            status_code=status.HTTP_403_FORBIDDEN,
+        )
+
+
+class PpmForgejoAccessStatusView(PpmForgejoAccessAPIView):
+    """G2.2 R18–R19: ``GET /api/ppm/v1/git/forgejo/access/status/`` — the Git server is configured and answers, single
+    sign-on is on, the last full reconciliation (time, outcome, numbers) and the latest problems, the link to
+    Forgejo's own administration (``forgejo_access_status.access_status``)."""
+
+    def get(self, request):
+        if not is_ppm_global_admin(user=request.user):
+            return self.admin_only_response(request)
+        return Response(forgejo_access_status.access_status())
+
+
+class PpmForgejoAccessSyncView(PpmForgejoAccessAPIView):
+    """G2.2 R18–R19: ``POST /api/ppm/v1/git/forgejo/access/sync/`` — «Синхронизировать сейчас»: a full reconciliation
+    ≈5 s later (``schedule_access_sync(full=True)`` — it waits for a running one instead of being dropped), at most once
+    per 30 s for all administrators (429 ``GIT_SYNC_RATE_LIMITED``, ``details.retry_after_seconds`` and
+    ``Retry-After``). The request is recorded in the admin centre's audit."""
+
+    def post(self, request):
+        if not is_ppm_global_admin(user=request.user):
+            return self.admin_only_response(request)
+        if not forgejo_sso_is_configured():
+            raise PpmGitError(
+                "FORGEJO_SSO_NOT_CONFIGURED",
+                "Единый вход на Git-сервер не настроен — синхронизировать нечего.",
+            )
+        wait = forgejo_access_status.reserve_manual_sync()
+        if wait:
+            response = ppm_error_response(
+                request,
+                code="GIT_SYNC_RATE_LIMITED",
+                message=(
+                    f"Синхронизацию можно запускать не чаще раза в {forgejo_access_status.SYNC_INTERVAL_SECONDS} "
+                    f"секунд. Повторите через {wait} с."
+                ),
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                details={"retry_after_seconds": wait},
+            )
+            response["Retry-After"] = str(wait)
+            return response
+        schedule_access_sync(full=True)
+        registry = PpmGlobalAdmin.objects.filter(user=request.user, revoked_at__isnull=True).first()
+        if registry is not None:
+            PpmGlobalAdminAudit.objects.create(
+                global_admin=registry,
+                action="git_server_sync_requested",
+                method=request.method,
+                path=request.path[:500],
+                request_id=get_request_id(request),
+                metadata={},
+            )
+        return Response({"scheduled": True}, status=status.HTTP_202_ACCEPTED)
 
 
 class PpmGitHubWebhookView(APIView):

@@ -472,9 +472,11 @@ class PpmGitDelivery(models.Model):
 
 class PpmGitAudit(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    workspace_id = models.UUIDField(db_index=True)
-    project_id = models.UUIDField(db_index=True)
-    actor_id = models.UUIDField(db_index=True)
+    # G2.2: the access engine of the Git server records what it does itself — without an actor, and without a
+    # workspace or project for account-wide events (`forgejo.access.*`). Only such rows leave these empty.
+    workspace_id = models.UUIDField(db_index=True, null=True, blank=True)
+    project_id = models.UUIDField(db_index=True, null=True, blank=True)
+    actor_id = models.UUIDField(db_index=True, null=True, blank=True)
     action = models.CharField(max_length=64)
     target_type = models.CharField(max_length=32)
     target_id = models.UUIDField(null=True, blank=True)
@@ -562,3 +564,106 @@ class PpmGitWriteAction(models.Model):
             models.Index(fields=["work_item", "-created_at"], name="ppm_git_write_item_idx"),
         ]
         ordering = ("-created_at", "id")
+
+
+# --- G2.2: people's accounts and code access on PPM's own Git server (Forgejo), kept by `forgejo_access` -------------
+
+
+class PpmForgejoTeamRole(models.TextChoices):
+    # R12: `<KEY>-admin` ← project administrators (20), `<KEY>` ← members (15), `<KEY>-read` ← guests (5).
+    ADMIN = "admin", "Admin"
+    WRITE = "write", "Write"
+    READ = "read", "Read"
+
+
+class PpmForgejoSyncKind(models.TextChoices):
+    FULL = "full", "Full"
+    SCOPED = "scoped", "Scoped"
+
+
+class PpmForgejoSyncStatus(models.TextChoices):
+    OK = "ok", "Ok"
+    PARTIAL = "partial", "Partial"
+    ERROR = "error", "Error"
+
+
+class PpmForgejoAccount(models.Model):
+    """The Git server account PPM created for one person — found by (sign-in source, ``login_name`` = the person's
+    UUID). ``user_id`` is a plain UUID, as elsewhere in ppm_git: the row outlives a deleted person, so the account can
+    still be locked (R15)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField(unique=True)
+    forgejo_user_id = models.BigIntegerField(unique=True)
+    # R10: chosen once and never renamed (personal repositories live under it).
+    username = models.CharField(max_length=40, unique=True)
+    # Kept as in the plan's schema; always False since the security review of 2026-09-29 — PPM never adopts an account
+    # it did not create (R9).
+    adopted = models.BooleanField(default=False)
+    prohibited = models.BooleanField(default=False)
+    # R14: the Git server administrator flag was set by PPM (a PPM global administrator). An account that is an
+    # administrator without it was made one by somebody else: PPM then leaves the account alone.
+    admin_granted = models.BooleanField(default=False)
+    last_synced_at = models.DateTimeField(null=True, blank=True)
+    last_error_code = models.CharField(max_length=64, blank=True, default="")
+    last_error_message = models.CharField(max_length=500, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "ppm_forgejo_accounts"
+        ordering = ("username", "id")
+
+
+class PpmForgejoOrganization(models.Model):
+    """R11: the organization of one workspace on the Git server (created by PPM or adopted)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace_id = models.UUIDField(unique=True)
+    forgejo_org_id = models.BigIntegerField(unique=True)
+    name = models.CharField(max_length=40)
+    adopted = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "ppm_forgejo_organizations"
+        ordering = ("name", "id")
+
+
+class PpmForgejoTeam(models.Model):
+    """R12: one team of a project on the Git server, per role."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace_id = models.UUIDField(db_index=True)
+    project_id = models.UUIDField(db_index=True)
+    role = models.CharField(max_length=8, choices=PpmForgejoTeamRole.choices)
+    forgejo_team_id = models.BigIntegerField(unique=True)
+    name = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "ppm_forgejo_teams"
+        constraints = [
+            models.UniqueConstraint(fields=["project_id", "role"], name="ppm_forgejo_team_role_uniq"),
+        ]
+        ordering = ("name", "id")
+
+
+class PpmForgejoSyncRun(models.Model):
+    """One synchronization of access (R16, R18): a full reconciliation, or a scoped one that changed something or met
+    a problem. ``problems`` — at most 50 ``{at, kind, subject, message, level}``, plain Russian, never a secret."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    kind = models.CharField(max_length=8, choices=PpmForgejoSyncKind.choices)
+    status = models.CharField(max_length=8, choices=PpmForgejoSyncStatus.choices)
+    started_at = models.DateTimeField()
+    finished_at = models.DateTimeField()
+    counts = models.JSONField(default=dict, blank=True)
+    problems = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        db_table = "ppm_forgejo_sync_runs"
+        indexes = [models.Index(fields=["kind", "-started_at"], name="ppm_forgejo_sync_kind_idx")]
+        ordering = ("-started_at", "id")

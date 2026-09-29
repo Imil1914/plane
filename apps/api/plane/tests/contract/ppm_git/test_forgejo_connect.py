@@ -387,17 +387,33 @@ def test_overview_reports_both_providers_and_the_git_server_capability(api_clien
     settings.PPM_FORGEJO_PUBLIC_URL = ""
     unconfigured = api_client.get(git_url(people))
 
+    # G2.2 adds the single sign-on fields (additive; without single sign-on they are off and empty).
     assert admin_view.data["providers"] == {
         "github": {"configured": False},
-        "forgejo": {"configured": True, "public_url": PUBLIC_URL},
+        "forgejo": {
+            "configured": True,
+            "public_url": PUBLIC_URL,
+            "sso_enabled": False,
+            "username": None,
+            "sso_login_url": None,
+        },
     }
     assert admin_view.data["capabilities"]["manage_git_server"] is True
     assert lead_view.data["capabilities"]["manage_git_server"] is False
     assert lead_view.data["capabilities"]["manage_provider"] is True
+    # G2.2 R17: without single sign-on only the PPM global administrator connects repositories of the Git server.
+    assert admin_view.data["capabilities"]["connect_git_server_repositories"] is True
+    assert lead_view.data["capabilities"]["connect_git_server_repositories"] is False
     # The RC.1 GitHub summary stays as it was.
     assert admin_view.data["provider"]["provider"] == "github"
     assert admin_view.data["provider"]["mode"] == "github_app"
-    assert unconfigured.data["providers"]["forgejo"] == {"configured": False, "public_url": None}
+    assert unconfigured.data["providers"]["forgejo"] == {
+        "configured": False,
+        "public_url": None,
+        "sso_enabled": False,
+        "username": None,
+        "sso_login_url": None,
+    }
     for response in (admin_view, lead_view):
         text = json.dumps(response.data, default=str)
         assert TOKEN not in text and WEBHOOK_SECRET not in text

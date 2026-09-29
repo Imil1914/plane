@@ -16,12 +16,16 @@ from urllib.parse import urljoin
 import dj_database_url
 
 # Django imports
+from django.conf import global_settings
 from django.core.management.utils import get_random_secret_key
 from corsheaders.defaults import default_headers
 
 
 # Module imports
 from plane.utils.url import is_valid_url
+
+# G2.2: standard library only — safe where django-oauth-toolkit is not installed (see the provider block below).
+from plane.ppm_oidc import conf as ppm_oidc_conf
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -284,6 +288,46 @@ PPM_FORGEJO_WEBHOOK_MAX_BYTES = int(os.environ.get("PPM_FORGEJO_WEBHOOK_MAX_BYTE
 # PPM show and store no SSH address for Forgejo repositories.
 PPM_FORGEJO_SSH_ENABLED = os.environ.get("PPM_FORGEJO_SSH_ENABLED", "1").strip() != "0"
 
+# G2.2: single sign-on to PPM's own Git server. PPM is the OpenID Connect provider (plane.ppm_oidc on
+# django-oauth-toolkit) of exactly one client — Forgejo, which exchanges codes and reads userinfo over the internal
+# address of the API; at sign-in PPM ensures the person's Forgejo account and access through the access module
+# (plane.ppm_git.forgejo_access, admin token below). Everything stays off without PPM_GIT_SSO_ENABLED=1 and a complete
+# configuration: /auth/oidc/* answers 404, the access module does nothing. The signing key, the client secret and the
+# admin token come only from the environment (never the database, so never a backup) and never leave the API server.
+PPM_GIT_SSO_ENABLED = os.environ.get("PPM_GIT_SSO_ENABLED", "0").strip() == "1"
+PPM_OIDC_CLIENT_ID = os.environ.get("PPM_OIDC_CLIENT_ID", "").strip() or "forgejo"
+PPM_OIDC_CLIENT_SECRET = _ppm_secret("PPM_OIDC_CLIENT_SECRET", "PPM_OIDC_CLIENT_SECRET_FILE")
+# RS256 signing key: base64 of the PEM in one line (the bundle's form) or, in a _FILE, the PEM itself. The previous key
+# is published in the JWKS during a rotation, until the tokens it signed have expired.
+PPM_OIDC_PRIVATE_KEY = ppm_oidc_conf.pem_from_setting(
+    _ppm_secret("PPM_OIDC_PRIVATE_KEY", "PPM_OIDC_PRIVATE_KEY_FILE"), name="PPM_OIDC_PRIVATE_KEY"
+)
+PPM_OIDC_PREVIOUS_PRIVATE_KEY = ppm_oidc_conf.pem_from_setting(
+    _ppm_secret("PPM_OIDC_PREVIOUS_PRIVATE_KEY", "PPM_OIDC_PREVIOUS_PRIVATE_KEY_FILE"),
+    name="PPM_OIDC_PREVIOUS_PRIVATE_KEY",
+)
+# The API as Forgejo reaches it inside the bundle: the internal discovery points token/userinfo/jwks there.
+PPM_OIDC_INTERNAL_URL = (os.environ.get("PPM_OIDC_INTERNAL_URL", "").strip() or "http://api:8000").rstrip("/")
+# The only redirect URI of the client: Forgejo's callback of the login source named «PPM».
+PPM_OIDC_FORGEJO_REDIRECT_URI = ppm_oidc_conf.forgejo_redirect_uri(
+    os.environ.get("PPM_OIDC_FORGEJO_REDIRECT_URI", ""), PPM_FORGEJO_PUBLIC_URL
+)
+# Written by the bundle's git-bootstrap: the admin token of ppm-bot (write:admin, write:organization,
+# read:repository, read:user) — only for the access module; and the id of Forgejo's login source «PPM».
+PPM_FORGEJO_ADMIN_TOKEN = _ppm_secret("PPM_FORGEJO_ADMIN_TOKEN", "PPM_FORGEJO_ADMIN_TOKEN_FILE")
+PPM_FORGEJO_SSO_SOURCE_ID = ppm_oidc_conf.positive_int(os.environ.get("PPM_FORGEJO_SSO_SOURCE_ID", ""))
+# Per client address (the last X-Forwarded-For element), Django cache; an invalid value falls back to the default.
+# token/ counts only failed client authentications: every sign-in of anybody comes from Forgejo's own address.
+PPM_OIDC_TOKEN_FAILURE_RATE_LIMIT = ppm_oidc_conf.rate_setting(
+    os.environ.get("PPM_OIDC_TOKEN_FAILURE_RATE_LIMIT"), default="10/minute", name="PPM_OIDC_TOKEN_FAILURE_RATE_LIMIT"
+)
+PPM_OIDC_CONTINUE_RATE_LIMIT = ppm_oidc_conf.rate_setting(
+    os.environ.get("PPM_OIDC_CONTINUE_RATE_LIMIT"), default="60/minute", name="PPM_OIDC_CONTINUE_RATE_LIMIT"
+)
+PPM_OIDC_AUTHORIZE_RATE_LIMIT = ppm_oidc_conf.rate_setting(
+    os.environ.get("PPM_OIDC_AUTHORIZE_RATE_LIMIT"), default="120/minute", name="PPM_OIDC_AUTHORIZE_RATE_LIMIT"
+)
+
 # Django Auth Backend
 AUTHENTICATION_BACKENDS = ("django.contrib.auth.backends.ModelBackend",)  # default
 
@@ -411,6 +455,10 @@ else:
         }
     }
 
+# Django's hashers first (people's passwords keep PBKDF2); G2.2 appends the fast hasher of the Git server client
+# secret — a random value of 128+ bits, see plane/ppm_oidc/hashers.py (Django and the standard library only).
+PASSWORD_HASHERS = [*global_settings.PASSWORD_HASHERS, ppm_oidc_conf.CLIENT_SECRET_HASHER_PATH]
+
 # Password validations
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -497,6 +545,9 @@ CELERY_IMPORTS = (
     # issue version tasks
     "plane.bgtasks.issue_version_sync",
     "plane.bgtasks.issue_description_version_sync",
+    # G2.2: registered even without django-oauth-toolkit (then it does nothing), so its daily beat entry is never an
+    # unknown task
+    "plane.ppm_oidc.tasks",
 )
 
 FILE_SIZE_LIMIT = int(os.environ.get("FILE_SIZE_LIMIT", 5242880))
@@ -569,6 +620,17 @@ LIVE_URL = urljoin(LIVE_BASE_URL, LIVE_BASE_PATH) if LIVE_BASE_URL else None
 
 # WEB URL
 WEB_URL = os.environ.get("WEB_URL")
+
+# G2.2: PPM's OpenID Connect provider for its Git server (plane.ppm_oidc). Installed only where django-oauth-toolkit is
+# (the release image has it); without it — e.g. a development API on an older image — the app and its /auth/oidc/
+# routes simply do not exist and everything else works. issuer = the public address of PPM + /auth/oidc (R1).
+PPM_OIDC_ISSUER = ppm_oidc_conf.oidc_issuer(WEB_URL)
+OAUTH2_PROVIDER = ppm_oidc_conf.oauth2_provider_settings(
+    issuer=PPM_OIDC_ISSUER,
+    private_key=PPM_OIDC_PRIVATE_KEY,
+    previous_private_key=PPM_OIDC_PREVIOUS_PRIVATE_KEY,
+)
+INSTALLED_APPS += ppm_oidc_conf.oidc_installed_apps()
 
 HARD_DELETE_AFTER_DAYS = int(os.environ.get("HARD_DELETE_AFTER_DAYS", 60))
 

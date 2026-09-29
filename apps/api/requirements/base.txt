@@ -67,6 +67,11 @@ zxcvbn==4.4.28
 pytz==2024.1
 # jwt
 PyJWT==2.13.0
+# G2.2: PPM is the OpenID Connect provider of its own Git server (plane.ppm_oidc). oauthlib is pinned explicitly:
+# django-oauth-toolkit asks only for oauthlib>=3.3.0, and 3.4.1 was released before oauthlib 4.0.0.
+django-oauth-toolkit==3.4.1
+jwcrypto==1.6.1
+oauthlib==3.3.1
 # OpenTelemetry
 opentelemetry-api==1.28.1
 opentelemetry-sdk==1.28.1
