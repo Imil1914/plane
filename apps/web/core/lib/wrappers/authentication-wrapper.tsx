@@ -5,6 +5,7 @@
  */
 
 import type { ReactNode } from "react";
+import { useEffect, useRef } from "react";
 import { observer } from "mobx-react";
 import { useSearchParams, usePathname } from "next/navigation";
 import useSWR from "swr";
@@ -12,6 +13,11 @@ import useSWR from "swr";
 import { LogoSpinner } from "@/components/common/logo-spinner";
 // helpers
 import { EPageTypes } from "@/helpers/authentication.helper";
+import {
+  isPpmOidcReturnPath,
+  redirectToPpmOidcNextPath,
+  shouldFireOidcRedirectOnce,
+} from "@/helpers/ppm-oidc-return.helper";
 // hooks
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUser, useUserProfile, useUserSettings } from "@/hooks/store/user";
@@ -46,6 +52,18 @@ export const AuthenticationWrapper = observer(function AuthenticationWrapper(pro
     revalidateOnFocus: false,
     shouldRetryOnError: false,
   });
+
+  // G2.2 review round 1 (Important #3): `continue/<id>/` is single-use (S1) — calling `window.location.assign`
+  // straight from the render body ran the risk of firing twice (StrictMode's dev double-render, or a further
+  // MobX/SWR-driven re-render before the browser actually tears this page down) and burning the id on an attempt
+  // whose result the page never gets to show. The redirect itself now lives in an effect, guarded by a ref so it
+  // fires at most once per mount regardless of how many times the component re-renders before navigation completes.
+  const hasRedirectedForOidcRef = useRef(false);
+  const shouldRedirectForOidc = pageType === EPageTypes.NON_AUTHENTICATED && isPpmOidcReturnPath(nextPath);
+  useEffect(() => {
+    if (!shouldRedirectForOidc || !isPpmOidcReturnPath(nextPath)) return;
+    if (shouldFireOidcRedirectOnce(hasRedirectedForOidcRef)) redirectToPpmOidcNextPath(nextPath);
+  }, [shouldRedirectForOidc, nextPath]);
 
   const isUserOnboard =
     currentUserProfile?.is_onboarded ||
@@ -89,15 +107,20 @@ export const AuthenticationWrapper = observer(function AuthenticationWrapper(pro
 
   if (pageType === EPageTypes.NON_AUTHENTICATED) {
     if (!currentUser?.id) return <>{children}</>;
-    else {
-      if (currentUserProfile?.id && isUserOnboard) {
-        const currentRedirectRoute = getWorkspaceRedirectionUrl();
-        router.push(currentRedirectRoute);
-        return <></>;
-      } else {
-        router.push("/onboarding");
-        return <></>;
-      }
+    // G2.2 (R6/R20): a person who is already signed in to PPM and lands here with `?next_path=/auth/oidc/continue/
+    // <id>/` (the OIDC `authorize/` redirect, or simply a second tab) must leave for that path immediately, ahead of
+    // the onboarding gate below — completing a Git-server sign-in is not a reason to detour through onboarding, and
+    // `router.push` cannot reach it anyway (it is a Django route, not one of the SPA's own). The actual navigation
+    // happens in the effect above (single-use id, see round-1 comment there); the render only decides to show
+    // nothing while that effect is about to fire.
+    if (shouldRedirectForOidc) return <></>;
+    if (currentUserProfile?.id && isUserOnboard) {
+      const currentRedirectRoute = getWorkspaceRedirectionUrl();
+      router.push(currentRedirectRoute);
+      return <></>;
+    } else {
+      router.push("/onboarding");
+      return <></>;
     }
   }
 

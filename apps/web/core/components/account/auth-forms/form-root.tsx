@@ -93,7 +93,10 @@ export const AuthFormRoot = observer(function AuthFormRoot(props: TAuthFormRoot)
     setErrorInfo(undefined);
     setEmail("");
     setAuthStep(EAuthSteps.EMAIL);
-    router.push(currentAuthMode === EAuthModes.SIGN_IN ? `/` : "/sign-up");
+    const base = currentAuthMode === EAuthModes.SIGN_IN ? `/` : "/sign-up";
+    // G2.2 review round 1 (#4): keep next_path across this reset — otherwise a person who arrived from the Git
+    // server's «Войти через PPM» loses their way back the moment they clear a mistyped email.
+    router.push(nextPath ? `${base}?next_path=${nextPath}` : base);
   };
 
   // generating the unique code

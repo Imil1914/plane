@@ -7,6 +7,7 @@
 import React from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AUTH_TRACKER_ELEMENTS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { isPpmBrandEnabled, isPpmShellEnabled, PPM_BRAND } from "@ppm/brand";
@@ -43,8 +44,14 @@ export const AuthHeader = observer(function AuthHeader({ type }: AuthHeaderProps
   const ppmT = usePpmTranslation();
   // store
   const { config } = useInstance();
+  // G2.2 review round 1 (#4): the sign-in/sign-up toggle below must keep next_path — otherwise switching between
+  // them loses the way back to the Git server's «Войти через PPM» continuation link.
+  const nextPath = useSearchParams().get("next_path");
   // derived values
   const enableSignUpConfig = config?.enable_signup ?? false;
+  const toggleHref = nextPath
+    ? `${authContentMap[type].linkHref}?next_path=${nextPath}`
+    : authContentMap[type].linkHref;
   const pageTitle = IS_PPM_SHELL_ENABLED
     ? ppmT(type === EAuthModes.SIGN_IN ? "auth.sign_in" : "auth.sign_up")
     : t(authContentMap[type].pageTitle);
@@ -64,7 +71,7 @@ export const AuthHeader = observer(function AuthHeader({ type }: AuthHeaderProps
             <span className="text-body-sm-regular text-tertiary">{prompt}</span>
             <Link
               data-ph-element={AUTH_TRACKER_ELEMENTS.NAVIGATE_TO_SIGN_UP}
-              href={authContentMap[type].linkHref}
+              href={toggleHref}
               className="text-body-sm-semibold text-accent-primary hover:underline"
             >
               {linkText}

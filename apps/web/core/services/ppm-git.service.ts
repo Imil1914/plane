@@ -49,12 +49,25 @@ export type TPpmGitCapabilities = {
   /** G2.1: only a PPM global administrator connects and disconnects repositories of our Git server. Absent on an
    * older API — then nobody may. */
   manage_git_server?: boolean;
+  /** G2.2 (R17): true for a PPM global administrator, and also for a project administrator once single sign-on is
+   * configured for our Git server — this is the capability the «Код» page's connect/disconnect button actually
+   * follows. Absent on an older API — then `manage_git_server` alone decides (G2.1 behaviour, SSO off). */
+  connect_git_server_repositories?: boolean;
 };
 
 /** G2.1: which Git providers this PPM is set up for. Absent on an older API — then only `provider` (GitHub) is known. */
 export type TPpmGitProviders = {
   github?: { configured: boolean };
-  forgejo?: { configured: boolean; public_url: string | null };
+  forgejo?: {
+    configured: boolean;
+    public_url: string | null;
+    /** G2.2: single sign-on through PPM is configured for our Git server. Absent on an older API — then off. */
+    sso_enabled?: boolean;
+    /** G2.2: the viewer's own username on our Git server, or null without a personal account there yet. */
+    username?: string | null;
+    /** G2.2: one-click sign-in link (`${PPM_FORGEJO_PUBLIC_URL}/user/oauth2/PPM`), or null without single sign-on. */
+    sso_login_url?: string | null;
+  };
 };
 
 export type TPpmGitProviderSummary = {
@@ -694,7 +707,9 @@ export class PpmGitService extends APIService {
 // G2.1: the contract errors of our Git server in plain Russian. The code wins over the status: a not-configured
 // server answers 400 like any invalid request.
 const PPM_FORGEJO_ERROR_MESSAGES = {
-  forbidden: "Подключать репозитории может только администратор PPM.",
+  // G2.2 review round 1 (#7): under single sign-on a project administrator may also connect (R17) — a flat "only
+  // the PPM administrator" would misinform them about their own 403 (e.g. no Forgejo-admin rights on that org yet).
+  forbidden: "Подключать репозитории может только администратор проекта или администратор PPM.",
   notConfigured: "Git-сервер не настроен.",
   rateLimited: "Git-сервер просит подождать. Повторите чуть позже.",
   unavailable: "Git-сервер не отвечает. Повторите чуть позже.",
@@ -702,6 +717,11 @@ const PPM_FORGEJO_ERROR_MESSAGES = {
   notFound: "Репозиторий не найден на Git-сервере. Обновите список.",
   offline: "Нет связи с PPM. Проверьте подключение и повторите.",
   fallback: "Не удалось выполнить операцию с Git-сервером.",
+  /** G2.2 (R17): the actor has no personal account on our Git server yet (single sign-on required first) — a 409
+   * that must not fall into the generic `conflict` branch below (the code, not the status, tells them apart). The
+   * picker's list error additionally shows this with a `sso_login_url` link (`ForgejoRepositoryResults`); this
+   * string is the fallback for the plain-text surfaces (the connect button's own error banner). */
+  accountRequired: "Сначала войдите на Git-сервер кнопкой «Войти через PPM» — здесь появятся ваши репозитории.",
 } as const;
 
 export function getPpmForgejoErrorMessage({
@@ -714,6 +734,7 @@ export function getPpmForgejoErrorMessage({
   status?: number;
 }): string {
   if (code === "FORGEJO_NOT_CONFIGURED") return PPM_FORGEJO_ERROR_MESSAGES.notConfigured;
+  if (code === "FORGEJO_ACCOUNT_REQUIRED") return PPM_FORGEJO_ERROR_MESSAGES.accountRequired;
   if (code === "GIT_PERMISSION_DENIED" || status === 403) return PPM_FORGEJO_ERROR_MESSAGES.forbidden;
   if (code === "GIT_PROVIDER_RATE_LIMITED" || status === 429) return PPM_FORGEJO_ERROR_MESSAGES.rateLimited;
   if (code === "GIT_PROVIDER_UNAVAILABLE" || status === 502) return PPM_FORGEJO_ERROR_MESSAGES.unavailable;

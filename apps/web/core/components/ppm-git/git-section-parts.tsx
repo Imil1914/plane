@@ -4,7 +4,7 @@ import { Archive, Check, Clipboard, Code2, ExternalLink, RefreshCw, Search, Star
 import Link from "next/link";
 import { getPpmGitWebhookStatus, type TPpmGitWebhookStatus } from "@/helpers/ppm-git-webhook-status.helper";
 import type { TPpmGitConnection, TPpmGitProvider, TPpmGitRepository } from "@/services/ppm-git.service";
-import { GitCloneCommands } from "./git-clone-commands";
+import { GitCloneCommands, type TPpmForgejoIdentityHint } from "./git-clone-commands";
 import {
   getGitCodeSearchConnectHint,
   getGitConnectionStatusLabel,
@@ -119,12 +119,14 @@ export function RepositoryCard({
   canManageCode,
   canvasHref,
   copied,
+  forgejoIdentity,
   hasActiveConnection,
   onArchive,
   onCopy,
   onMakeDefault,
   onSyncCode,
   onToggleCode,
+  openUrl,
   repository,
   saving,
 }: {
@@ -133,12 +135,18 @@ export function RepositoryCard({
   /** «На холст» (route.tsx builds it: the canvas reads exactly the parameters it puts there). */
   canvasHref: string;
   copied?: string;
+  /** G2.2 (R21): forwarded to «Как скачать код» — the viewer's own username hint, only for a forgejo repository
+   * under single sign-on (route.tsx decides; this component stays a pure function of its props). */
+  forgejoIdentity?: TPpmForgejoIdentityHint;
   hasActiveConnection: boolean;
   onArchive: (repository: TPpmGitRepository) => void;
   onCopy: (value: string, key: string) => void;
   onMakeDefault: (repository: TPpmGitRepository) => void;
   onSyncCode: (repository: TPpmGitRepository) => void;
   onToggleCode: (repository: TPpmGitRepository, enabled: boolean) => void;
+  /** G2.2 (R21): a one-click Git-server sign-in link when the repository is ours and single sign-on is configured
+   * (route.tsx: `getForgejoSsoOpenUrl`); falls back to `repository.canonical_url` (G2.1 behaviour) otherwise. */
+  openUrl?: string | null;
   repository: TPpmGitRepository;
   saving: boolean;
 }) {
@@ -164,7 +172,7 @@ export function RepositoryCard({
         </div>
         <a
           className="text-secondary hover:text-primary"
-          href={repository.canonical_url}
+          href={openUrl ?? repository.canonical_url}
           target="_blank"
           rel="noreferrer"
           aria-label={openLabel}
@@ -188,7 +196,7 @@ export function RepositoryCard({
           onCopy={() => onCopy(repository.clone_ssh, `${repository.id}:ssh`)}
         />
       )}
-      <GitCloneCommands copied={copied} onCopy={onCopy} repository={repository} />
+      <GitCloneCommands copied={copied} forgejoIdentity={forgejoIdentity} onCopy={onCopy} repository={repository} />
 
       <div className="mt-3 rounded-lg border border-subtle bg-layer-1 p-3">
         <div className="flex items-start justify-between gap-3">

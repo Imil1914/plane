@@ -3,7 +3,7 @@
 // Only a PPM global administrator connects and disconnects: the Git server's service account sees all the code.
 // Hooks live in useForgejoRepositoryPicker and ForgejoRepositoryPicker only: the views are plain functions of props.
 import { useEffect, useRef, useState, useSyncExternalStore, type Ref } from "react";
-import { Archive, Check, LoaderCircle, Lock, RefreshCw, Search, Server } from "lucide-react";
+import { Archive, Check, LoaderCircle, Lock, LogIn, RefreshCw, Search, Server } from "lucide-react";
 import type { TPpmForgejoRepository, TPpmGitConnection, TPpmGitRepository } from "@/services/ppm-git.service";
 import {
   createForgejoRepositoryPicker,
@@ -11,8 +11,21 @@ import {
   type TForgejoPickerState,
   type TForgejoRepositoryPicker,
 } from "./forgejo-repository-picker";
-import { safeGitWebUrl } from "./git-provider-labels";
+import { getForgejoSsoOpenUrl, safeGitWebUrl } from "./git-provider-labels";
 import { GitConnectionRow } from "./git-section-parts";
+
+/** G2.2 (R17): pre-resolved text for the «no personal account yet» hint — kept as plain strings (not a `ppmT` call)
+ * so this whole view tree stays hook-free: some tests call it by invoking the component functions directly
+ * (`element-tree.ts`'s `hostElements`/`press`), which has no React dispatcher for hooks to run against. Callers
+ * resolve the strings with `usePpmTranslation()` where they do hold hooks (`GitServerRepositoryDialog`, route.tsx).
+ */
+export type TForgejoAccountRequiredHint = {
+  title: string;
+  description: string;
+  action: string;
+  /** `sso_login_url`, or null without single sign-on — then the hint shows no link, just the text. */
+  loginUrl: string | null;
+};
 
 const CONNECT_HINT_ID = "ppm-git-server-connect-hint";
 
@@ -48,7 +61,9 @@ export function ForgejoConnectButton({
         <Server className="size-4" aria-hidden="true" /> Подключить с нашего Git-сервера
       </button>
       <p id={CONNECT_HINT_ID} className="text-11 text-tertiary">
-        Репозиторий подключает администратор PPM
+        {/* G2.2 review round 1 (#7): under single sign-on a project administrator can connect too (R17), not only
+            the PPM global administrator (G2.1) — the hint now names both possible connectors. */}
+        Репозиторий подключает администратор проекта или PPM
       </p>
     </div>
   );
@@ -66,8 +81,11 @@ export function ForgejoProviderPanel({
   publicUrl,
   repositories,
   saving,
+  ssoEnabled = false,
+  ssoLoginUrl = null,
 }: {
-  /** `capabilities.manage_git_server`: connect and disconnect. */
+  /** `capabilities.connect_git_server_repositories` (falls back to `manage_git_server` on an older API, G2.2 R17):
+   * connect and disconnect. */
   canConnect: boolean;
   /** `capabilities.manage_provider`: sync now, as for GitHub. */
   canSync: boolean;
@@ -79,6 +97,9 @@ export function ForgejoProviderPanel({
   publicUrl: string | null;
   repositories: TPpmGitRepository[];
   saving: boolean;
+  /** G2.2 (R21): single sign-on is configured — a connection's «Открыть на Git-сервере» becomes a one-click link. */
+  ssoEnabled?: boolean;
+  ssoLoginUrl?: string | null;
 }) {
   if (!configured && connections.length === 0) return null;
   const serverUrl = safeGitWebUrl(publicUrl);
@@ -119,19 +140,27 @@ export function ForgejoProviderPanel({
 
       {connections.length > 0 && (
         <div className="mt-4 grid gap-2 border-t border-subtle pt-4">
-          {connections.map((connection) => (
-            <GitConnectionRow
-              canDisconnect={canConnect}
-              canSync={canSync}
-              connection={connection}
-              key={connection.id}
-              onDisconnect={onDisconnect}
-              onSync={onSync}
-              openUrl={safeGitWebUrl(repositories.find((item) => item.id === connection.repository_id)?.canonical_url)}
-              provider="forgejo"
-              saving={saving}
-            />
-          ))}
+          {connections.map((connection) => {
+            const repository = repositories.find((item) => item.id === connection.repository_id);
+            // G2.2 (R21): a one-click sign-in link when single sign-on is configured, else the plain repository page
+            // (G2.1 behaviour, unchanged) — same fallback order the repository card below uses.
+            const openUrl =
+              (ssoEnabled ? getForgejoSsoOpenUrl(ssoLoginUrl, repository?.provider_full_name) : null) ??
+              safeGitWebUrl(repository?.canonical_url);
+            return (
+              <GitConnectionRow
+                canDisconnect={canConnect}
+                canSync={canSync}
+                connection={connection}
+                key={connection.id}
+                onDisconnect={onDisconnect}
+                onSync={onSync}
+                openUrl={openUrl}
+                provider="forgejo"
+                saving={saving}
+              />
+            );
+          })}
         </div>
       )}
     </section>
@@ -170,6 +199,9 @@ type TForgejoRepositoryPickerProps = {
   onReload: () => void;
   publicUrl: string | null;
   state: TForgejoPickerState;
+  /** G2.2 (R17): shown instead of the generic «Повторить» banner when the list fails with
+   * `FORGEJO_ACCOUNT_REQUIRED` — the caller (`GitServerRepositoryDialog`) resolves the text once with `ppmT`. */
+  accountRequiredHint: TForgejoAccountRequiredHint;
 };
 
 export function ForgejoRepositoryPicker(props: TForgejoRepositoryPickerProps) {
@@ -185,6 +217,7 @@ export function ForgejoRepositoryPicker(props: TForgejoRepositoryPickerProps) {
 }
 
 export function ForgejoRepositoryPickerView({
+  accountRequiredHint,
   onClose,
   onConnect,
   onLoadMore,
@@ -233,6 +266,7 @@ export function ForgejoRepositoryPickerView({
       )}
 
       <ForgejoRepositoryResults
+        accountRequiredHint={accountRequiredHint}
         busy={busy}
         onConnect={onConnect}
         onLoadMore={onLoadMore}
@@ -259,6 +293,7 @@ export function ForgejoRepositoryPickerView({
 }
 
 function ForgejoRepositoryResults({
+  accountRequiredHint,
   busy,
   onConnect,
   onLoadMore,
@@ -266,6 +301,7 @@ function ForgejoRepositoryResults({
   publicUrl,
   state,
 }: {
+  accountRequiredHint: TForgejoAccountRequiredHint;
   busy: boolean;
   onConnect: (providerRepositoryId: number) => void;
   onLoadMore: () => void;
@@ -274,6 +310,27 @@ function ForgejoRepositoryResults({
   state: TForgejoPickerState;
 }) {
   if (state.error?.during === "list") {
+    // G2.2 (R17): a project administrator without a personal account on our Git server yet sees a sign-in hint
+    // instead of «Повторить» — retrying would only repeat the same 409 (backend `views.py`: no account, no list).
+    if (state.error.code === "FORGEJO_ACCOUNT_REQUIRED") {
+      return (
+        <div
+          className="flex flex-col items-start gap-3 rounded-lg border border-warning-subtle bg-warning-subtle p-3 text-12 text-primary"
+          role="alert"
+        >
+          <p className="font-semibold">{accountRequiredHint.title}</p>
+          <p className="text-secondary">{accountRequiredHint.description}</p>
+          {accountRequiredHint.loginUrl && (
+            <a
+              className="inline-flex items-center gap-1.5 rounded-md bg-accent-primary px-3 py-1.5 text-12 font-semibold text-on-accent"
+              href={accountRequiredHint.loginUrl}
+            >
+              <LogIn className="size-3.5" aria-hidden="true" /> {accountRequiredHint.action}
+            </a>
+          )}
+        </div>
+      );
+    }
     return (
       <div
         className="flex flex-col items-start gap-3 rounded-lg border border-danger-subtle bg-danger-subtle p-3 text-12 text-primary"

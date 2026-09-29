@@ -42,6 +42,55 @@ describe("«Код» page wiring for our Git server", () => {
   });
 });
 
+describe("G2.2 (R17/R21): single sign-on threaded from the overview down to the views", () => {
+  it("passes ssoEnabled/ssoLoginUrl to our Git server's panel, next to the unchanged canConnect", () => {
+    const gitServer = source.indexOf("<ForgejoProviderPanel");
+    const github = source.indexOf("<GithubProviderPanel");
+    const block = source.slice(gitServer, github);
+    expect(block).toMatch(/ssoEnabled=\{gitServer\.ssoEnabled\}/);
+    expect(block).toMatch(/ssoLoginUrl=\{gitServer\.ssoLoginUrl\}/);
+  });
+
+  it("resolves the account-required hint and the forgejo identity hint once, with ppmT, before any repository loop", () => {
+    const hintDecl = source.indexOf("const accountRequiredHint: TForgejoAccountRequiredHint = {");
+    const identityDecl = source.indexOf("const forgejoIdentityHint = gitServer.ssoEnabled");
+    const firstRepositoryCard = source.indexOf("<RepositoryCard");
+    const dialog = source.indexOf("<GitServerRepositoryDialog");
+    expect(hintDecl).toBeGreaterThan(-1);
+    expect(identityDecl).toBeGreaterThan(-1);
+    expect(hintDecl).toBeLessThan(firstRepositoryCard);
+    expect(identityDecl).toBeLessThan(firstRepositoryCard);
+    expect(source.slice(hintDecl, dialog + 200)).toContain("accountRequiredHint={accountRequiredHint}");
+    for (const key of [
+      "g22.code.connect_account_required_title",
+      "g22.code.connect_account_required_description",
+      "g22.code.connect_account_required_action",
+      "g22.code.your_git_username",
+      "g22.code.https_token_hint",
+      "g22.code.sign_in_hint",
+    ]) {
+      expect(source).toContain(`ppmT("${key}")`);
+    }
+  });
+
+  it("gives RepositoryCard the one-click open link and the identity hint, both forgejo-only", () => {
+    const start = source.indexOf("<RepositoryCard");
+    const end = source.indexOf("/>", source.indexOf("repository={repository}", start));
+    const block = source.slice(start, end);
+    expect(block).toMatch(/forgejoIdentity=\{repository\.provider === "forgejo" \? forgejoIdentityHint : undefined\}/);
+    expect(block).toContain('repository.provider === "forgejo" && gitServer.ssoEnabled');
+    expect(block).toContain("getForgejoSsoOpenUrl(gitServer.ssoLoginUrl, repository.provider_full_name)");
+  });
+
+  it("GitServerRepositoryDialog receives and forwards the same accountRequiredHint, not a hook of its own", () => {
+    const start = source.indexOf("function GitServerRepositoryDialog(");
+    const body = source.slice(start, source.indexOf("\n}\n", start));
+    expect(body).toContain("accountRequiredHint,");
+    expect(body).toContain("accountRequiredHint={accountRequiredHint}");
+    expect(body).not.toContain("usePpmTranslation");
+  });
+});
+
 describe("fix round 1", () => {
   it("keeps the dialog open while connecting: the close button of the frame is disabled too", () => {
     expect(source).toMatch(/<DialogFrame\s+closeDisabled=\{connecting\}\s+onClose=\{onClose\}\s+saving=\{connecting\}/);

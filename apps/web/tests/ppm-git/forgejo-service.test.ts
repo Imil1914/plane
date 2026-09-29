@@ -99,11 +99,13 @@ describe("PpmGitService — our Git server (Forgejo)", () => {
   });
 
   it.each([
-    [403, "GIT_PERMISSION_DENIED", "Подключать репозитории может только администратор PPM"],
+    [403, "GIT_PERMISSION_DENIED", "Подключать репозитории может только администратор проекта или администратор PPM"],
     [400, "FORGEJO_NOT_CONFIGURED", "Git-сервер не настроен"],
     [429, "GIT_PROVIDER_RATE_LIMITED", "Git-сервер просит подождать"],
     [502, "GIT_PROVIDER_UNAVAILABLE", "Git-сервер не отвечает"],
     [409, "GIT_REPOSITORY_CONFLICT", "Репозиторий уже подключён"],
+    // G2.2 (R17): also a 409, but a different code — must not fall into the generic «уже подключён» conflict above.
+    [409, "FORGEJO_ACCOUNT_REQUIRED", "Сначала войдите на Git-сервер кнопкой «Войти через PPM»"],
   ])("explains HTTP %i %s in Russian for the list and for connecting", async (status, code, text) => {
     const service = new PpmGitService();
     vi.spyOn(service, "get").mockRejectedValue(httpError(status, { code, message: "Server text" }));
@@ -143,5 +145,13 @@ describe("PpmGitService — our Git server (Forgejo)", () => {
       "не найден на Git-сервере"
     );
     expect(getPpmForgejoErrorMessage({})).toBe("Не удалось выполнить операцию с Git-сервером.");
+  });
+
+  it("G2.2 (R17): a 409 without a personal account yet is not the generic «уже подключён» conflict", () => {
+    expect(getPpmForgejoErrorMessage({ code: "FORGEJO_ACCOUNT_REQUIRED", status: 409 })).toBe(
+      "Сначала войдите на Git-сервер кнопкой «Войти через PPM» — здесь появятся ваши репозитории."
+    );
+    // The status alone (no code) still falls back to the plain conflict message, unchanged from G2.1.
+    expect(getPpmForgejoErrorMessage({ status: 409 })).toBe("Репозиторий уже подключён.");
   });
 });

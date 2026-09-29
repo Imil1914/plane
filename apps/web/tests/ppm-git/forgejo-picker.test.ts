@@ -156,6 +156,30 @@ describe("our Git server repository picker", () => {
     expect(list).not.toHaveBeenCalled();
   });
 
+  it("G2.2 (R17): a list failure carries the contract error code, so the view can tell «нет учётки» from any other error", async () => {
+    const list = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new PpmGitServiceError(
+          "Сначала войдите на Git-сервер кнопкой «Войти через PPM» — здесь появятся ваши репозитории.",
+          {
+            code: "FORGEJO_ACCOUNT_REQUIRED",
+            status: 409,
+          }
+        )
+      )
+      .mockRejectedValueOnce(new PpmGitServiceError("Git-сервер не отвечает.", { status: 502 }));
+    const { picker } = setup(list);
+    picker.start();
+    await vi.runAllTimersAsync();
+    expect(picker.getState().error).toMatchObject({ code: "FORGEJO_ACCOUNT_REQUIRED", during: "list" });
+
+    picker.reload();
+    await vi.runAllTimersAsync();
+    // An error the picker has no dedicated code for still works exactly as before G2.2 — `code` is simply undefined.
+    expect(picker.getState().error).toMatchObject({ code: undefined, during: "list" });
+  });
+
   it("shows a list error and loads again on «Повторить»", async () => {
     const list = vi
       .fn()

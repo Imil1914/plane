@@ -9,6 +9,7 @@ import {
   ForgejoProviderPanel,
   ForgejoRepositoryPicker,
   ForgejoRepositoryPickerView,
+  type TForgejoAccountRequiredHint,
 } from "@/components/ppm-git/forgejo-connect";
 import type { TForgejoPickerState } from "@/components/ppm-git/forgejo-repository-picker";
 import { GitConnectionRow, RepositoryCard } from "@/components/ppm-git/git-section-parts";
@@ -29,6 +30,15 @@ const text = (html: string) =>
     .replaceAll(/<[^>]+>/g, " ")
     .replaceAll(/\s+/g, " ")
     .trim();
+
+// G2.2 (R17): pre-resolved text for the picker's «нет учётки» hint — a fixture standing in for what
+// `GitServerRepositoryDialog` would resolve with `ppmT` in the real page.
+const ACCOUNT_REQUIRED_HINT: TForgejoAccountRequiredHint = {
+  title: "Сначала войдите на Git-сервер",
+  description: "Сначала войдите на Git-сервер кнопкой «Войти через PPM» — здесь появятся ваши репозитории.",
+  action: "Войти через PPM",
+  loginUrl: "https://git.ppm.example/user/oauth2/PPM",
+};
 
 const robotRepository: TPpmGitRepository = {
   id: "r-robot",
@@ -105,7 +115,9 @@ describe("«Подключить с нашего Git-сервера»", () => {
     const button = connectButton(html);
     expect(button).toContain('disabled=""');
     expect(button).toContain('aria-describedby="ppm-git-server-connect-hint"');
-    expect(html).toMatch(/id="ppm-git-server-connect-hint"[^>]*>Репозиторий подключает администратор PPM</);
+    // Round 1 (#7): the hint names both possible connectors — a project administrator (once single sign-on is on)
+    // or the PPM global administrator — not only the latter.
+    expect(html).toMatch(/id="ppm-git-server-connect-hint"[^>]*>Репозиторий подключает администратор проекта или PPM</);
   });
 
   it("is absent while our Git server is not set up", () => {
@@ -155,6 +167,25 @@ describe("connections of our Git server", () => {
     expect(html).toContain("GitHub просит подождать");
     expect(html).not.toContain("Открыть на Git-сервере");
   });
+
+  // G2.2 (R21): «Открыть на Git-сервере» becomes a one-click sign-in link once single sign-on is configured — the
+  // plain repository page above (the test right before this one) is what stays without it, unchanged from G2.1.
+  it("«Открыть на Git-сервере» is a one-click sign-in link once single sign-on is configured", () => {
+    const html = panel({
+      connections: [robotConnection],
+      ssoEnabled: true,
+      ssoLoginUrl: "https://git.ppm.example/user/oauth2/PPM",
+    });
+    expect(html).toMatch(
+      /<a[^>]*href="https:\/\/git\.ppm\.example\/user\/oauth2\/PPM\?redirect_to=%2Flab%2Frobot"[^>]*>Открыть на Git-сервере/
+    );
+    expect(html).not.toMatch(/href="https:\/\/git\.ppm\.example\/lab\/robot"/);
+  });
+
+  it("falls back to the plain repository page when single sign-on has no link yet, even if ssoEnabled were true", () => {
+    const html = panel({ connections: [robotConnection], ssoEnabled: true, ssoLoginUrl: null });
+    expect(html).toMatch(/<a[^>]*href="https:\/\/git\.ppm\.example\/lab\/robot"[^>]*>Открыть на Git-сервере/);
+  });
 });
 
 function pickerState(overrides: Partial<TForgejoPickerState> = {}): TForgejoPickerState {
@@ -180,9 +211,14 @@ function forgejoRepository(id: number, overrides: Partial<TPpmForgejoRepository>
   };
 }
 
-function picker(state: TForgejoPickerState, publicUrl: string | null = "https://git.ppm.example") {
+function picker(
+  state: TForgejoPickerState,
+  publicUrl: string | null = "https://git.ppm.example",
+  accountRequiredHint: TForgejoAccountRequiredHint = ACCOUNT_REQUIRED_HINT
+) {
   return renderToStaticMarkup(
     <ForgejoRepositoryPicker
+      accountRequiredHint={accountRequiredHint}
       onClose={noop}
       onConnect={noop}
       onLoadMore={noop}
@@ -257,10 +293,50 @@ describe("repository picker", () => {
     const refused = picker(
       pickerState({
         items: [forgejoRepository(1)],
-        connectError: "Подключать репозитории может только администратор PPM.",
+        connectError: "Подключать репозитории может только администратор проекта или администратор PPM.",
       })
     );
-    expect(refused).toMatch(/role="alert"[^>]*>Подключать репозитории может только администратор PPM\.</);
+    expect(refused).toMatch(
+      /role="alert"[^>]*>Подключать репозитории может только администратор проекта или администратор PPM\.</
+    );
+  });
+
+  // G2.2 (R17): a project administrator without a personal account on our Git server yet sees a dedicated hint with
+  // a sign-in link, not the generic «Повторить» banner (retrying would only repeat the same 409).
+  it("shows the account-required hint with a sign-in link instead of «Повторить»", () => {
+    const html = picker(
+      pickerState({
+        error: {
+          message: "Сначала войдите на Git-сервер кнопкой «Войти через PPM» — здесь появятся ваши репозитории.",
+          code: "FORGEJO_ACCOUNT_REQUIRED",
+          during: "list",
+        },
+      })
+    );
+    expect(html).toMatch(new RegExp(`role="alert"[^>]*>.*${ACCOUNT_REQUIRED_HINT.title}`, "s"));
+    expect(html).toContain(ACCOUNT_REQUIRED_HINT.description);
+    expect(html).toMatch(
+      new RegExp(`<a[^>]*href="${ACCOUNT_REQUIRED_HINT.loginUrl}"[^>]*>.*${ACCOUNT_REQUIRED_HINT.action}`, "s")
+    );
+    expect(html).not.toContain(">Повторить<");
+  });
+
+  it("shows the hint's text without a link when there is no sign-in link to offer", () => {
+    const html = picker(
+      pickerState({ error: { message: "…", code: "FORGEJO_ACCOUNT_REQUIRED", during: "list" } }),
+      "https://git.ppm.example",
+      { ...ACCOUNT_REQUIRED_HINT, loginUrl: null }
+    );
+    expect(html).toContain(ACCOUNT_REQUIRED_HINT.title);
+    expect(html).not.toContain("<a");
+  });
+
+  it("an error without this code still shows the plain «Повторить» banner, unchanged", () => {
+    const html = picker(
+      pickerState({ error: { message: "Git-сервер не отвечает. Повторите чуть позже.", during: "list" } })
+    );
+    expect(html).toContain(">Повторить<");
+    expect(html).not.toContain(ACCOUNT_REQUIRED_HINT.title);
   });
 
   it("disables every row while one repository is being connected", () => {
@@ -319,6 +395,105 @@ describe("a repository of our Git server on the «Код» page", () => {
     expect(html).toContain("Для поиска сначала подключите этот репозиторий через GitHub.");
     expect(html).toContain('aria-label="Открыть репозиторий"');
   });
+
+  // G2.2 (R21): the header's «Открыть на Git-сервере» icon becomes the one-click sign-in link route.tsx computes
+  // (`getForgejoSsoOpenUrl`) — without one (single sign-on off, G2.1), it keeps opening canonical_url as before.
+  it("opens canonical_url without an openUrl override (G2.1, single sign-on off)", () => {
+    expect(card(true)).toMatch(
+      /href="https:\/\/git\.ppm\.example\/lab\/robot"[^>]*aria-label="Открыть на Git-сервере"/
+    );
+  });
+
+  it("opens the one-click sign-in link when route.tsx passes openUrl", () => {
+    const html = renderToStaticMarkup(
+      <RepositoryCard
+        canManage
+        canManageCode
+        canvasHref="/lab/projects/p/brain?x=1"
+        hasActiveConnection
+        onArchive={noop}
+        onCopy={noop}
+        onMakeDefault={noop}
+        onSyncCode={noop}
+        onToggleCode={noop}
+        openUrl="https://git.ppm.example/user/oauth2/PPM?redirect_to=/lab/robot"
+        repository={robotRepository}
+        saving={false}
+      />
+    );
+    expect(html).toMatch(
+      /href="https:\/\/git\.ppm\.example\/user\/oauth2\/PPM\?redirect_to=\/lab\/robot"[^>]*aria-label="Открыть на Git-сервере"/
+    );
+  });
+
+  // G2.2 (R21): «Как скачать код» names the viewer's own identity on our Git server — only while single sign-on is
+  // configured (route.tsx passes `forgejoIdentity` only then; GitHub repositories never get it at all).
+  describe("the viewer's identity in «Как скачать код»", () => {
+    const withIdentity = (forgejoIdentity: Parameters<typeof RepositoryCard>[0]["forgejoIdentity"]) =>
+      renderToStaticMarkup(
+        <RepositoryCard
+          canManage
+          canManageCode
+          canvasHref="/lab/projects/p/brain?x=1"
+          forgejoIdentity={forgejoIdentity}
+          hasActiveConnection
+          onArchive={noop}
+          onCopy={noop}
+          onMakeDefault={noop}
+          onSyncCode={noop}
+          onToggleCode={noop}
+          repository={robotRepository}
+          saving={false}
+        />
+      );
+
+    it("names the username and the HTTPS token hint once there is a personal account", () => {
+      const html = withIdentity({
+        username: "robot",
+        usernameTemplate: "Ваше имя на Git-сервере: {username}",
+        tokenHint: "Для HTTPS нужен токен: Git-сервер → Настройки → Приложения.",
+        signInHint: "Войдите на Git-сервер кнопкой «Войти через PPM».",
+        ssoLoginUrl: "https://git.ppm.example/user/oauth2/PPM",
+      });
+      expect(html).toContain("Ваше имя на Git-сервере: robot");
+      expect(html).toContain("Для HTTPS нужен токен: Git-сервер → Настройки → Приложения.");
+      expect(html).not.toContain("Войдите на Git-сервер");
+    });
+
+    it("offers the sign-in hint as a link when there is no personal account yet", () => {
+      const html = withIdentity({
+        username: null,
+        usernameTemplate: "Ваше имя на Git-сервере: {username}",
+        tokenHint: "…",
+        signInHint: "Войдите на Git-сервер кнопкой «Войти через PPM».",
+        ssoLoginUrl: "https://git.ppm.example/user/oauth2/PPM",
+      });
+      expect(html).toMatch(
+        /<a[^>]*href="https:\/\/git\.ppm\.example\/user\/oauth2\/PPM"[^>]*>Войдите на Git-сервер кнопкой «Войти через PPM»\.<\/a>/
+      );
+      expect(html).not.toContain("Ваше имя на Git-сервере");
+    });
+
+    it("shows the sign-in hint as plain text without a link to offer", () => {
+      const html = withIdentity({
+        username: null,
+        usernameTemplate: "…",
+        tokenHint: "…",
+        signInHint: "Войдите на Git-сервер кнопкой «Войти через PPM».",
+        ssoLoginUrl: null,
+      });
+      expect(html).toContain("Войдите на Git-сервер кнопкой «Войти через PPM».");
+      // The card's two unconditional anchors (header «Открыть на Git-сервере», footer «На холст») are the only ones;
+      // the hint itself is plain text here, not wrapped in a further <a>.
+      expect(html.match(/<a /g)).toHaveLength(2);
+    });
+
+    it("shows nothing extra without forgejoIdentity at all (GitHub repositories, or single sign-on off)", () => {
+      const html = withIdentity(undefined);
+      expect(html).not.toContain("Ваше имя на Git-сервере");
+      expect(html).not.toContain("Войдите на Git-сервер");
+    });
+  });
 });
 
 describe("pressing the controls", () => {
@@ -360,6 +535,7 @@ describe("pressing the controls", () => {
 
   it("connects the pressed row, loads more, searches, reloads and closes", () => {
     const handlers = {
+      accountRequiredHint: ACCOUNT_REQUIRED_HINT,
       onClose: vi.fn(),
       onConnect: vi.fn(),
       onLoadMore: vi.fn(),
@@ -435,6 +611,7 @@ describe("pressing the controls", () => {
 
 describe("fix round 1: the dialog while connecting and on open", () => {
   const handlers = {
+    accountRequiredHint: ACCOUNT_REQUIRED_HINT,
     onClose: vi.fn(),
     onConnect: vi.fn(),
     onLoadMore: vi.fn(),

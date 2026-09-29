@@ -19,7 +19,10 @@ export type TForgejoPickerState = {
   page: number;
   hasNext: boolean;
   loading: "list" | "more" | null;
-  error?: { message: string; during: "list" | "more" };
+  /** G2.2 (R17): `code` carries the contract error code (e.g. `FORGEJO_ACCOUNT_REQUIRED`) so the view can show a
+   * dedicated hint with a sign-in link instead of the generic «Повторить» banner — undefined for older errors/paths
+   * that never had a code, which keeps the generic banner exactly as it was. */
+  error?: { message: string; code?: string; during: "list" | "more" };
   connectingId?: number;
   connectError?: string;
 };
@@ -99,6 +102,7 @@ export function createForgejoRepositoryPicker(deps: TForgejoPickerDeps): TForgej
       if (!active || ticket !== generation) return;
       const error = {
         message: messageOf(reason, "Не удалось получить репозитории Git-сервера."),
+        code: reason instanceof PpmGitServiceError ? reason.code : undefined,
         during: page === 1 ? ("list" as const) : ("more" as const),
       };
       update(page === 1 ? { loading: null, error, items: [], page: 0, hasNext: false } : { loading: null, error });

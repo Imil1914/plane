@@ -7,7 +7,6 @@
 import { useDeferredValue, useState } from "react";
 import type { FormEvent } from "react";
 import {
-  Activity,
   ArrowLeft,
   ArrowRight,
   BrainCircuit,
@@ -19,13 +18,14 @@ import {
   LockKeyhole,
   ScrollText,
   Search,
+  Server,
   ShieldCheck,
   Users,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { Button } from "@plane/propel/button";
-import { Input, Spinner } from "@plane/ui";
+import { Input } from "@plane/ui";
 import type { TPpmTranslationKey } from "@ppm/brand";
 import { PageHead } from "@/components/core/page-title";
 import { usePpmAdminAccess } from "@/hooks/use-ppm-admin-access";
@@ -37,10 +37,12 @@ import {
   type TPpmAdminProject,
   type TPpmAdminUser,
 } from "@/services/ppm-admin.service";
+import { GitServerPanel } from "./git-server-panel";
+import { EmptyState, ErrorState, LoadingState } from "./shared-states";
 
 const adminService = new PpmAdminService();
 
-type TAdminTab = "projects" | "users" | "audit";
+type TAdminTab = "projects" | "users" | "audit" | "git";
 
 const STATUS_KEYS: Record<string, TPpmTranslationKey> = {
   ready: "admin.status_ready",
@@ -57,19 +59,6 @@ function formatDate(value: string | null) {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function ErrorState({ onRetry }: { onRetry: () => void }) {
-  const ppmT = usePpmTranslation();
-  return (
-    <div className="flex min-h-72 flex-col items-center justify-center rounded-xl border border-subtle bg-surface-2 p-8 text-center">
-      <Activity className="size-8 text-danger-primary" aria-hidden="true" />
-      <p className="mt-3 text-16 font-semibold text-primary">{ppmT("admin.error")}</p>
-      <Button className="mt-4" variant="secondary" onClick={onRetry}>
-        {ppmT("admin.retry")}
-      </Button>
-    </div>
-  );
 }
 
 function Pagination({ page, hasNext, onChange }: { page: number; hasNext: boolean; onChange: (page: number) => void }) {
@@ -333,24 +322,6 @@ function AuditPanel() {
   );
 }
 
-function LoadingState() {
-  const ppmT = usePpmTranslation();
-  return (
-    <div className="flex min-h-72 items-center justify-center gap-3 rounded-xl border border-subtle bg-surface-2 text-13 text-secondary">
-      <Spinner />
-      {ppmT("admin.loading")}
-    </div>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="flex min-h-56 items-center justify-center rounded-xl border border-dashed border-subtle bg-surface-2 p-8 text-center text-13 text-secondary">
-      {message}
-    </div>
-  );
-}
-
 function ReauthenticationCard({
   reauthenticatedUntil,
   onConfirmed,
@@ -452,6 +423,8 @@ export function PpmAdminCenter() {
     { id: "projects", label: ppmT("admin.projects"), icon: FolderKanban },
     { id: "users", label: ppmT("admin.users"), icon: Users },
     { id: "audit", label: ppmT("admin.audit"), icon: ScrollText },
+    // G2.2 (R18): global administrators only — inherited for free, the whole center is already gated above.
+    { id: "git", label: ppmT("g22.admin.git_tab"), icon: Server },
   ];
 
   return (
@@ -505,6 +478,7 @@ export function PpmAdminCenter() {
         {tab === "projects" && <ProjectsPanel />}
         {tab === "users" && <UsersPanel />}
         {tab === "audit" && <AuditPanel />}
+        {tab === "git" && <GitServerPanel />}
       </div>
     </main>
   );

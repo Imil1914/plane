@@ -2,6 +2,7 @@ import buildManifest from "../build-manifest.json";
 import { AF21_CANVAS_TRANSLATIONS } from "./translations/af21-canvas";
 import { AF22_LIVING_MAP_TRANSLATIONS } from "./translations/af22-living-map";
 import { G21_CANVAS_ASSIGNEES_TRANSLATIONS } from "./translations/g21-canvas-assignees";
+import { G22_SSO_TRANSLATIONS } from "./translations/g22-sso";
 import { R_RU_UI_TRANSLATIONS } from "./translations/r-ru-ui";
 import { R2_RU_UI_TRANSLATIONS } from "./translations/r2-ru-ui";
 import { S_LIVE_STATS_TRANSLATIONS } from "./translations/s-live-stats";
@@ -1050,6 +1051,8 @@ export const PPM_TRANSLATIONS = {
     ...S_LIVE_STATS_TRANSLATIONS.en,
     // Line C (G2.1 wave): canvas assignee picker, own `canvas.assignees_*` keys.
     ...G21_CANVAS_ASSIGNEES_TRANSLATIONS.en,
+    // Line S4 (G2.2 wave): web single sign-on — «Код» hints and the admin center's «Git server» tab, own `g22.*`.
+    ...G22_SSO_TRANSLATIONS.en,
     ...AF21_CANVAS_TRANSLATIONS.en,
     ...AF22_LIVING_MAP_TRANSLATIONS.en,
   },
@@ -2067,6 +2070,7 @@ export const PPM_TRANSLATIONS = {
     ...R2_RU_UI_TRANSLATIONS.ru,
     ...S_LIVE_STATS_TRANSLATIONS.ru,
     ...G21_CANVAS_ASSIGNEES_TRANSLATIONS.ru,
+    ...G22_SSO_TRANSLATIONS.ru,
     ...AF21_CANVAS_TRANSLATIONS.ru,
     ...AF22_LIVING_MAP_TRANSLATIONS.ru,
   },

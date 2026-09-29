@@ -42,13 +42,19 @@ import {
   type TPpmGitWriteAction,
   type TPpmGitWriteActionRequest,
 } from "@/services/ppm-git.service";
-import { ForgejoProviderPanel, ForgejoRepositoryPicker, useForgejoRepositoryPicker } from "./forgejo-connect";
+import {
+  ForgejoProviderPanel,
+  ForgejoRepositoryPicker,
+  useForgejoRepositoryPicker,
+  type TForgejoAccountRequiredHint,
+} from "./forgejo-connect";
 import type { TForgejoPickerDeps } from "./forgejo-repository-picker";
 import { copyTextToClipboard } from "./git-clipboard";
 import { DialogActions, FormInput } from "./git-dialog-parts";
 import {
   getActiveGithubInstallation,
   getActiveGithubRepositories,
+  getForgejoSsoOpenUrl,
   getGitMergedAtTitle,
   getGitPullRequestStatusLabel,
   getGitSecurityNote,
@@ -600,6 +606,23 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
 
   // G2.1: our Git server next to GitHub. GitHub-only flows see only GitHub connections and the GitHub App installation.
   const gitServer = getPpmGitServer(overview);
+  // G2.2 (R17/R21): resolved once — every «Как скачать код» block for a forgejo repository (below) and the picker's
+  // «нет учётки» hint (`GitServerRepositoryDialog`) reuse the same text; components downstream stay hook-free.
+  const forgejoIdentityHint = gitServer.ssoEnabled
+    ? {
+        username: gitServer.username,
+        usernameTemplate: ppmT("g22.code.your_git_username"),
+        tokenHint: ppmT("g22.code.https_token_hint"),
+        signInHint: ppmT("g22.code.sign_in_hint"),
+        ssoLoginUrl: gitServer.ssoLoginUrl,
+      }
+    : undefined;
+  const accountRequiredHint: TForgejoAccountRequiredHint = {
+    title: ppmT("g22.code.connect_account_required_title"),
+    description: ppmT("g22.code.connect_account_required_description"),
+    action: ppmT("g22.code.connect_account_required_action"),
+    loginUrl: gitServer.ssoLoginUrl,
+  };
   const connectionsByProvider = splitGitConnectionsByProvider(overview);
   const githubInstallation = getActiveGithubInstallation(overview.installations);
   const githubWritableRepositories = getActiveGithubRepositories(overview);
@@ -680,6 +703,8 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
             publicUrl={gitServer.publicUrl}
             repositories={overview.repositories}
             saving={saving}
+            ssoEnabled={gitServer.ssoEnabled}
+            ssoLoginUrl={gitServer.ssoLoginUrl}
           />
 
           <GithubProviderPanel
@@ -737,6 +762,7 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
                     canManageCode={overview.capabilities.manage_provider}
                     canvasHref={gitCanvasHref(workspaceSlug, projectId, repository)}
                     copied={copied}
+                    forgejoIdentity={repository.provider === "forgejo" ? forgejoIdentityHint : undefined}
                     hasActiveConnection={overview.connections.some(
                       (connection) => connection.repository_id === repository.id && connection.status === "active"
                     )}
@@ -746,6 +772,11 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
                     onMakeDefault={makeDefault}
                     onSyncCode={syncCodeIndex}
                     onToggleCode={setCodeIndexEnabled}
+                    openUrl={
+                      repository.provider === "forgejo" && gitServer.ssoEnabled
+                        ? (getForgejoSsoOpenUrl(gitServer.ssoLoginUrl, repository.provider_full_name) ?? undefined)
+                        : undefined
+                    }
                     repository={repository}
                     saving={saving}
                   />
@@ -843,6 +874,7 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
       )}
       {gitServerDialog && (
         <GitServerRepositoryDialog
+          accountRequiredHint={accountRequiredHint}
           connect={(providerRepositoryId) =>
             service.connectForgejoRepository(workspace.id, projectId, providerRepositoryId)
           }
@@ -949,12 +981,19 @@ export function PpmGitRoute({ projectId, workspaceSlug }: TPpmGitRouteProps) {
 // the dialog cannot be closed (Esc, backdrop, × and «Закрыть»): the result — a refreshed page or the reason of a
 // refusal — always lands in this dialog, and a late answer can never close a dialog opened again.
 function GitServerRepositoryDialog({
+  accountRequiredHint,
   connect,
   list,
   onClose,
   onConnected,
   publicUrl,
-}: TForgejoPickerDeps & { onClose: () => void; publicUrl: string | null }) {
+}: TForgejoPickerDeps & {
+  /** G2.2 (R17): resolved once by `PpmGitRoute` (which holds `ppmT`) and passed straight through — this dialog and
+   * everything under it stay hook-free. */
+  accountRequiredHint: TForgejoAccountRequiredHint;
+  onClose: () => void;
+  publicUrl: string | null;
+}) {
   const { picker, state } = useForgejoRepositoryPicker({ connect, list, onConnected });
   const connecting = state.connectingId !== undefined;
   return (
@@ -965,6 +1004,7 @@ function GitServerRepositoryDialog({
       title="Подключить репозиторий с нашего Git-сервера"
     >
       <ForgejoRepositoryPicker
+        accountRequiredHint={accountRequiredHint}
         onClose={onClose}
         onConnect={(providerRepositoryId) => void picker.connect(providerRepositoryId)}
         onLoadMore={picker.loadMore}

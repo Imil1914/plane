@@ -172,6 +172,46 @@ describe("«Как скачать код»", () => {
     expect(html).toContain("нельзя безопасно вставить в терминал");
   });
 
+  // G2.2 (R21): the viewer's identity on our Git server — an optional, pre-resolved prop (RepositoryCard forwards it
+  // unchanged from route.tsx). Every test above passes none, so they also prove the block is absent by default.
+  describe("forgejoIdentity (G2.2)", () => {
+    const hint = {
+      username: "robot" as string | null,
+      usernameTemplate: "Ваше имя на Git-сервере: {username}",
+      tokenHint: "Для HTTPS нужен токен: Git-сервер → Настройки → Приложения.",
+      signInHint: "Войдите на Git-сервер кнопкой «Войти через PPM».",
+      ssoLoginUrl: "https://git.ppm.example/user/oauth2/PPM" as string | null,
+    };
+
+    it("substitutes {username} into the pre-resolved template and shows the token hint", () => {
+      const html = renderToStaticMarkup(
+        <GitCloneCommands forgejoIdentity={hint} onCopy={() => undefined} repository={forgejoRepository} />
+      );
+      expect(html).toContain("Ваше имя на Git-сервере: robot");
+      expect(html).toContain("Для HTTPS нужен токен: Git-сервер → Настройки → Приложения.");
+    });
+
+    it("links the sign-in hint when there is no account yet, and a link to offer", () => {
+      const html = renderToStaticMarkup(
+        <GitCloneCommands
+          forgejoIdentity={{ ...hint, username: null }}
+          onCopy={() => undefined}
+          repository={forgejoRepository}
+        />
+      );
+      expect(html).toMatch(
+        /<a[^>]*href="https:\/\/git\.ppm\.example\/user\/oauth2\/PPM"[^>]*>Войдите на Git-сервер кнопкой «Войти через PPM»\.<\/a>/
+      );
+      expect(html).not.toContain("Ваше имя на Git-сервере");
+    });
+
+    it("is absent without forgejoIdentity at all — the exact baseline every test above already renders", () => {
+      const html = render(forgejoRepository);
+      expect(html).not.toContain("Ваше имя на Git-сервере");
+      expect(html).not.toContain("Войдите на Git-сервер");
+    });
+  });
+
   // D-1: the block must not overflow the repository card, or the neighbouring card can cover «Копировать» (a real
   // layout/overflow bug that a node-environment render cannot reproduce — this locks in the two classes the fix
   // relies on, so the grid track stays capped at the card's width instead of the `<code>` element's full,

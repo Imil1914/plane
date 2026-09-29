@@ -17,6 +17,23 @@ export type TPpmGitCloneCommand = {
 
 type TPpmGitCloneSource = { clone_https?: string | null; clone_ssh?: string | null };
 
+/**
+ * G2.2 (R21): the viewer's own identity on our Git server, shown inside «Как скачать код» only for a repository of
+ * our Git server while single sign-on is configured (route.tsx decides whether to pass this at all — this component
+ * stays a pure function of its props, no `usePpmTranslation`, so it can still be called directly by
+ * `element-tree.ts`'s `press()`-based tests). `usernameTemplate`/`tokenHint`/`signInHint` are already resolved by
+ * the caller (`ppmT`, `g22.code.*`); `{username}` in the template is substituted here with plain `replace`.
+ */
+export type TPpmForgejoIdentityHint = {
+  /** The viewer's username, or null without a personal account there yet (then `signInHint` shows instead). */
+  username: string | null;
+  usernameTemplate: string;
+  tokenHint: string;
+  signInHint: string;
+  /** `sso_login_url`, wraps `signInHint` in a link when present. */
+  ssoLoginUrl: string | null;
+};
+
 // A plain Git address only: spaces, quotes, `;`, `$`, backticks, `|`, `&`, `!`, globs and parentheses could turn a
 // pasted command into something else, so such an address gets no ready command.
 const SHELL_NEUTRAL = /^[A-Za-z0-9._~:/@%+=-]+$/;
@@ -46,10 +63,12 @@ export function gitCloneCopyKey(repositoryId: string, kind: TPpmGitCloneCommand[
 
 export function GitCloneCommands({
   copied,
+  forgejoIdentity,
   onCopy,
   repository,
 }: {
   copied?: string;
+  forgejoIdentity?: TPpmForgejoIdentityHint;
   onCopy: (value: string, key: string) => void;
   repository: { id: string } & TPpmGitCloneSource;
 }) {
@@ -109,6 +128,24 @@ export function GitCloneCommands({
             ? "По HTTPS Git спросит логин и токен доступа, по SSH нужен ключ, добавленный в ваш профиль на Git-сервере."
             : "Git спросит логин и токен доступа к Git-серверу."}
         </p>
+        {forgejoIdentity &&
+          (forgejoIdentity.username ? (
+            <p className="text-11 leading-5 text-secondary">
+              {forgejoIdentity.usernameTemplate.replace("{username}", forgejoIdentity.username)}
+              <br />
+              {forgejoIdentity.tokenHint}
+            </p>
+          ) : (
+            <p className="text-11 leading-5 text-secondary">
+              {forgejoIdentity.ssoLoginUrl ? (
+                <a className="font-semibold text-accent-primary hover:underline" href={forgejoIdentity.ssoLoginUrl}>
+                  {forgejoIdentity.signInHint}
+                </a>
+              ) : (
+                forgejoIdentity.signInHint
+              )}
+            </p>
+          ))}
         <span className="sr-only" role="status">
           {copiedHere ? "Команда скопирована" : ""}
         </span>

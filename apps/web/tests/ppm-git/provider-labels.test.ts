@@ -6,6 +6,7 @@ import { setDateFormatLanguage } from "@plane/utils";
 import {
   getActiveGithubInstallation,
   getActiveGithubRepositories,
+  getForgejoSsoOpenUrl,
   getGitCodeSearchConnectHint,
   getGitConnectionStatusLabel,
   getGitMergedAtTitle,
@@ -94,6 +95,20 @@ function connection(id: string, repositoryId: string, installationId: string, st
     retry_after: null,
     created_at: "2026-09-28T00:00:00Z",
     updated_at: "2026-09-28T00:00:00Z",
+  };
+}
+
+// G2.2: capabilities with connect_git_server_repositories/manage_git_server set independently (getPpmGitServer's
+// canManage precedence tests below).
+function connectCapabilities(connect: boolean, globalAdmin: boolean) {
+  return {
+    read: true,
+    manage_repositories: false,
+    manage_links: true,
+    manage_provider: false,
+    manage_write_actions: true,
+    manage_git_server: globalAdmin,
+    connect_git_server_repositories: connect,
   };
 }
 
@@ -196,10 +211,17 @@ describe("our Git server in the overview", () => {
           manage_write_actions: true,
         },
       })
-    ).toEqual({ configured: false, publicUrl: null, canManage: false });
+    ).toEqual({
+      configured: false,
+      publicUrl: null,
+      canManage: false,
+      ssoEnabled: false,
+      username: null,
+      ssoLoginUrl: null,
+    });
   });
 
-  it("reads the configuration, the public address and the global-administrator right", () => {
+  it("reads the configuration, the public address and the global-administrator right (G2.2: single sign-on off)", () => {
     expect(
       getPpmGitServer({
         capabilities: {
@@ -215,7 +237,77 @@ describe("our Git server in the overview", () => {
           forgejo: { configured: true, public_url: "https://git.ppm.example" },
         },
       })
-    ).toEqual({ configured: true, publicUrl: "https://git.ppm.example", canManage: true });
+    ).toEqual({
+      configured: true,
+      publicUrl: "https://git.ppm.example",
+      canManage: true,
+      ssoEnabled: false,
+      username: null,
+      ssoLoginUrl: null,
+    });
+  });
+
+  // G2.2 (R17): `connect_git_server_repositories` (once the API sends it) decides `canManage` on its own — a project
+  // administrator gets it too, without needing `manage_git_server` at all; an older/cached response without the new
+  // field still falls back to G2.1's `manage_git_server`-only rule (previous two tests, unchanged).
+  describe("G2.2: connect_git_server_repositories decides canManage where present", () => {
+    it("is true for a project administrator once single sign-on is configured, even without manage_git_server", () => {
+      expect(getPpmGitServer({ capabilities: connectCapabilities(true, false), providers: {} }).canManage).toBe(true);
+    });
+
+    it("is false for an ordinary member even if manage_git_server were somehow true", () => {
+      expect(getPpmGitServer({ capabilities: connectCapabilities(false, true), providers: {} }).canManage).toBe(false);
+    });
+
+    it("true for the global administrator, as the contract always sends it", () => {
+      expect(getPpmGitServer({ capabilities: connectCapabilities(true, true), providers: {} }).canManage).toBe(true);
+    });
+  });
+
+  it("G2.2 (R17/R21): reads sso_enabled, the viewer's username and the one-click sign-in link", () => {
+    const server = getPpmGitServer({
+      capabilities: {
+        read: true,
+        manage_repositories: true,
+        manage_links: true,
+        manage_provider: true,
+        manage_write_actions: true,
+      },
+      providers: {
+        forgejo: {
+          configured: true,
+          public_url: "https://git.ppm.example",
+          sso_enabled: true,
+          username: "robot",
+          sso_login_url: "https://git.ppm.example/user/oauth2/PPM",
+        },
+      },
+    });
+    expect(server.ssoEnabled).toBe(true);
+    expect(server.username).toBe("robot");
+    expect(server.ssoLoginUrl).toBe("https://git.ppm.example/user/oauth2/PPM");
+  });
+
+  it('without a personal account yet, username is null (not the string "null" or missing)', () => {
+    const server = getPpmGitServer({
+      capabilities: {
+        read: true,
+        manage_repositories: true,
+        manage_links: true,
+        manage_provider: true,
+        manage_write_actions: true,
+      },
+      providers: {
+        forgejo: {
+          configured: true,
+          public_url: null,
+          sso_enabled: true,
+          username: null,
+          sso_login_url: "https://git.ppm.example/user/oauth2/PPM",
+        },
+      },
+    });
+    expect(server.username).toBeNull();
   });
 
   it("links only to http(s) addresses", () => {
@@ -223,6 +315,35 @@ describe("our Git server in the overview", () => {
     expect(safeGitWebUrl("javascript:alert(1)")).toBeNull();
     expect(safeGitWebUrl("not a url")).toBeNull();
     expect(safeGitWebUrl(null)).toBeNull();
+  });
+});
+
+describe("getForgejoSsoOpenUrl (G2.2 R17/R21)", () => {
+  // Round 1 (#5): built through URL/searchParams.set, so the value is correctly percent-encoded — the research's
+  // own example (`forgejo-facts.md`) shows an unencoded path, but Forgejo (any standard query-string parser) decodes
+  // percent-encoding the same way, and this form is safe for a display name that is not already a plain slug.
+  it("builds the one-click sign-in link straight to the repository, percent-encoded", () => {
+    expect(getForgejoSsoOpenUrl("https://git.ppm.example/user/oauth2/PPM", "lab/robot")).toBe(
+      "https://git.ppm.example/user/oauth2/PPM?redirect_to=%2Flab%2Frobot"
+    );
+  });
+
+  it("percent-encodes characters a repository display name could carry (space, &, #)", () => {
+    expect(getForgejoSsoOpenUrl("https://git.ppm.example/user/oauth2/PPM", "lab/a & b#1")).toBe(
+      "https://git.ppm.example/user/oauth2/PPM?redirect_to=%2Flab%2Fa+%26+b%231"
+    );
+  });
+
+  it("is null without a login link or a full name — the caller then falls back to canonical_url", () => {
+    expect(getForgejoSsoOpenUrl(null, "lab/robot")).toBeNull();
+    expect(getForgejoSsoOpenUrl(undefined, "lab/robot")).toBeNull();
+    expect(getForgejoSsoOpenUrl("https://git.ppm.example/user/oauth2/PPM", "")).toBeNull();
+    expect(getForgejoSsoOpenUrl("https://git.ppm.example/user/oauth2/PPM", null)).toBeNull();
+    expect(getForgejoSsoOpenUrl("https://git.ppm.example/user/oauth2/PPM", undefined)).toBeNull();
+  });
+
+  it("rejects an unsafe login link the same way safeGitWebUrl does", () => {
+    expect(getForgejoSsoOpenUrl("javascript:alert(1)", "lab/robot")).toBeNull();
   });
 });
 

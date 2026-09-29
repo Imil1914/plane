@@ -165,18 +165,59 @@ export function getActiveGithubRepositories(
   return overview.repositories.filter((repository) => active.some((item) => item.repository_id === repository.id));
 }
 
-/** Our Git server as the overview describes it; an older API without the G2.1 fields means «not set up». */
+/**
+ * Our Git server as the overview describes it; an older API without the G2.1 fields means «not set up». G2.2:
+ * `canManage` now follows `connect_git_server_repositories` when the API sends it (a project administrator gets it
+ * too, once single sign-on is configured) — falling back to the G2.1-only `manage_git_server` for an older/cached
+ * response, so nothing changes while single sign-on is off.
+ */
 export function getPpmGitServer(overview: Pick<TPpmGitOverview, "capabilities" | "providers">): {
   configured: boolean;
   publicUrl: string | null;
   canManage: boolean;
+  /** G2.2: single sign-on through PPM is configured for our Git server. */
+  ssoEnabled: boolean;
+  /** G2.2: the viewer's own username on our Git server, or null without a personal account there yet. */
+  username: string | null;
+  /** G2.2: one-click sign-in link (`getForgejoSsoOpenUrl` turns it into a link to a specific repository). */
+  ssoLoginUrl: string | null;
 } {
   const forgejo = overview.providers?.forgejo;
   return {
     configured: forgejo?.configured === true,
     publicUrl: safeGitWebUrl(forgejo?.public_url),
-    canManage: overview.capabilities.manage_git_server === true,
+    canManage:
+      overview.capabilities.connect_git_server_repositories ?? overview.capabilities.manage_git_server === true,
+    ssoEnabled: forgejo?.sso_enabled === true,
+    username: forgejo?.username ?? null,
+    ssoLoginUrl: safeGitWebUrl(forgejo?.sso_login_url),
   };
+}
+
+/**
+ * G2.2 (R17/R21): a one-click sign-in link to a specific repository of our Git server through PPM single sign-on
+ * (Forgejo signs the person in and lands them straight on that page) — `sso_login_url` with `redirect_to`
+ * (`research/forgejo-facts.md`/`ppm-facts.md`: `https://git.<domain>/user/oauth2/PPM?redirect_to=/<org>/<repo>`).
+ * Review round 1 (#5): built through `URL`/`searchParams.set` rather than string concatenation, so the value is
+ * correctly percent-encoded — org/repository names are ordinarily safe slug characters, but a display name with a
+ * space, `&` or `#` must not spill into being a second query parameter or truncate the path. Null without a login
+ * link or a full name to redirect to (the caller then falls back to the plain `canonical_url`), or if `ssoLoginUrl`
+ * is not itself a valid URL.
+ */
+export function getForgejoSsoOpenUrl(
+  ssoLoginUrl: string | null | undefined,
+  fullName: string | null | undefined
+): string | null {
+  const base = safeGitWebUrl(ssoLoginUrl);
+  const target = fullName?.trim().replace(/^\/+/, "");
+  if (!base || !target) return null;
+  try {
+    const url = new URL(base);
+    url.searchParams.set("redirect_to", `/${target}`);
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 /** An address the page may link to: http(s) only, as given (trimmed). */
