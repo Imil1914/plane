@@ -60,6 +60,9 @@ x-app-env: &app-env
   PPM_AGENTS_WRITE_ENABLED: "0"
   PPM_GIT_WRITE_ENABLED: ${PPM_GIT_WRITE_ENABLED:-0}
   PPM_CANVAS_AUTOMERGE: ${PPM_CANVAS_AUTOMERGE:-1}
+  # UX2.1: other members' changes of tasks, sprints and directions arrive live over /ws/; 0 switches the channel off
+  # (the socket answers 4404 and the web client keeps its 30-second refresh). Absent in older env files = on.
+  PPM_REALTIME_EVENTS_ENABLED: ${PPM_REALTIME_EVENTS_ENABLED:-1}
   # Optional GitHub App (Git integration). Empty values keep Git unconfigured.
   PPM_GITHUB_APP_ID: ${PPM_GITHUB_APP_ID:-}
   PPM_GITHUB_APP_SLUG: ${PPM_GITHUB_APP_SLUG:-}

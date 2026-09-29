@@ -9,23 +9,31 @@
  * `research/ux21-facts.md` §3 already names — no new fetching machinery, only wiring:
  *  - entity "issue", action "updated" → `issueDetail.issue.fetchIssue` merges into the shared `IssueStore` map, so the
  *    card, and every list/board reading the same map, pick it up — but only when the issue is actually loaded
- *    (`getIssueById` truthy); an issue nobody has open is not worth a request. Above
- *    `PPM_REALTIME_FETCH_ISSUE_BATCH_THRESHOLD` loaded ids in one project's entry (review round 1, medium: a bulk
- *    change must not fire one request per issue), one `fetchIssuesWithExistingPagination` of the current view
- *    replaces the whole batch of individual fetches for that project.
+ *    (`getIssueById` truthy); an issue nobody has open is not worth a request. A visible update also re-reads the
+ *    current list/board once (review round 3, RT-1): `fetchIssue` alone refreshes the issue's own fields but not a
+ *    grouped view's `groupedIssueIds`, so a status change would not visibly move it between groups/columns without
+ *    this. Above `PPM_REALTIME_FETCH_ISSUE_BATCH_THRESHOLD` loaded ids in one project's entry (review round 1, medium:
+ *    a bulk change must not fire one request per issue), the individual fetches are skipped and the one list re-read
+ *    covers all of them. "Мои задачи" (`applyPpmRealtimeEventsToProfile`) treats *every* update in a subscribed
+ *    project as list-affecting, loaded or not (review round 3, RT-2): a new assignment arrives as an "updated" issue
+ *    that may not be loaded anywhere in this tab yet, so "is it loaded" cannot gate the refresh there.
  *  - entity "issue", action created/deleted/moved → the membership of a list may have changed, so the affected list's
  *    own `fetchIssuesWithExistingPagination` re-runs with whatever filters it already had — but only if that list was
  *    ever loaded this session (`paginationOptions` set); otherwise there is nothing on screen to refresh.
  *  - entity "cycle"/"module" → fed straight into line S's own `refresh-scheduler.notify()` (`getLiveStatsRuntime`),
  *    which already knows which stats panels are actually watched (their numbers/charts, not their issue list).
  *  - entity "project" → `projectRoot.project.fetchProjectDetails` (read by the project overview page).
+ * Either bucket above sets one flag per function call, so however many issues/projects triggered it, at most one
+ * `fetchIssuesWithExistingPagination` runs per flush — the point fetches and the list re-read are complementary, not
+ * a choice between them.
  *
- * Three call sites now, matching where U6 subscribes projects and reuses that subscription: the open project's layout
- * (one project — issue list/board/card, project overview), "Мои задачи" (several projects at once, aggregated in
- * `profileIssues`), and — added in review round 1 to close a U7 spec gap — the cycle/module detail page roots, which
- * reuse the project layout's own subscription rather than opening one of their own (`applyPpmRealtimeEventsToCycleOrModule`).
- * A failed point refetch is swallowed — the next event, or line S's own fallback poll, tries again; it must never
- * surface as an unhandled rejection.
+ * Four call sites now, matching where U6 subscribes projects and reuses that subscription: the open project's layout
+ * (one project — issue list/board/card, project overview) and the full work-item page outside it (review round 3,
+ * RT-3, `browse/[workItem]/page.tsx` — same function, its own project), "Мои задачи" (several projects at once,
+ * aggregated in `profileIssues`), and — added in review round 1 to close a U7 spec gap — the cycle/module detail page
+ * roots, which reuse the project layout's own subscription rather than opening one of their own
+ * (`applyPpmRealtimeEventsToCycleOrModule`). A failed point refetch is swallowed — the next event, or line S's own
+ * fallback poll, tries again; it must never surface as an unhandled rejection.
  */
 import { getLiveStatsRuntime } from "@/components/ppm-live-stats/runtime";
 import type { TLiveStatsSubject } from "@/components/ppm-live-stats/refresh-scheduler";
@@ -124,10 +132,11 @@ export function applyPpmRealtimeEventsToProject(
     if (entry.projectId !== projectId) continue;
     const loadedIds = entry.issueIds.filter((issueId) => store.issue.issues.getIssueById(issueId));
     if (loadedIds.length === 0) continue;
-    if (loadedIds.length > PPM_REALTIME_FETCH_ISSUE_BATCH_THRESHOLD) {
-      needsListRefresh = true;
-      continue;
-    }
+    // Review round 3 (RT-1): a field update (e.g. status) can move a visible issue into another group of a grouped
+    // list/board — `fetchIssue` alone refreshes the issue's own data but not `groupedIssueIds`, so a visible update
+    // also asks for one coalesced re-read of the current view, in addition to (not instead of) the point fetch below.
+    needsListRefresh = true;
+    if (loadedIds.length > PPM_REALTIME_FETCH_ISSUE_BATCH_THRESHOLD) continue;
     for (const issueId of loadedIds) {
       void store.issue.issueDetail.issue.fetchIssue(workspaceSlug, projectId, issueId).catch(ignoreFailure);
     }
@@ -171,12 +180,13 @@ export function applyPpmRealtimeEventsToProfile(
   let needsListRefresh = batch.issueListChanged.some((projectId) => subscribedProjectIds.has(projectId));
   for (const entry of batch.issueUpdated) {
     if (!subscribedProjectIds.has(entry.projectId)) continue;
+    // Review round 3 (RT-2): a new assignment arrives as an "updated" issue event (the issue itself was not
+    // created/deleted/moved), and the assigned issue may not be loaded anywhere in this tab yet — unlike the project
+    // view (RT-1), "loaded" is not a usable signal here, so any update in a subscribed project refreshes the
+    // aggregated list; the per-id fetch below still only runs for ids already loaded, unaffected.
+    needsListRefresh = true;
     const loadedIds = entry.issueIds.filter((issueId) => store.issue.issues.getIssueById(issueId));
-    if (loadedIds.length === 0) continue;
-    if (loadedIds.length > PPM_REALTIME_FETCH_ISSUE_BATCH_THRESHOLD) {
-      needsListRefresh = true;
-      continue;
-    }
+    if (loadedIds.length === 0 || loadedIds.length > PPM_REALTIME_FETCH_ISSUE_BATCH_THRESHOLD) continue;
     for (const issueId of loadedIds) {
       void store.issue.issueDetail.issue.fetchIssue(workspaceSlug, entry.projectId, issueId).catch(ignoreFailure);
     }

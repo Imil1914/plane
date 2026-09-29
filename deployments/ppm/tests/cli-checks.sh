@@ -552,6 +552,33 @@ expect_ok "  ... the rotated env is valid" "sign-in through PPM" "$envtool" chec
 expect_fail "rotate-sso-key refuses an env without sign-in keys" "ppm-env.sh add-sso" "$envtool" rotate-sso-key "$tmp/rc2.orig"
 expect_fail "rotate-sso-secret refuses an env without sign-in keys" "ppm-env.sh add-sso" "$envtool" rotate-sso-secret "$tmp/rc2.orig"
 
+echo "Realtime updates of tasks (UX2.1, RC.3 RT-4): PPM_REALTIME_EVENTS_ENABLED"
+[[ "$(rawget "$genv" PPM_REALTIME_EVENTS_ENABLED)" == 1 ]] \
+  && pass "init switches the realtime channel on (PPM_REALTIME_EVENTS_ENABLED=1)" \
+  || fail "init PPM_REALTIME_EVENTS_ENABLED: '$(rawget "$genv" PPM_REALTIME_EVENTS_ENABLED)'"
+broken "check refuses PPM_REALTIME_EVENTS_ENABLED other than 0/1" "PPM_REALTIME_EVENTS_ENABLED must be" \
+  PPM_REALTIME_EVENTS_ENABLED yes
+realtime() { "$deploy" --env-file "$1" compose config --format json 2>/dev/null | python3 -c '
+import json, sys
+s = json.load(sys.stdin)["services"]
+print(",".join(s[n]["environment"].get("PPM_REALTIME_EVENTS_ENABLED", "-") for n in ("api", "worker", "beat-worker")))'; }
+rtoff="$tmp/rtoff.env"; cp -p "$genv" "$rtoff"; cp -p "$tmp/git.backup-passphrase" "$tmp/rtoff.backup-passphrase"
+rawput "$rtoff" PPM_BACKUP_PASSPHRASE_FILE rtoff.backup-passphrase; rawput "$rtoff" PPM_REALTIME_EVENTS_ENABLED 0
+expect_ok "  ... 0 is valid (the channel off)" "is valid" "$envtool" check "$rtoff"
+rtold="$tmp/rtold.env"; grep -v '^PPM_REALTIME_EVENTS_ENABLED=' "$genv" >"$rtold"; chmod 600 "$rtold"
+cp -p "$tmp/git.backup-passphrase" "$tmp/rtold.backup-passphrase"; rawput "$rtold" PPM_BACKUP_PASSPHRASE_FILE rtold.backup-passphrase
+expect_ok "  ... an older env without the key stays valid" "is valid" "$envtool" check "$rtold"
+[[ "$(realtime "$genv")" == "1,1,1" && "$(realtime "$rtoff")" == "0,0,0" && "$(realtime "$rtold")" == "1,1,1" ]] \
+  && pass "api/worker/beat-worker get it from ppm.env (1, or 0 to switch off); an older env without the key keeps it on" \
+  || fail "PPM_REALTIME_EVENTS_ENABLED in compose: on=$(realtime "$genv") off=$(realtime "$rtoff") old=$(realtime "$rtold")"
+# shellcheck disable=SC2016  # the literal text of ppm-build.sh
+awk '/^    web\) build web / { web = 1 } /^    admin\) / { web = 0 }
+  web && index($0, "--build-arg \"PPM_REALTIME_EVENTS_ENABLED=${PPM_REALTIME_EVENTS_ENABLED:-1}\"") { found = 1 }
+  END { exit !found }' "$bundle_dir/ppm-build.sh" \
+  && grep -q '"PPM_REALTIME_EVENTS_ENABLED": "${PPM_REALTIME_EVENTS_ENABLED:-1}"' "$bundle_dir/ppm-build.sh" \
+  && pass "ppm-build.sh passes the web build flag PPM_REALTIME_EVENTS_ENABLED (default 1) and records it in the manifest" \
+  || fail "ppm-build.sh does not pass PPM_REALTIME_EVENTS_ENABLED like the other web flags"
+
 echo "Compose — Git server services (docker compose config only)"
 compose_json() { "$deploy" --env-file "$1" compose --profile tools config --format json 2>/dev/null; }  # tools: forgejo-tools
 gitcfg="$(compose_json "$genv" | python3 -c '

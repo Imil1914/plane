@@ -15,6 +15,15 @@ describe("Vault note markdown insertion", () => {
     expect(block).toContain("onChange={(event) => onChangeMarkdown(event.target.value)}");
   });
 
+  it("review round 3 (E2E G23-1): keeps lastSelectionRef fresh on every selection/cursor/typing change", () => {
+    const start = source.indexOf('id="ppm-vault-markdown-editor"');
+    const end = source.indexOf("/>", start);
+    const block = source.slice(start, end);
+    expect(block).toContain("onSelect={(event) => rememberSelection(event.currentTarget)}");
+    expect(block).toContain("onClick={(event) => rememberSelection(event.currentTarget)}");
+    expect(block).toContain("onKeyUp={(event) => rememberSelection(event.currentTarget)}");
+  });
+
   it("both buttons render only for an editable note (canEdit), directly under the Markdown label", () => {
     const labelAt = source.indexOf('htmlFor="ppm-vault-markdown-editor"');
     const guardAt = source.indexOf("{canEdit && (", labelAt);
@@ -38,13 +47,13 @@ describe("Vault note markdown insertion", () => {
     );
   });
 
-  it("goes through the execCommand-first helper, not a bare setState replacement (keeps Ctrl+Z on the insertion)", () => {
+  it("goes through the execCommand-first helper with the remembered range, not textarea.selectionStart/End live", () => {
     const start = source.indexOf("const insertMarkdownAtCursor = ");
     const end = source.indexOf('if (entry.kind === "folder")');
     const body = source.slice(start, end);
-    expect(body).toContain("insertTextIntoTextarea(textarea, content, (next) => {");
-    expect(body).toContain("onChangeMarkdown(next.value);");
-    expect(body).toContain("textarea.setSelectionRange(next.cursorPosition, next.cursorPosition)");
+    expect(body).toContain("const { start, end } = lastSelectionRef.current;");
+    expect(body).toContain("insertTextIntoTextarea(textarea, content, start, end);");
+    expect(body).not.toContain("textarea.selectionStart");
   });
 
   it(
@@ -55,11 +64,19 @@ describe("Vault note markdown insertion", () => {
       const end = source.indexOf('if (entry.kind === "folder")');
       const body = source.slice(start, end);
       expect(body).toContain(
-        "const content = options?.ensureOwnLine && needsLeadingNewline(textarea.value, position) ? `\\n\\n${text}` : text;"
+        "const content = options?.ensureOwnLine && needsLeadingNewline(textarea.value, start) ? `\\n\\n${text}` : text;"
       );
       expect(source).toContain(
         'import { insertTextIntoTextarea, needsLeadingNewline } from "@/components/ppm-git/insert/textarea-insert";'
       );
     }
   );
+
+  it("review round 3 (E2E G23-1): rememberSelection reads the live selection only from the event target, once", () => {
+    const start = source.indexOf("const rememberSelection = ");
+    const end = source.indexOf("const insertMarkdownAtCursor = ");
+    const body = source.slice(start, end);
+    expect(body).toContain("start: target.selectionStart ?? target.value.length,");
+    expect(body).toContain("end: target.selectionEnd ?? target.value.length,");
+  });
 });

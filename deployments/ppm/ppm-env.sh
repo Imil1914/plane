@@ -237,6 +237,7 @@ cmd_init() {
     echo "PPM_S3_MAX_ATTEMPTS=2"
     echo "PPM_GIT_WRITE_ENABLED=0"
     echo "PPM_CANVAS_AUTOMERGE=1"
+    echo "PPM_REALTIME_EVENTS_ENABLED=1"
     echo "PPM_BACKUP_PASSPHRASE_FILE=$passphrase_name"
     echo "PPM_BACKUP_KEEP=7"
     echo "SECRET_KEY=$secret_key"
@@ -554,6 +555,10 @@ cmd_check() {
       (( $(tr -d '\n' <"$passfile" | wc -c) >= 32 )) || errors+=("$passfile holds fewer than 32 characters")
     fi
   fi
+  # Realtime updates (UX2.1): optional (absent = on, the Compose default), else exactly 0 or 1.
+  value="$(env_get "$file" PPM_REALTIME_EVENTS_ENABLED)"
+  [[ -z "$value" || "$value" =~ ^[01]$ ]] \
+    || errors+=("PPM_REALTIME_EVENTS_ENABLED must be 1 (other members' changes arrive live) or 0 (the 30-second refresh only)")
   check_git "$file"
   check_sso "$file"
   check_monitor "$file"

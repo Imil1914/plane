@@ -87,6 +87,31 @@ describe("applyPpmRealtimeEventsToProject", () => {
     expect(store.issue.issueDetail.issue.fetchIssue).toHaveBeenCalledWith("acme", "project-1", "issue-1");
   });
 
+  it("review round 3 (RT-1): a single visible issue update also re-reads the current list/board once, so a status change moves it between groups", () => {
+    const store = fakeStore({ loadedIssueIds: ["issue-1"] });
+    applyPpmRealtimeEventsToProject(store, "acme", "project-1", {
+      ...emptyBatch(),
+      issueUpdated: [{ projectId: "project-1", issueIds: ["issue-1"] }],
+    });
+    // Both: the point fetch (keeps the card/peek fresh) and the list re-read (moves it between groups) — not a choice.
+    expect(store.issue.issueDetail.issue.fetchIssue).toHaveBeenCalledWith("acme", "project-1", "issue-1");
+    expect(store.issue.projectIssues.fetchIssuesWithExistingPagination).toHaveBeenCalledWith(
+      "acme",
+      "project-1",
+      "mutation"
+    );
+  });
+
+  it("review round 3 (RT-1): an update to an issue nobody has loaded does not trigger the list re-read either", () => {
+    const store = fakeStore();
+    applyPpmRealtimeEventsToProject(store, "acme", "project-1", {
+      ...emptyBatch(),
+      issueUpdated: [{ projectId: "project-1", issueIds: ["issue-not-loaded"] }],
+    });
+    expect(store.issue.issueDetail.issue.fetchIssue).not.toHaveBeenCalled();
+    expect(store.issue.projectIssues.fetchIssuesWithExistingPagination).not.toHaveBeenCalled();
+  });
+
   it("re-reads the project's issue list once when it changed and the list was ever loaded", () => {
     const store = fakeStore();
     applyPpmRealtimeEventsToProject(store, "acme", "project-1", { ...emptyBatch(), issueListChanged: ["project-1"] });
@@ -148,7 +173,7 @@ describe("applyPpmRealtimeEventsToProject", () => {
   });
 
   describe("review round 1: a threshold caps individual fetchIssue calls (avoids a request avalanche)", () => {
-    it("still does one fetchIssue per loaded id at exactly the threshold", () => {
+    it("at exactly the threshold: still one fetchIssue per loaded id, plus one list refresh (RT-1)", () => {
       const ids = idsRange(PPM_REALTIME_FETCH_ISSUE_BATCH_THRESHOLD);
       const store = fakeStore({ loadedIssueIds: ids });
       applyPpmRealtimeEventsToProject(store, "acme", "project-1", {
@@ -156,7 +181,8 @@ describe("applyPpmRealtimeEventsToProject", () => {
         issueUpdated: [{ projectId: "project-1", issueIds: ids }],
       });
       expect(store.issue.issueDetail.issue.fetchIssue).toHaveBeenCalledTimes(PPM_REALTIME_FETCH_ISSUE_BATCH_THRESHOLD);
-      expect(store.issue.projectIssues.fetchIssuesWithExistingPagination).not.toHaveBeenCalled();
+      // RT-1: a grouped list/board's membership does not follow from fetchIssue alone — one combined re-read too.
+      expect(store.issue.projectIssues.fetchIssuesWithExistingPagination).toHaveBeenCalledTimes(1);
     });
 
     it("switches to one list refresh instead of N fetchIssue calls above the threshold", () => {
@@ -184,7 +210,7 @@ describe("applyPpmRealtimeEventsToProject", () => {
         issueUpdated: [{ projectId: "project-1", issueIds: [...loaded, ...unloaded] }],
       });
       expect(store.issue.issueDetail.issue.fetchIssue).toHaveBeenCalledTimes(PPM_REALTIME_FETCH_ISSUE_BATCH_THRESHOLD);
-      expect(store.issue.projectIssues.fetchIssuesWithExistingPagination).not.toHaveBeenCalled();
+      expect(store.issue.projectIssues.fetchIssuesWithExistingPagination).toHaveBeenCalledTimes(1);
     });
 
     it("still only one list refresh when both issueListChanged and an over-threshold update fire together", () => {
@@ -244,6 +270,29 @@ describe("applyPpmRealtimeEventsToProfile ('Мои задачи' spans several p
     });
     expect(store.issue.issueDetail.issue.fetchIssue).toHaveBeenCalledTimes(1);
     expect(store.issue.issueDetail.issue.fetchIssue).toHaveBeenCalledWith("acme", "project-2", "issue-1");
+  });
+
+  it("review round 3 (RT-2): a new assignment (an 'updated' event for an issue nobody has loaded yet) still refreshes the list", () => {
+    const store = fakeStore(); // the newly-assigned issue is not in issuesMap anywhere in this tab
+    applyPpmRealtimeEventsToProfile(store, "acme", "user-1", subscribed, {
+      ...emptyBatch(),
+      issueUpdated: [{ projectId: "project-1", issueIds: ["issue-newly-assigned"] }],
+    });
+    expect(store.issue.issueDetail.issue.fetchIssue).not.toHaveBeenCalled(); // nothing to point-fetch — it isn't loaded
+    expect(store.issue.profileIssues.fetchIssuesWithExistingPagination).toHaveBeenCalledWith(
+      "acme",
+      "user-1",
+      "mutation"
+    );
+  });
+
+  it("review round 3 (RT-2): an 'updated' event from a project the profile is not subscribed to does nothing", () => {
+    const store = fakeStore();
+    applyPpmRealtimeEventsToProfile(store, "acme", "user-1", subscribed, {
+      ...emptyBatch(),
+      issueUpdated: [{ projectId: "project-not-subscribed", issueIds: ["issue-1"] }],
+    });
+    expect(store.issue.profileIssues.fetchIssuesWithExistingPagination).not.toHaveBeenCalled();
   });
 
   it("re-reads 'Мои задачи' once even when several subscribed projects' lists changed", () => {

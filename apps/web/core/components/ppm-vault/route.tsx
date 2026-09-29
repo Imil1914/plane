@@ -725,19 +725,28 @@ function EntryContent({
   workspaceId: string;
 }) {
   // G2.3 (line G-Web): inserts at the caret and keeps native undo when the browser allows it (execCommand); falls
-  // back to a plain value replacement + manual caret restore otherwise (see textarea-insert.ts for why).
+  // back to setRangeText + a dispatched input event otherwise (see textarea-insert.ts for why).
   const markdownTextareaRef = useRef<HTMLTextAreaElement>(null);
+  // Review round 3 (E2E G23-1): remembered independently of the textarea's own live selection. Opening the insert
+  // dialog moves focus to its search field and, in Chrome, `onInsert` fires while that dialog (a focus trap) is
+  // still technically mounted — by then `textarea.selectionStart/End` can no longer be trusted to reflect where the
+  // user actually had their cursor before clicking "Вставить коммит/PR"/"Что сделано за период". Kept fresh on every
+  // selection/cursor change while the note is focused, which is necessarily before either button can be clicked.
+  const lastSelectionRef = useRef({ start: 0, end: 0 });
+  const rememberSelection = (target: HTMLTextAreaElement) => {
+    lastSelectionRef.current = {
+      start: target.selectionStart ?? target.value.length,
+      end: target.selectionEnd ?? target.value.length,
+    };
+  };
   const insertMarkdownAtCursor = (text: string, options?: { ensureOwnLine?: boolean }) => {
     const textarea = markdownTextareaRef.current;
     if (!textarea) return;
-    const position = textarea.selectionStart ?? textarea.value.length;
+    const { start, end } = lastSelectionRef.current;
     // Review round 2 (#3): the work summary's Markdown starts with a "### …" heading — mid-line it would not read as
     // one. A single commit/PR link has no such requirement, so only the summary insertion opts in.
-    const content = options?.ensureOwnLine && needsLeadingNewline(textarea.value, position) ? `\n\n${text}` : text;
-    insertTextIntoTextarea(textarea, content, (next) => {
-      onChangeMarkdown(next.value);
-      requestAnimationFrame(() => textarea.setSelectionRange(next.cursorPosition, next.cursorPosition));
-    });
+    const content = options?.ensureOwnLine && needsLeadingNewline(textarea.value, start) ? `\n\n${text}` : text;
+    insertTextIntoTextarea(textarea, content, start, end);
   };
 
   if (entry.kind === "folder") {
@@ -774,6 +783,9 @@ function EntryContent({
             readOnly={!canEdit}
             value={markdownContent}
             onChange={(event) => onChangeMarkdown(event.target.value)}
+            onSelect={(event) => rememberSelection(event.currentTarget)}
+            onClick={(event) => rememberSelection(event.currentTarget)}
+            onKeyUp={(event) => rememberSelection(event.currentTarget)}
           />
           {canEdit && (
             <button

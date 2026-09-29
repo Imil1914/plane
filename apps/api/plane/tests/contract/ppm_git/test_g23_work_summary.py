@@ -12,6 +12,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from html import escape as html_escape
 from html.parser import HTMLParser
+from types import SimpleNamespace
 
 import pytest
 from django.db import connection
@@ -686,6 +687,50 @@ def test_daylight_saving_days_follow_the_project_timezone(api_client, env, day, 
     assert [item["label"] for item in response.data["items"][1]["pull_requests"]] == [
         f"PR #50 «Слияние» · {merged_label}"
     ]
+
+
+def test_plane_default_state_names_read_as_in_the_interface(api_client, env):
+    """Round 2 (G23-2): Plane's own default states (``db/models/state.py``) are stored in English; the summary names
+    them as the PPM interface does (``ux.state.*`` of ``packages/ppm-brand``, ``getPpmStateDisplayName``) — only the
+    exact default name of its own group; an own or renamed state keeps its name. Group headings are Russian."""
+    api_client.force_authenticate(user=env["lead"])
+    project, lead = env["project"], env["lead"]
+    states = [
+        State.objects.create(name=name, color="#60646C", group=group, project=project, created_by=lead)
+        for group, name in (
+            ("backlog", "Backlog"),
+            ("unstarted", "Todo"),
+            ("started", "In Progress"),
+            ("completed", "Done"),
+            ("cancelled", "Cancelled"),
+            ("triage", "Triage"),
+            ("started", "QA"),
+        )
+    ]
+    for index, state in enumerate(states):
+        issue = task(env, f"Задача {index + 1}", state, project=project)
+        state_change(env, issue, msk(24, 10 + index), state, project=project)
+
+    response = get_summary(api_client, env, **WEEK)
+
+    data = response.data
+    assert [(item["work_item"]["name"], item["work_item"]["state_name"]) for item in data["items"]] == [
+        ("Задача 4", "Готово"),
+        ("Задача 3", "В работе"),
+        ("Задача 7", "QA"),
+        ("Задача 1", "Бэклог"),
+        ("Задача 2", "К работе"),
+        ("Задача 5", "Отменена"),
+        ("Задача 6", "На разборе"),
+    ]
+    for text in (data["markdown"], data["html"]):
+        for english in ("Backlog", "Todo", "In Progress", "Done", "Cancelled", "Triage"):
+            assert english not in text
+    assert "**Сделано**" in data["markdown"] and "**В работе**" in data["markdown"] and "**Прочее**" in data["markdown"]
+    assert " · Готово</p>" in data["html"]
+    # A default English name in another group is not the default state — shown as stored (as on the web).
+    assert work_summary.state_display_name(SimpleNamespace(name="Done", group="started")) == "Done"
+    assert work_summary.state_display_name(None) == "Без статуса"
 
 
 def test_relative_task_links_without_public_address(api_client, env, settings):

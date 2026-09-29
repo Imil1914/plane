@@ -19,6 +19,7 @@ import emptyIssueLight from "@/app/assets/empty-state/search/issues-light.webp?u
 // components
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHead } from "@/components/core/page-title";
+import { usePpmRealtimeProjectSync } from "@/components/ppm-realtime/use-ppm-realtime";
 // hooks
 import { useAppTheme } from "@/hooks/store/use-app-theme";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
@@ -70,6 +71,11 @@ export const IssueDetailsPage = observer(function IssueDetailsPage({ params }: R
     issueId,
     issue?.is_epic ? EIssueServiceType.EPICS : EIssueServiceType.ISSUES
   );
+
+  // PPM line U-Web (UX2.1 U6-U7, review round 3 RT-3): the full work-item page is outside the project layout
+  // (`[projectId]/layout.tsx`), where the events client is normally subscribed — subscribe this page's own project
+  // directly so the issue re-reads itself when a colleague changes it elsewhere.
+  usePpmRealtimeProjectSync(workspaceSlug.toString(), projectId || undefined);
 
   useEffect(() => {
     const handleToggleIssueDetailSidebar = () => {

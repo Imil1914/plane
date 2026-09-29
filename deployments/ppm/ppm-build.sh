@@ -14,7 +14,8 @@
 #   PPM_BUILD_PLATFORM    optional docker --platform (default: the host architecture)
 #   PPM_RUNTIME_DIR       where build exports and manifests go (default: <bundle>/.runtime, git-ignored)
 #   PPM_DESIGN_V2, PPM_PROJECT_ASK_ENABLED, PPM_CANVAS_AUTOMERGE, PPM_BRAND_ENABLED, PPM_CANVAS_ENABLED,
-#   PPM_ANTYFLOW_SHELL_ENABLED, PPM_SHELL_ENABLED — web build flags (RC defaults: 1, 0, 1, 1, 1, 1, 1).
+#   PPM_ANTYFLOW_SHELL_ENABLED, PPM_SHELL_ENABLED, PPM_REALTIME_EVENTS_ENABLED — web build flags
+#   (RC defaults: 1, 0, 1, 1, 1, 1, 1, 1).
 # --overlay copies a file from the working tree over the export and records its SHA-256 in the manifest.
 # It exists only for rehearsals before the release commit exists; a release build must not use it.
 set -euo pipefail
@@ -34,7 +35,7 @@ while (($#)); do
     --services) services="${2:?}"; shift 2 ;;
     --page-revision) page_revision="${2:?}"; shift 2 ;;
     --overlay) overlays+=("${2:?}"); shift 2 ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help) awk 'NR == 1 { next } /^#/ { print; next } { exit }' "$0"; exit 0 ;;  # the comment block above
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -127,7 +128,8 @@ for service in $services; do
            --build-arg "PPM_BRAND_ENABLED=${PPM_BRAND_ENABLED:-1}" \
            --build-arg "PPM_CANVAS_ENABLED=${PPM_CANVAS_ENABLED:-1}" \
            --build-arg "PPM_ANTYFLOW_SHELL_ENABLED=${PPM_ANTYFLOW_SHELL_ENABLED:-1}" \
-           --build-arg "PPM_SHELL_ENABLED=${PPM_SHELL_ENABLED:-1}" ;;
+           --build-arg "PPM_SHELL_ENABLED=${PPM_SHELL_ENABLED:-1}" \
+           --build-arg "PPM_REALTIME_EVENTS_ENABLED=${PPM_REALTIME_EVENTS_ENABLED:-1}" ;;
     admin) build admin "$export_dir" "$export_dir/apps/admin/Dockerfile.admin" \
              --build-arg "NODE_IMAGE=$node_image" --build-arg "NGINX_IMAGE=$nginx_image" \
              --build-arg "PPM_BRAND_ENABLED=${PPM_BRAND_ENABLED:-1}" \
@@ -170,7 +172,7 @@ cat >"$manifest" <<JSON
   "web_flags": {"PPM_DESIGN_V2": "${PPM_DESIGN_V2:-1}", "PPM_PROJECT_ASK_ENABLED": "${PPM_PROJECT_ASK_ENABLED:-0}",
                 "PPM_CANVAS_AUTOMERGE": "${PPM_CANVAS_AUTOMERGE:-1}", "PPM_BRAND_ENABLED": "${PPM_BRAND_ENABLED:-1}",
                 "PPM_CANVAS_ENABLED": "${PPM_CANVAS_ENABLED:-1}", "PPM_ANTYFLOW_SHELL_ENABLED": "${PPM_ANTYFLOW_SHELL_ENABLED:-1}",
-                "PPM_SHELL_ENABLED": "${PPM_SHELL_ENABLED:-1}"},
+                "PPM_SHELL_ENABLED": "${PPM_SHELL_ENABLED:-1}", "PPM_REALTIME_EVENTS_ENABLED": "${PPM_REALTIME_EVENTS_ENABLED:-1}"},
   ${freeze_json}
   "base_images": {"node": "$node_image", "nginx": "$nginx_image", "python": "$python_image", "caddy": "$caddy_image", "alpine": "$alpine_image"},
   "images": {${images_json}}

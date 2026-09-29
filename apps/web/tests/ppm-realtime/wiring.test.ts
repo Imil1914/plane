@@ -39,6 +39,24 @@ describe("project layout subscribes the open project (U6)", () => {
   });
 });
 
+// Review round 3 (RT-3, minor): the full work-item page (`/browse/…`) sits outside the project layout, where the
+// events client is normally subscribed, so it never got any events. It reuses the very same project-sync hook.
+describe("full work-item page (/browse/…) subscribes its own project (U6, review round 3 RT-3)", () => {
+  const source = read("../../app/(all)/[workspaceSlug]/(projects)/browse/[workItem]/page.tsx");
+
+  it("imports the hook", () => {
+    expect(source).toContain('import { usePpmRealtimeProjectSync } from "@/components/ppm-realtime/use-ppm-realtime";');
+  });
+
+  it("calls it with the page's own workspaceSlug/projectId, before any early return", () => {
+    expect(source).toContain("usePpmRealtimeProjectSync(workspaceSlug.toString(), projectId || undefined);");
+    const hookCall = source.indexOf("usePpmRealtimeProjectSync(workspaceSlug.toString(), projectId || undefined);");
+    const firstEarlyReturn = source.indexOf("if (error && !isLoading)");
+    expect(hookCall).toBeGreaterThan(-1);
+    expect(hookCall).toBeLessThan(firstEarlyReturn);
+  });
+});
+
 describe("'Мои задачи' (profile layout) subscribes the user's own projects (U6)", () => {
   const source = read("../../app/(all)/[workspaceSlug]/(projects)/profile/[userId]/layout.tsx");
 

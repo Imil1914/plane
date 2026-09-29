@@ -1,8 +1,14 @@
-// G2.3 (G-Web, Review Focus item 4): the pure fallback computation for inserting Markdown at the caret of the Vault
-// note's <textarea>. `insertTextIntoTextarea` itself needs a real DOM (execCommand) and is out of scope for a
-// node-only vitest run — see textarea-insert.ts's own comment and the report for that residual risk.
+// G2.3 (G-Web, Review Focus item 4; review round 3 E2E G23-1): the pure fallback computation and the
+// execCommand-trust decision for inserting Markdown at the caret of the Vault note's <textarea>.
+// `insertTextIntoTextarea` itself needs a real DOM (execCommand, setRangeText, dispatchEvent) and is out of scope for
+// a node-only vitest run — see textarea-insert.ts's own comment and the report for that residual risk; this file
+// covers every pure decision it is built from.
 import { describe, expect, it } from "vitest";
-import { computeTextareaInsertion, needsLeadingNewline } from "@/components/ppm-git/insert/textarea-insert";
+import {
+  computeTextareaInsertion,
+  execCommandInsertionSucceeded,
+  needsLeadingNewline,
+} from "@/components/ppm-git/insert/textarea-insert";
 
 describe("computeTextareaInsertion", () => {
   it("inserts at a collapsed caret in the middle of the text, without losing surrounding content", () => {
@@ -55,5 +61,24 @@ describe("needsLeadingNewline", () => {
 
   it("treats a negative position like position 0 (defensive, matches computeTextareaInsertion's own clamping)", () => {
     expect(needsLeadingNewline("first line", -1)).toBe(false);
+  });
+});
+
+// Review round 3 (E2E, task-EF-report.md G23-1): in Chrome, execCommand("insertText") can return `true` while the
+// insert dialog's still-mounted focus trap keeps the real DOM selection elsewhere, leaving the Vault textarea
+// completely unchanged — a bare `if (applied) return;` (the pre-round-3 code) then wrongly skips the fallback and
+// nothing gets inserted at all. This decision must look at the value, not just the return value.
+describe("execCommandInsertionSucceeded", () => {
+  it("trusts a true return only when the value actually changed", () => {
+    expect(execCommandInsertionSucceeded(true, "before", "before-after")).toBe(true);
+  });
+
+  it("does not trust a true return when the value is unchanged (Chrome's silent no-op — the G23-1 bug)", () => {
+    expect(execCommandInsertionSucceeded(true, "unchanged", "unchanged")).toBe(false);
+  });
+
+  it("does not trust a false return, even if the value somehow changed anyway", () => {
+    expect(execCommandInsertionSucceeded(false, "before", "before")).toBe(false);
+    expect(execCommandInsertionSucceeded(false, "before", "before-after")).toBe(false);
   });
 });

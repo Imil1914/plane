@@ -14,6 +14,7 @@
   ``ZoneInfo``: дни перехода на летнее/зимнее время длятся 23 и 25 часов);
 - статус и группа задачи — на конец периода: статус последней смены внутри периода (задачу закрыли в периоде и вернули
   в работу после — в сводке она «Сделано»); группы: «Сделано» (completed), «В работе» (started), «Прочее» (остальное);
+  состояния Plane по умолчанию (точное английское имя своей группы) называются по-русски, как в интерфейсе PPM;
 - Git — только через активные связи этих задач (``PpmGitLink``) с активными коммитами и PR активных репозиториев
   этого же проекта; связь без Git-объекта (ручная ссылка) даты не имеет и в сводку не входит. Коммит — если его время
   (у провайдера — время автора, иначе первое появление в PPM) в периоде. PR — по состоянию на конец периода: слит в
@@ -59,6 +60,17 @@ LABEL_TEXT_LIMIT = 72
 # Короткие месяцы в родительном падеже — те же, что у дат интерфейса (date-fns `ru`, formattingMonthValues.abbreviated).
 RU_MONTHS = ("янв.", "фев.", "мар.", "апр.", "мая", "июн.", "июл.", "авг.", "сент.", "окт.", "нояб.", "дек.")
 STATE_GROUPS = {"completed": "done", "started": "in_progress"}  # всё остальное — «other»
+# Состояния Plane по умолчанию (``plane/db/models/state.py``, DEFAULT_STATES): группа → (имя в БД, имя в интерфейсе
+# PPM — ``ux.state.*`` ru из ``packages/ppm-brand``; правило — ``getPpmStateDisplayName`` в web ``lib/ppm-design.ts``).
+DEFAULT_STATE_NAMES = {
+    "backlog": ("Backlog", "Бэклог"),
+    "unstarted": ("Todo", "К работе"),
+    "started": ("In Progress", "В работе"),
+    "completed": ("Done", "Готово"),
+    "cancelled": ("Cancelled", "Отменена"),
+    "triage": ("Triage", "На разборе"),
+}
+NO_STATE_NAME = "Без статуса"
 GROUPS = (("done", "Сделано"), ("in_progress", "В работе"), ("other", "Прочее"))
 GROUP_ORDER = {key: index for index, (key, _) in enumerate(GROUPS)}
 # Ключи словарей — простые строки (значения из БД приходят строками).
@@ -240,6 +252,15 @@ def _period_links(project, *, work_item_ids, start_at, end_at):
     )
 
 
+def state_display_name(state):
+    """Имя статуса в сводке — как в интерфейсе PPM: точное имя состояния Plane по умолчанию в своей группе — по-русски,
+    своё или переименованное — как есть."""
+    if state is None:
+        return NO_STATE_NAME
+    default = DEFAULT_STATE_NAMES.get(state.group)
+    return default[1] if default is not None and default[0] == state.name else state.name
+
+
 def _work_item_url(project, issue, key, origin):
     slug = quote(project.workspace.slug, safe="")
     if issue.archived_at:
@@ -374,7 +395,7 @@ def build_work_summary(*, project, user, start, end, serialize):
                     "key": key,
                     "name": row.issue.name,
                     "url": _work_item_url(project, row.issue, key, origin),
-                    "state_name": row.state.name if row.state else "Без статуса",
+                    "state_name": state_display_name(row.state),
                     "state_group": row.group,
                 },
                 "commits": labeled(objects[COMMIT]),
