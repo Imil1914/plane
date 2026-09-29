@@ -17,6 +17,8 @@ import { API_TOKENS_LIST } from "@plane/constants";
 // local imports
 import { CreateApiTokenForm } from "./form";
 import { GeneratedTokenDetails } from "./generated-token-details";
+// hooks
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   isOpen: boolean;
@@ -28,6 +30,7 @@ const apiTokenService = new APITokenService();
 
 export function CreateApiTokenModal(props: Props) {
   const { isOpen, onClose } = props;
+  const ppmText = usePpmText();
   // states
   const [neverExpires, setNeverExpires] = useState<boolean>(false);
   const [generatedToken, setGeneratedToken] = useState<IApiToken | null | undefined>(null);
@@ -73,7 +76,7 @@ export function CreateApiTokenModal(props: Props) {
       .catch((err) => {
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: "Error!",
+          title: ppmText("ui.toast.error", "Error!"),
           message: err.message || err.detail,
         });
 

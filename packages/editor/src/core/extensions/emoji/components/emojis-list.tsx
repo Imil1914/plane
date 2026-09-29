@@ -10,6 +10,8 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useSta
 // plane imports
 import { useOutsideClickDetector } from "@plane/hooks";
 import { cn } from "@plane/utils";
+// helpers
+import { editorText } from "@/helpers/ppm-text";
 
 export type EmojiItem = {
   name: string;
@@ -172,7 +174,9 @@ export const EmojisListDropdown = forwardRef(function EmojisListDropdown(
             );
           })
         ) : (
-          <div className="py-2 text-center text-13 text-placeholder">No emojis found</div>
+          <div className="py-2 text-center text-13 text-placeholder">
+            {editorText("ui.editor.no_emojis", "No emojis found")}
+          </div>
         )}
       </div>
     </>

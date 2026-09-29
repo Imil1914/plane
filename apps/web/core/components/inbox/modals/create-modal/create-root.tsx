@@ -24,6 +24,7 @@ import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useAppRouter } from "@/hooks/use-app-router";
 import useKeypress from "@/hooks/use-keypress";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // services
 import { FileService } from "@/services/file.service";
 // local imports
@@ -70,6 +71,7 @@ export const InboxIssueCreateRoot = observer(function InboxIssueCreateRoot(props
   const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id;
   const { isMobile } = usePlatformOS();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // states
   const [createMore, setCreateMore] = useState<boolean>(false);
   const [formSubmitting, setFormSubmitting] = useState(false);
@@ -92,8 +94,8 @@ export const InboxIssueCreateRoot = observer(function InboxIssueCreateRoot(props
     } else {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Editor is still processing changes. Please wait before proceeding.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: ppmText("ui.toast.editor_busy", "Editor is still processing changes. Please wait before proceeding."),
       });
       event.preventDefault(); // Prevent default action if editor is not ready to discard
     }
@@ -124,8 +126,8 @@ export const InboxIssueCreateRoot = observer(function InboxIssueCreateRoot(props
     if (!descriptionEditorRef.current?.isEditorReadyToDiscard()) {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Editor is still processing changes. Please wait before proceeding.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: ppmText("ui.toast.editor_busy", "Editor is still processing changes. Please wait before proceeding."),
       });
       return;
     }
@@ -159,16 +161,16 @@ export const InboxIssueCreateRoot = observer(function InboxIssueCreateRoot(props
         }
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: `Success!`,
-          message: "Work item created successfully.",
+          title: ppmText("ui.toast.success", `Success!`),
+          message: ppmText("ui.intake.created", "Work item created successfully."),
         });
       })
       .catch((error) => {
         console.error(error);
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: `Error!`,
-          message: "Some error occurred. Please try again.",
+          title: ppmText("ui.toast.error", `Error!`),
+          message: ppmText("ui.intake.create_failed", "Some error occurred. Please try again."),
         });
       });
     setFormSubmitting(false);
@@ -226,8 +228,11 @@ export const InboxIssueCreateRoot = observer(function InboxIssueCreateRoot(props
                   } else {
                     setToast({
                       type: TOAST_TYPE.ERROR,
-                      title: "Error!",
-                      message: "Editor is still processing changes. Please wait before proceeding.",
+                      title: ppmText("ui.toast.error", "Error!"),
+                      message: ppmText(
+                        "ui.toast.editor_busy",
+                        "Editor is still processing changes. Please wait before proceeding."
+                      ),
                     });
                   }
                 }}
@@ -244,7 +249,7 @@ export const InboxIssueCreateRoot = observer(function InboxIssueCreateRoot(props
                 tabIndex={getIndex("submit_button")}
                 size="lg"
               >
-                {formSubmitting ? t("creating") : t("create_work_item")}
+                {formSubmitting ? t("creating") : ppmText("ui.intake.create", t("create_work_item"))}
               </Button>
             </div>
           </div>

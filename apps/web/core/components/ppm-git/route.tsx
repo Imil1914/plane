@@ -49,6 +49,7 @@ import { DialogActions, FormInput } from "./git-dialog-parts";
 import {
   getActiveGithubInstallation,
   getActiveGithubRepositories,
+  getGitMergedAtTitle,
   getGitPullRequestStatusLabel,
   getGitSecurityNote,
   getPpmGitServer,
@@ -1128,10 +1129,14 @@ function GitObjectRow({
   workspaceSlug: string;
 }) {
   const Icon = OBJECT_ICONS[gitObject.object_type];
-  // G2.1 D-3: a PR row also names its status («Открыт»/«Черновик»/«Закрыт»/«Слит»); branches and commits have no such
-  // status. No merge timestamp: the API does not send one on this list (git-provider-labels.ts, getGitPullRequestStatusLabel).
+  // G2.1 M-3/M-4: a PR row also names its status («Открыт»/«Черновик»/«Закрыт»/«Слит 28 сент., 14:05» — the merge
+  // date+time when the API has one, git-provider-labels.ts); branches and commits have no such status.
   const statusLabel =
-    gitObject.object_type === "pull_request" ? getGitPullRequestStatusLabel(gitObject.state, gitObject.is_draft) : null;
+    gitObject.object_type === "pull_request"
+      ? getGitPullRequestStatusLabel(gitObject.state, gitObject.is_draft, gitObject.provider_merged_at)
+      : null;
+  const statusTitle =
+    gitObject.object_type === "pull_request" ? getGitMergedAtTitle(gitObject.provider_merged_at) : undefined;
   return (
     <article className="flex items-center gap-3 border-b border-subtle p-4 last:border-b-0">
       <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-layer-1 text-accent-primary">
@@ -1139,11 +1144,21 @@ function GitObjectRow({
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-13 font-semibold text-primary">{gitObject.title}</p>
-        <p className="mt-0.5 truncate text-12 text-secondary">
-          {OBJECT_LABELS[gitObject.object_type]}
-          {gitObject.ref ? ` · ${gitObject.ref}` : ""}
-          {repository ? ` · ${repository.name}` : ""}
-          {statusLabel ? ` · ${statusLabel}` : ""}
+        {/* G2.1 M-6 (review W5 #8): the status used to sit last in one truncated line and vanished first on a narrow
+            row; a merge date is longer than «Слит», so it is now its own non-truncated element (`shrink-0`, no
+            `truncate`) before ref/repository — those truncate first under pressure instead. */}
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-12 text-secondary">
+          {statusLabel && (
+            <span className="shrink-0 font-medium text-primary" title={statusTitle}>
+              {statusLabel}
+            </span>
+          )}
+          <span className="min-w-0 truncate">
+            {statusLabel ? "· " : ""}
+            {OBJECT_LABELS[gitObject.object_type]}
+            {gitObject.ref ? ` · ${gitObject.ref}` : ""}
+            {repository ? ` · ${repository.name}` : ""}
+          </span>
         </p>
       </div>
       <a
@@ -1182,9 +1197,16 @@ function GitLinkRow({
   workspaceSlug: string;
 }) {
   const Icon = OBJECT_ICONS[link.object_type];
-  // G2.1 D-3: same PR status as GitObjectRow; a link only carries git_object_state (no is_draft), so a draft PR
-  // reads as «Открыт» here — still correct, just less specific than the objects list.
-  const statusLabel = link.object_type === "pull_request" ? getGitPullRequestStatusLabel(link.git_object_state) : null;
+  // G2.1 D-3/M-3/M-4: same PR status as GitObjectRow (incl. the merge date+time); a link only carries
+  // git_object_state (no is_draft), so a draft PR reads as «Открыт» here — still correct, just less specific than
+  // the objects list. Already laid out with flex-wrap (review W5 #8 found only GitObjectRow needed the fix).
+  const statusLabel =
+    link.object_type === "pull_request"
+      ? getGitPullRequestStatusLabel(link.git_object_state, undefined, link.git_object_merged_at)
+      : null;
+  // G2.1 M review round 1: the status is its own flex-wrap sibling (not concatenated into the tertiary text) so it
+  // can carry the same full-date hover tooltip as GitObjectRow.
+  const statusTitle = link.object_type === "pull_request" ? getGitMergedAtTitle(link.git_object_merged_at) : undefined;
   return (
     <article className="flex flex-col gap-3 border-b border-subtle p-4 last:border-b-0 sm:flex-row sm:items-center">
       <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-layer-1 text-accent-primary">
@@ -1195,8 +1217,12 @@ function GitLinkRow({
           <span className="text-11 font-semibold text-accent-primary">{link.work_item.identifier}</span>
           <span className="text-11 text-tertiary">
             {OBJECT_LABELS[link.object_type]} · {link.repository_name}
-            {statusLabel ? ` · ${statusLabel}` : ""}
           </span>
+          {statusLabel && (
+            <span className="text-11 text-tertiary" title={statusTitle}>
+              · {statusLabel}
+            </span>
+          )}
         </div>
         <p className="mt-1 truncate text-13 font-semibold text-primary">{link.title}</p>
         <p className="mt-0.5 truncate text-12 text-secondary">{link.work_item.title}</p>

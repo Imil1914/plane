@@ -6,11 +6,37 @@
 
 // ui
 import { Button } from "@plane/propel/button";
+import { isPpmBrandEnabled } from "@ppm/brand";
+// helpers
+import { useAuthLanguage } from "@/helpers/ppm-auth-language";
+
+// Line R2-5: under the PPM brand the published pages send nobody to Plane's support mailbox or forum — the text asks
+// the PPM administrator, in the interface language. PPM_BRAND_ENABLED=0 keeps the upstream page.
+const IS_PPM_BRAND_ENABLED = isPpmBrandEnabled(process.env.PPM_BRAND_ENABLED);
 
 function ErrorPage() {
+  const { t } = useAuthLanguage();
+
   const handleRetry = () => {
     window.location.reload();
   };
+
+  if (IS_PPM_BRAND_ENABLED)
+    return (
+      <div className="grid h-screen place-items-center bg-surface-1 p-4">
+        <div className="space-y-8 text-center">
+          <div className="space-y-2">
+            <h3 className="text-16 font-semibold">{t("ui.support.space_error_title")}</h3>
+            <p className="mx-auto text-13 text-secondary md:w-1/2">{t("ui.support.space_error_description")}</p>
+          </div>
+          <div className="flex items-center justify-center gap-2">
+            <Button variant="primary" size="lg" onClick={handleRetry}>
+              {t("ui.support.refresh")}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
 
   return (
     <div className="grid h-screen place-items-center bg-surface-1 p-4">

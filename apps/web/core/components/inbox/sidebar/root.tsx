@@ -20,6 +20,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
 import { useAppRouter } from "@/hooks/use-app-router";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // local imports
 import { FiltersRoot } from "../inbox-filter";
 import { InboxIssueAppliedFilters } from "../inbox-filter/applied-filters/root";
@@ -52,6 +53,7 @@ export const InboxSidebar = observer(function InboxSidebar(props: IInboxSidebarP
   const [elementRef, setElementRef] = useState<HTMLDivElement | null>(null);
   // plane hooks
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // store
   const { currentProjectDetails } = useProject();
   const {
@@ -164,8 +166,11 @@ export const InboxSidebar = observer(function InboxSidebar(props: IInboxSidebarP
                   // TODO: Add translation
                   <EmptyStateDetailed
                     assetKey="inbox"
-                    title="No request closed yet"
-                    description="All the work items whether accepted or declined can be found here."
+                    title={ppmText("ui.intake.no_closed_title", "No request closed yet")}
+                    description={ppmText(
+                      "ui.intake.no_closed_description",
+                      "All the work items whether accepted or declined can be found here."
+                    )}
                     assetClassName="size-20"
                     className="px-10"
                   />

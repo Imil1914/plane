@@ -14,6 +14,9 @@ import { cn } from "@plane/utils";
 // constants
 import type { ToolbarMenuItem } from "@plane/editor";
 import { TOOLBAR_ITEMS, TYPOGRAPHY_ITEMS } from "@plane/editor";
+// hooks
+import { usePpmEditorLanguage } from "@/components/editor/ppm-editor-language";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // local imports
 import { ColorDropdown } from "./color-dropdown";
 
@@ -70,6 +73,9 @@ const toolbarItems = TOOLBAR_ITEMS.document;
 
 export function PageToolbar(props: Props) {
   const { editorRef } = props;
+  // PPM: the editor's own texts in the interface language (line R2)
+  usePpmEditorLanguage();
+  const ppmText = usePpmText();
   // states
   const [activeStates, setActiveStates] = useState<Record<string, boolean>>(() => {
     const initialStates: Record<string, boolean> = {};
@@ -128,7 +134,7 @@ export function PageToolbar(props: Props) {
               }
             )}
           >
-            {activeTypography?.name || "Text"}
+            {activeTypography?.name || ppmText("ui.editor.text", "Text")}
             <ChevronDownIcon className="size-3 shrink-0" />
           </span>
         }

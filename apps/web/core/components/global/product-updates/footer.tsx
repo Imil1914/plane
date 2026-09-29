@@ -11,9 +11,13 @@ import { getButtonStyling } from "@plane/propel/button";
 import { PlaneLogo } from "@plane/propel/icons";
 // helpers
 import { cn } from "@plane/utils";
+import { getPpmTranslation, isPpmBrandEnabled } from "@ppm/brand";
+
+// Line R2-5: under the PPM brand the footer names the PPM administrator instead of Plane's support mailbox.
+const IS_PPM_BRAND_ENABLED = isPpmBrandEnabled(process.env.PPM_BRAND_ENABLED);
 
 export function ProductUpdatesFooter() {
-  const { t } = useTranslation();
+  const { currentLocale, t } = useTranslation();
   return (
     <div className="m-6 mb-4 flex flex-shrink-0 items-center justify-between gap-4">
       <div className="flex items-center gap-2">
@@ -40,14 +44,18 @@ export function ProductUpdatesFooter() {
         <svg viewBox="0 0 2 2" className="h-0.5 w-0.5 fill-current">
           <circle cx={1} cy={1} r={1} />
         </svg>
-        <a
-          href="mailto:support@plane.so"
-          target="_blank"
-          className="text-13 text-secondary underline-offset-1 outline-none hover:text-primary hover:underline"
-          rel="noreferrer"
-        >
-          {t("support")}
-        </a>
+        {IS_PPM_BRAND_ENABLED ? (
+          <span className="text-13 text-secondary">{getPpmTranslation(currentLocale, "ui.support.contact_admin")}</span>
+        ) : (
+          <a
+            href="mailto:support@plane.so"
+            target="_blank"
+            className="text-13 text-secondary underline-offset-1 outline-none hover:text-primary hover:underline"
+            rel="noreferrer"
+          >
+            {t("support")}
+          </a>
+        )}
         <svg viewBox="0 0 2 2" className="h-0.5 w-0.5 fill-current">
           <circle cx={1} cy={1} r={1} />
         </svg>

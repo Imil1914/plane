@@ -10,6 +10,7 @@ import { CloseIcon } from "@plane/propel/icons";
 import { Tag } from "@plane/ui";
 import { useLabel } from "@/hooks/store/use-label";
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 function LabelIcons({ color }: { color: string }) {
   return <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />;
@@ -19,6 +20,7 @@ export const InboxIssueAppliedFiltersLabel = observer(function InboxIssueApplied
   // hooks
   const { inboxFilters, handleInboxIssueFilters } = useProjectInbox();
   const { getLabelById } = useLabel();
+  const ppmText = usePpmText();
   // derived values
   const filteredValues = inboxFilters?.labels || [];
   const currentOptionDetail = (labelId: string) => getLabelById(labelId) || undefined;
@@ -31,7 +33,7 @@ export const InboxIssueAppliedFiltersLabel = observer(function InboxIssueApplied
   if (filteredValues.length === 0) return <></>;
   return (
     <Tag>
-      <div className="text-11 text-secondary">Label</div>
+      <div className="text-11 text-secondary">{ppmText("ui.filter.label", "Label")}</div>
       {filteredValues.map((value) => {
         const optionDetail = currentOptionDetail(value);
         if (!optionDetail) return <></>;

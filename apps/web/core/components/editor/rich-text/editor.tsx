@@ -18,6 +18,7 @@ import { useMember } from "@/hooks/store/use-member";
 import { useParseEditorContent } from "@/hooks/use-parse-editor-content";
 // plane web hooks
 import { useEditorFlagging } from "@/hooks/use-editor-flagging";
+import { usePpmEditorLanguage } from "@/components/editor/ppm-editor-language";
 
 type RichTextEditorWrapperProps = MakeOptional<
   Omit<IRichTextEditorProps, "fileHandler" | "mentionHandler" | "extendedEditorProps">,
@@ -65,6 +66,8 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
   });
   // editor config
   const { getEditorFileHandlers } = useEditorConfig();
+  // PPM: the editor's own texts in the interface language (line R2)
+  usePpmEditorLanguage();
   // parse content
   const { getEditorMetaData } = useParseEditorContent({
     projectId,

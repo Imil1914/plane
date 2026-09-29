@@ -29,6 +29,8 @@ import {
   Underline,
 } from "lucide-react";
 import { MonospaceIcon, SansSerifIcon, SerifIcon } from "@plane/propel/icons";
+// helpers
+import { editorText } from "@/helpers/ppm-text";
 import type { TCommandExtraProps, TEditorCommands, TEditorFontStyle } from "@/types";
 
 export type TEditorTypes = "lite" | "document" | "sticky";
@@ -48,24 +50,84 @@ export type ToolbarMenuItem<T extends TEditorCommands = TEditorCommands> = {
   extraProps?: ExtraPropsForCommand<T>;
 };
 
+// PPM (line R2): `name` and `label` below are getters — read at render time, in the language the host app registered
+// (editorText); without a registration they are the upstream English. They stay after `editors`, where a11y tests look.
 export const TYPOGRAPHY_ITEMS: ToolbarMenuItem<"text" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6">[] = [
-  { itemKey: "text", renderKey: "text", name: "Text", icon: CaseSensitive, editors: ["document"] },
-  { itemKey: "h1", renderKey: "h1", name: "Heading 1", icon: Heading1, editors: ["document"] },
-  { itemKey: "h2", renderKey: "h2", name: "Heading 2", icon: Heading2, editors: ["document"] },
-  { itemKey: "h3", renderKey: "h3", name: "Heading 3", icon: Heading3, editors: ["document"] },
-  { itemKey: "h4", renderKey: "h4", name: "Heading 4", icon: Heading4, editors: ["document"] },
-  { itemKey: "h5", renderKey: "h5", name: "Heading 5", icon: Heading5, editors: ["document"] },
-  { itemKey: "h6", renderKey: "h6", name: "Heading 6", icon: Heading6, editors: ["document"] },
+  {
+    itemKey: "text",
+    renderKey: "text",
+    icon: CaseSensitive,
+    editors: ["document"],
+    get name() {
+      return editorText("ui.editor.text", "Text");
+    },
+  },
+  {
+    itemKey: "h1",
+    renderKey: "h1",
+    icon: Heading1,
+    editors: ["document"],
+    get name() {
+      return editorText("ui.editor.heading_1", "Heading 1");
+    },
+  },
+  {
+    itemKey: "h2",
+    renderKey: "h2",
+    icon: Heading2,
+    editors: ["document"],
+    get name() {
+      return editorText("ui.editor.heading_2", "Heading 2");
+    },
+  },
+  {
+    itemKey: "h3",
+    renderKey: "h3",
+    icon: Heading3,
+    editors: ["document"],
+    get name() {
+      return editorText("ui.editor.heading_3", "Heading 3");
+    },
+  },
+  {
+    itemKey: "h4",
+    renderKey: "h4",
+    icon: Heading4,
+    editors: ["document"],
+    get name() {
+      return editorText("ui.editor.heading_4", "Heading 4");
+    },
+  },
+  {
+    itemKey: "h5",
+    renderKey: "h5",
+    icon: Heading5,
+    editors: ["document"],
+    get name() {
+      return editorText("ui.editor.heading_5", "Heading 5");
+    },
+  },
+  {
+    itemKey: "h6",
+    renderKey: "h6",
+    icon: Heading6,
+    editors: ["document"],
+    get name() {
+      return editorText("ui.editor.heading_6", "Heading 6");
+    },
+  },
 ];
 
 export const TEXT_ALIGNMENT_ITEMS: ToolbarMenuItem<"text-align">[] = [
   {
     itemKey: "text-align",
     renderKey: "text-align-left",
-    name: "Left align",
     icon: AlignLeft,
     shortcut: ["Cmd", "Shift", "L"],
     editors: ["lite", "document"],
+    get name() {
+      return editorText("ui.editor.align_left", "Left align");
+    },
     extraProps: {
       alignment: "left",
     },
@@ -73,10 +135,12 @@ export const TEXT_ALIGNMENT_ITEMS: ToolbarMenuItem<"text-align">[] = [
   {
     itemKey: "text-align",
     renderKey: "text-align-center",
-    name: "Center align",
     icon: AlignCenter,
     shortcut: ["Cmd", "Shift", "E"],
     editors: ["lite", "document"],
+    get name() {
+      return editorText("ui.editor.align_center", "Center align");
+    },
     extraProps: {
       alignment: "center",
     },
@@ -84,10 +148,12 @@ export const TEXT_ALIGNMENT_ITEMS: ToolbarMenuItem<"text-align">[] = [
   {
     itemKey: "text-align",
     renderKey: "text-align-right",
-    name: "Right align",
     icon: AlignRight,
     shortcut: ["Cmd", "Shift", "R"],
     editors: ["lite", "document"],
+    get name() {
+      return editorText("ui.editor.align_right", "Right align");
+    },
     extraProps: {
       alignment: "right",
     },
@@ -98,34 +164,42 @@ const BASIC_MARK_ITEMS: ToolbarMenuItem<"bold" | "italic" | "underline" | "strik
   {
     itemKey: "bold",
     renderKey: "bold",
-    name: "Bold",
     icon: Bold,
     shortcut: ["Cmd", "B"],
     editors: ["lite", "document"],
+    get name() {
+      return editorText("ui.editor.bold", "Bold");
+    },
   },
   {
     itemKey: "italic",
     renderKey: "italic",
-    name: "Italic",
     icon: Italic,
     shortcut: ["Cmd", "I"],
     editors: ["lite", "document"],
+    get name() {
+      return editorText("ui.editor.italic", "Italic");
+    },
   },
   {
     itemKey: "underline",
     renderKey: "underline",
-    name: "Underline",
     icon: Underline,
     shortcut: ["Cmd", "U"],
     editors: ["lite", "document"],
+    get name() {
+      return editorText("ui.editor.underline", "Underline");
+    },
   },
   {
     itemKey: "strikethrough",
     renderKey: "strikethrough",
-    name: "Strikethrough",
     icon: Strikethrough,
     shortcut: ["Cmd", "Shift", "S"],
     editors: ["lite", "document"],
+    get name() {
+      return editorText("ui.editor.strikethrough", "Strikethrough");
+    },
   },
 ];
 
@@ -133,37 +207,75 @@ const LIST_ITEMS: ToolbarMenuItem<"bulleted-list" | "numbered-list" | "to-do-lis
   {
     itemKey: "bulleted-list",
     renderKey: "bulleted-list",
-    name: "Bulleted list",
     icon: List,
     shortcut: ["Cmd", "Shift", "7"],
     editors: ["lite", "document"],
+    get name() {
+      return editorText("ui.editor.bulleted_list", "Bulleted list");
+    },
   },
   {
     itemKey: "numbered-list",
     renderKey: "numbered-list",
-    name: "Numbered list",
     icon: ListOrdered,
     shortcut: ["Cmd", "Shift", "8"],
     editors: ["lite", "document"],
+    get name() {
+      return editorText("ui.editor.numbered_list", "Numbered list");
+    },
   },
   {
     itemKey: "to-do-list",
     renderKey: "to-do-list",
-    name: "To-do list",
     icon: ListTodo,
     shortcut: ["Cmd", "Shift", "9"],
     editors: ["lite", "document"],
+    get name() {
+      return editorText("ui.editor.todo_list", "To-do list");
+    },
   },
 ];
 
 export const USER_ACTION_ITEMS: ToolbarMenuItem<"quote" | "code">[] = [
-  { itemKey: "quote", renderKey: "quote", name: "Quote", icon: TextQuote, editors: ["lite", "document"] },
-  { itemKey: "code", renderKey: "code", name: "Code", icon: Code2, editors: ["lite", "document"] },
+  {
+    itemKey: "quote",
+    renderKey: "quote",
+    icon: TextQuote,
+    editors: ["lite", "document"],
+    get name() {
+      return editorText("ui.editor.quote", "Quote");
+    },
+  },
+  {
+    itemKey: "code",
+    renderKey: "code",
+    icon: Code2,
+    editors: ["lite", "document"],
+    get name() {
+      return editorText("ui.editor.code", "Code");
+    },
+  },
 ];
 
 export const COMPLEX_ITEMS: ToolbarMenuItem<"table" | "image">[] = [
-  { itemKey: "table", renderKey: "table", name: "Table", icon: Table, editors: ["document"] },
-  { itemKey: "image", renderKey: "image", name: "Image", icon: Image, editors: ["lite", "document"] },
+  {
+    itemKey: "table",
+    renderKey: "table",
+    icon: Table,
+    editors: ["document"],
+    get name() {
+      return editorText("ui.editor.table", "Table");
+    },
+  },
+  {
+    itemKey: "image",
+    renderKey: "image",
+    icon: Image,
+    editors: ["lite", "document"],
+    get name() {
+      return editorText("ui.editor.image", "Image");
+    },
+  },
 ];
 
 export const IMAGE_ITEM = COMPLEX_ITEMS.find((item): item is ToolbarMenuItem<"image"> => item.itemKey === "image")!;
@@ -201,49 +313,65 @@ export const COLORS_LIST: {
 }[] = [
   {
     key: "gray",
-    label: "Gray",
+    get label() {
+      return editorText("ui.editor.color_gray", "Gray");
+    },
     textColor: "var(--editor-colors-gray-text)",
     backgroundColor: "var(--editor-colors-gray-background)",
   },
   {
     key: "peach",
-    label: "Peach",
+    get label() {
+      return editorText("ui.editor.color_peach", "Peach");
+    },
     textColor: "var(--editor-colors-peach-text)",
     backgroundColor: "var(--editor-colors-peach-background)",
   },
   {
     key: "pink",
-    label: "Pink",
+    get label() {
+      return editorText("ui.editor.color_pink", "Pink");
+    },
     textColor: "var(--editor-colors-pink-text)",
     backgroundColor: "var(--editor-colors-pink-background)",
   },
   {
     key: "orange",
-    label: "Orange",
+    get label() {
+      return editorText("ui.editor.color_orange", "Orange");
+    },
     textColor: "var(--editor-colors-orange-text)",
     backgroundColor: "var(--editor-colors-orange-background)",
   },
   {
     key: "green",
-    label: "Green",
+    get label() {
+      return editorText("ui.editor.color_green", "Green");
+    },
     textColor: "var(--editor-colors-green-text)",
     backgroundColor: "var(--editor-colors-green-background)",
   },
   {
     key: "light-blue",
-    label: "Light blue",
+    get label() {
+      return editorText("ui.editor.color_light_blue", "Light blue");
+    },
     textColor: "var(--editor-colors-light-blue-text)",
     backgroundColor: "var(--editor-colors-light-blue-background)",
   },
   {
     key: "dark-blue",
-    label: "Dark blue",
+    get label() {
+      return editorText("ui.editor.color_dark_blue", "Dark blue");
+    },
     textColor: "var(--editor-colors-dark-blue-text)",
     backgroundColor: "var(--editor-colors-dark-blue-background)",
   },
   {
     key: "purple",
-    label: "Purple",
+    get label() {
+      return editorText("ui.editor.color_purple", "Purple");
+    },
     textColor: "var(--editor-colors-purple-text)",
     backgroundColor: "var(--editor-colors-purple-background)",
   },
@@ -260,7 +388,25 @@ export const EDITOR_FONT_STYLES: {
   label: string;
   icon: React.FC;
 }[] = [
-  { key: "sans-serif", label: "Sans serif", icon: SansSerifIcon },
-  { key: "serif", label: "Serif", icon: SerifIcon },
-  { key: "monospace", label: "Mono", icon: MonospaceIcon },
+  {
+    key: "sans-serif",
+    get label() {
+      return editorText("ui.editor.font_sans", "Sans serif");
+    },
+    icon: SansSerifIcon,
+  },
+  {
+    key: "serif",
+    get label() {
+      return editorText("ui.editor.font_serif", "Serif");
+    },
+    icon: SerifIcon,
+  },
+  {
+    key: "monospace",
+    get label() {
+      return editorText("ui.editor.font_mono", "Mono");
+    },
+    icon: MonospaceIcon,
+  },
 ];

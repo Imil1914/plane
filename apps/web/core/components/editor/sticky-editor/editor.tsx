@@ -19,6 +19,7 @@ import { useEditorConfig } from "@/hooks/editor";
 import { useParseEditorContent } from "@/hooks/use-parse-editor-content";
 // plane web hooks
 import { useEditorFlagging } from "@/hooks/use-editor-flagging";
+import { usePpmEditorLanguage } from "@/components/editor/ppm-editor-language";
 import { StickyEditorToolbar } from "./toolbar";
 
 interface StickyEditorWrapperProps extends Omit<
@@ -74,6 +75,8 @@ export const StickyEditor = React.forwardRef(function StickyEditor(
   });
   // editor config
   const { getEditorFileHandlers } = useEditorConfig();
+  // PPM: the editor's own texts in the interface language (line R2)
+  usePpmEditorLanguage();
   function isMutableRefObject<T>(ref: React.ForwardedRef<T>): ref is React.MutableRefObject<T | null> {
     return !!ref && typeof ref === "object" && "current" in ref;
   }

@@ -15,6 +15,9 @@ import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/fi
 // constants
 // hooks
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
+import { usePpmText } from "@/hooks/use-ppm-text";
+// local imports
+import { useIntakeDatePresetName } from "../ppm-date-presets";
 
 type Props = {
   filterKey: TInboxIssueFilterDateKeys;
@@ -31,14 +34,17 @@ export const FilterDate = observer(function FilterDate(props: Props) {
   const { filterKey, label, searchQuery } = props;
   // hooks
   const { inboxFilters, handleInboxIssueFilters } = useProjectInbox();
+  const ppmText = usePpmText();
+  const intakeDatePresetName = useIntakeDatePresetName();
   // state
   const [previewEnabled, setPreviewEnabled] = useState(true);
   const [isDateFilterModalOpen, setIsDateFilterModalOpen] = useState(false);
   // derived values
   const filterValue: string[] = inboxFilters?.[filterKey] || [];
   const appliedFiltersCount = filterValue?.length ?? 0;
+  // Search by the shown name too («сегодня»), as the other date filters do.
   const filteredOptions = PAST_DURATION_FILTER_OPTIONS.filter((d) =>
-    d.name.toLowerCase().includes(searchQuery.toLowerCase())
+    `${d.name} ${intakeDatePresetName(d.value, d.name)}`.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleFilterValue = (value: string): string[] => (filterValue?.includes(value) ? [] : uniq(concat(value)));
@@ -64,11 +70,11 @@ export const FilterDate = observer(function FilterDate(props: Props) {
           handleClose={() => setIsDateFilterModalOpen(false)}
           isOpen={isDateFilterModalOpen}
           onSelect={(val) => handleInboxIssueFilters(filterKey, val)}
-          title="Created date"
+          title={ppmText("ui.filter.created_date", "Created date")}
         />
       )}
       <FilterHeader
-        title={`${label || "Created date"}${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
+        title={`${label || ppmText("ui.filter.created_date", "Created date")}${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
         isPreviewEnabled={previewEnabled}
         handleIsPreviewEnabled={() => setPreviewEnabled(!previewEnabled)}
       />
@@ -81,19 +87,19 @@ export const FilterDate = observer(function FilterDate(props: Props) {
                   key={option.value}
                   isChecked={filterValue?.includes(option.value) ? true : false}
                   onClick={() => handleInboxIssueFilters(filterKey, handleFilterValue(option.value))}
-                  title={option.name}
+                  title={intakeDatePresetName(option.value, option.name)}
                   multiple={false}
                 />
               ))}
               <FilterOption
                 isChecked={isCustomDateSelected()}
                 onClick={handleCustomDate}
-                title="Custom"
+                title={ppmText("ui.common.custom_dates", "Custom")}
                 multiple={false}
               />
             </>
           ) : (
-            <p className="text-11 text-placeholder italic">No matches found</p>
+            <p className="text-11 text-placeholder italic">{ppmText("ui.common.no_matches", "No matches found")}</p>
           )}
         </div>
       )}

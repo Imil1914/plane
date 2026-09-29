@@ -4,13 +4,27 @@
  * See the LICENSE file for details.
  */
 
-import { isPpmShellEnabled } from "@ppm/brand";
+import { isPpmBrandEnabled } from "@ppm/brand";
 // hooks
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
+// Line R2-5: under the PPM brand (not only the full shell) nothing sends people to Plane's support mailbox — the PPM
+// text asks the PPM administrator, in the interface language. PPM_BRAND_ENABLED=0 keeps the upstream message.
+const IS_PPM_BRAND_ENABLED = isPpmBrandEnabled(process.env.PPM_BRAND_ENABLED);
+
 export function MaintenanceMessage() {
   const ppmT = usePpmTranslation();
-  const isPpmShell = isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED);
+
+  if (IS_PPM_BRAND_ENABLED) {
+    return (
+      <div className="flex flex-col gap-2.5">
+        <h1 className="text-left text-18 font-semibold text-primary">🚧 {ppmT("state.maintenance_title")}</h1>
+        <span className="text-left text-14 font-medium text-secondary">{ppmT("state.maintenance_description")}</span>
+        <span className="text-left text-13 text-secondary">{ppmT("ui.support.maintenance_contact")}</span>
+      </div>
+    );
+  }
+
   const linkMap = [
     {
       key: "mail_to",
@@ -18,15 +32,6 @@ export function MaintenanceMessage() {
       value: "mailto:support@plane.so",
     },
   ];
-
-  if (isPpmShell) {
-    return (
-      <div className="flex flex-col gap-2.5">
-        <h1 className="text-left text-18 font-semibold text-primary">🚧 {ppmT("state.maintenance_title")}</h1>
-        <span className="text-left text-14 font-medium text-secondary">{ppmT("state.maintenance_description")}</span>
-      </div>
-    );
-  }
 
   return (
     <>

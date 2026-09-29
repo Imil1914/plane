@@ -10,6 +10,8 @@ import type { Editor } from "@tiptap/react";
 import { MoveHorizontal } from "lucide-react";
 // constants
 import { CORE_EXTENSIONS } from "@/constants/extension";
+// helpers
+import { editorText } from "@/helpers/ppm-text";
 // types
 import type { BlockMenuOption } from "./block-menu";
 
@@ -86,7 +88,7 @@ export const getNodeOptions = (editor: Editor): BlockMenuOption[] => [
   {
     icon: MoveHorizontal,
     key: "table-full-width",
-    label: "Fit to width",
+    label: editorText("ui.editor.fit_width", "Fit to width"),
     isDisabled: !editor.isActive(CORE_EXTENSIONS.TABLE),
     onClick: () => setTableToFullWidth(editor),
   },

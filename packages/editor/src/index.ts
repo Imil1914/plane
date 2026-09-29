@@ -18,6 +18,9 @@ export * from "@/constants/common";
 // helpers
 export * from "@/helpers/common";
 export * from "@/helpers/yjs-utils";
+// PPM (line R2): the host app registers the editor's interface texts (the Russian PPM interface)
+export { setEditorTextResolver } from "@/helpers/ppm-text";
+export type { TEditorTextResolver } from "@/helpers/ppm-text";
 
 export { CORE_EXTENSIONS } from "@/constants/extension";
 export { ADDITIONAL_EXTENSIONS } from "@/plane-editor/constants/extensions";

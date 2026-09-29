@@ -11,6 +11,7 @@ import { SearchIcon, CloseIcon } from "@plane/propel/icons";
 import { useLabel } from "@/hooks/store/use-label";
 import { useMember } from "@/hooks/store/use-member";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // local imports
 import { FilterDate } from "./date";
 import { FilterLabels } from "./labels";
@@ -25,6 +26,7 @@ export const InboxIssueFilterSelection = observer(function InboxIssueFilterSelec
     project: { projectMemberIds },
   } = useMember();
   const { projectLabels } = useLabel();
+  const ppmText = usePpmText();
   // states
   const [filtersSearchQuery, setFiltersSearchQuery] = useState("");
 
@@ -36,7 +38,7 @@ export const InboxIssueFilterSelection = observer(function InboxIssueFilterSelec
           <input
             type="text"
             className="w-full bg-surface-2 outline-none placeholder:text-placeholder"
-            placeholder="Search"
+            placeholder={ppmText("ui.common.search", "Search")}
             value={filtersSearchQuery}
             onChange={(e) => setFiltersSearchQuery(e.target.value)}
             autoFocus={!isMobile}
@@ -62,7 +64,7 @@ export const InboxIssueFilterSelection = observer(function InboxIssueFilterSelec
         <div className="py-2">
           <FilterMember
             filterKey="assignees"
-            label="Assignees"
+            label={ppmText("ui.filter.assignees", "Assignees")}
             searchQuery={filtersSearchQuery}
             memberIds={projectMemberIds ?? []}
           />
@@ -71,7 +73,7 @@ export const InboxIssueFilterSelection = observer(function InboxIssueFilterSelec
         <div className="py-2">
           <FilterMember
             filterKey="created_by"
-            label="Created By"
+            label={ppmText("ui.intake.created_by", "Created By")}
             searchQuery={filtersSearchQuery}
             memberIds={projectMemberIds ?? []}
           />
@@ -82,11 +84,19 @@ export const InboxIssueFilterSelection = observer(function InboxIssueFilterSelec
         </div>
         {/* Created at */}
         <div className="py-2">
-          <FilterDate filterKey="created_at" label="Created date" searchQuery={filtersSearchQuery} />
+          <FilterDate
+            filterKey="created_at"
+            label={ppmText("ui.filter.created_date", "Created date")}
+            searchQuery={filtersSearchQuery}
+          />
         </div>
         {/* Updated at */}
         <div className="py-2">
-          <FilterDate filterKey="updated_at" label="Last updated date" searchQuery={filtersSearchQuery} />
+          <FilterDate
+            filterKey="updated_at"
+            label={ppmText("ui.intake.last_updated_date", "Last updated date")}
+            searchQuery={filtersSearchQuery}
+          />
         </div>
       </div>
     </div>

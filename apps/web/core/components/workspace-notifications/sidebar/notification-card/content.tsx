@@ -15,12 +15,17 @@ import {
 } from "@plane/utils";
 // components
 import { LiteTextEditor } from "@/components/editor/lite-text";
+import { usePpmPriorityTitle } from "@/components/ppm-shell/priority-title";
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import {
   ADDITIONAL_NOTIFICATION_CONTENT_MAP,
   renderAdditionalAction,
   renderAdditionalValue,
   shouldShowConnector,
 } from "../../notification-card/content";
+import { resolvePpmNotificationPhrase } from "../../ppm-notification-text";
 
 // Types
 export type TNotificationFieldData = {
@@ -160,6 +165,9 @@ export function NotificationContent({
   renderCommentBox?: boolean;
 }) {
   const { data, triggered_by_details: triggeredBy } = notification;
+  const isPpmRu = usePpmRu();
+  const ppmT = usePpmTranslation();
+  const priorityTitle = usePpmPriorityTitle();
   const notificationField = data?.issue_activity.field;
   const newValue = data?.issue_activity.new_value;
   const oldValue = data?.issue_activity.old_value;
@@ -199,6 +207,42 @@ export function NotificationContent({
     return renderAdditionalValue(notificationField, newValue, oldValue);
   };
 
+  const commentBox =
+    notificationField === "comment" && renderCommentBox ? (
+      <div className="origin-left scale-75">
+        <LiteTextEditor
+          editable={false}
+          id=""
+          initialValue={newValue ?? ""}
+          workspaceId={workspaceId}
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          displayConfig={{
+            fontSize: "small-font",
+          }}
+        />
+      </div>
+    ) : null;
+
+  // PPM (line R2): the Russian interface shows a whole phrase per field and verb instead of the English pieces.
+  if (isPpmRu) {
+    const ppm = resolvePpmNotificationPhrase(fieldData, renderCommentBox);
+    const value = ppm.priority ? priorityTitle(ppm.priority, ppm.value ?? "") : ppm.value;
+    return (
+      <>
+        {renderTriggerName()}
+        <span className="text-tertiary">
+          <PpmTemplateText
+            template={ppmT(ppm.phrase)}
+            values={{ value: <span className="font-medium text-primary">{value}</span> }}
+          />
+          .
+        </span>
+        {verb !== "deleted" && commentBox}
+      </>
+    );
+  }
+
   // Determine if connector should be shown - prefer map value, fallback to function
   const showConnector =
     contentDetails?.showConnector !== undefined ? contentDetails.showConnector : shouldShowConnector(notificationField);
@@ -211,21 +255,7 @@ export function NotificationContent({
         <>
           {showConnector && <span className="text-tertiary">to </span>}
           <span className="font-medium text-primary">{renderValue()}</span>
-          {notificationField === "comment" && renderCommentBox && (
-            <div className="origin-left scale-75">
-              <LiteTextEditor
-                editable={false}
-                id=""
-                initialValue={newValue ?? ""}
-                workspaceId={workspaceId}
-                workspaceSlug={workspaceSlug}
-                projectId={projectId}
-                displayConfig={{
-                  fontSize: "small-font",
-                }}
-              />
-            </div>
-          )}
+          {commentBox}
           {"."}
         </>
       )}

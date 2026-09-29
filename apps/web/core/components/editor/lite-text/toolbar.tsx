@@ -22,6 +22,8 @@ import { cn } from "@plane/utils";
 import type { ToolbarMenuItem } from "@plane/editor";
 import { TOOLBAR_ITEMS } from "@plane/editor";
 // ppm
+import { usePpmEditorLanguage } from "@/components/editor/ppm-editor-language";
+import { usePpmRu } from "@/hooks/use-ppm-text";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { LITE_TOOLBAR_A11Y_KEY } from "./toolbar-a11y";
 // helpers
@@ -43,6 +45,8 @@ type TCommentAccessType = {
   icon: LucideIcon | React.FC<ISvgIcons>;
   key: EIssueCommentAccessSpecifier;
   label: "Private" | "Public";
+  // The Plane key of the same word (en = label), shown in the Russian PPM interface.
+  i18nLabel: "common.access.private" | "common.access.public";
 };
 
 const COMMENT_ACCESS_SPECIFIERS: TCommentAccessType[] = [
@@ -50,11 +54,13 @@ const COMMENT_ACCESS_SPECIFIERS: TCommentAccessType[] = [
     icon: LockIcon,
     key: EIssueCommentAccessSpecifier.INTERNAL,
     label: "Private",
+    i18nLabel: "common.access.private",
   },
   {
     icon: GlobeIcon,
     key: EIssueCommentAccessSpecifier.EXTERNAL,
     label: "Public",
+    i18nLabel: "common.access.public",
   },
 ];
 
@@ -63,6 +69,9 @@ const toolbarItems = TOOLBAR_ITEMS.lite;
 export function IssueCommentToolbar(props: Props) {
   const { t } = useTranslation();
   const ppmT = usePpmTranslation();
+  const isPpmRu = usePpmRu();
+  // PPM: the editor's own texts in the interface language (line R2)
+  usePpmEditorLanguage();
   const {
     accessSpecifier,
     executeCommand,
@@ -114,7 +123,7 @@ export function IssueCommentToolbar(props: Props) {
             const isAccessActive = accessSpecifier === access.key;
 
             return (
-              <Tooltip key={access.key} tooltipContent={access.label}>
+              <Tooltip key={access.key} tooltipContent={isPpmRu ? t(access.i18nLabel) : access.label}>
                 <button
                   type="button"
                   onClick={() => handleAccessChange?.(access.key)}

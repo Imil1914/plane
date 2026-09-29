@@ -14,6 +14,9 @@ import { CustomSelect, EModalPosition, EModalWidth, ModalCore } from "@plane/ui"
 // components
 import { getDate, cn } from "@plane/utils";
 import { DateDropdown } from "@/components/dropdowns/date";
+import { toPpm24HourTime } from "@/components/workspace-notifications/ppm-notification-text";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type TNotificationSnoozeModal = {
   isOpen: boolean;
@@ -39,6 +42,9 @@ export function NotificationSnoozeModal(props: TNotificationSnoozeModal) {
   const { isOpen, onClose, onSubmit: handleSubmitSnooze } = props;
 
   const { workspaceSlug } = useParams();
+  const isPpmRu = usePpmRu();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
 
   const {
     formState: { isSubmitting },
@@ -116,7 +122,9 @@ export function NotificationSnoozeModal(props: TNotificationSnoozeModal) {
     <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.XXL}>
       <form onSubmit={handleSubmit(onSubmit)} className="p-5">
         <div className="flex items-center justify-between">
-          <h3 className="text-h5-medium leading-6 text-primary">Customize Snooze Time</h3>
+          <h3 className="text-h5-medium leading-6 text-primary">
+            {ppmText("ui.notification.snooze_title", "Customize Snooze Time")}
+          </h3>
 
           <div>
             <button type="button" onClick={handleClose}>
@@ -127,15 +135,17 @@ export function NotificationSnoozeModal(props: TNotificationSnoozeModal) {
 
         <div className="mt-5 flex flex-col gap-3 md:!flex-row md:items-center">
           <div className="flex-1 pb-3 md:pb-0">
-            <h6 className="mb-2 block text-body-xs-medium text-placeholder">Pick a date</h6>
+            <h6 className="mb-2 block text-body-xs-medium text-placeholder">
+              {ppmText("ui.notification.pick_date", "Pick a date")}
+            </h6>
             <Controller
               name="date"
               control={control}
-              rules={{ required: "Please select a date" }}
+              rules={{ required: ppmText("ui.notification.date_required", "Please select a date") }}
               render={({ field: { value, onChange } }) => (
                 <DateDropdown
                   value={value || null}
-                  placeholder="Select date"
+                  placeholder={ppmText("ui.notification.select_date", "Select date")}
                   onChange={(val) => {
                     setValue("time", undefined);
                     onChange(val);
@@ -150,11 +160,13 @@ export function NotificationSnoozeModal(props: TNotificationSnoozeModal) {
             />
           </div>
           <div className="flex-1">
-            <h6 className="mb-2 block text-body-xs-medium text-placeholder">Pick a time</h6>
+            <h6 className="mb-2 block text-body-xs-medium text-placeholder">
+              {ppmText("ui.notification.pick_time", "Pick a time")}
+            </h6>
             <Controller
               control={control}
               name="time"
-              rules={{ required: "Please select a time" }}
+              rules={{ required: ppmText("ui.notification.time_required", "Please select a time") }}
               render={({ field: { value, onChange } }) => (
                 <CustomSelect
                   value={value}
@@ -163,10 +175,18 @@ export function NotificationSnoozeModal(props: TNotificationSnoozeModal) {
                     <div className="truncate">
                       {value ? (
                         <span>
-                          {value} {watch("period").toLowerCase()}
+                          {isPpmRu ? (
+                            toPpm24HourTime(value, watch("period"))
+                          ) : (
+                            <>
+                              {value} {watch("period").toLowerCase()}
+                            </>
+                          )}
                         </span>
                       ) : (
-                        <span className="text-body-xs-medium text-placeholder">Select a time</span>
+                        <span className="text-body-xs-medium text-placeholder">
+                          {ppmText("ui.notification.select_time", "Select a time")}
+                        </span>
                       )}
                     </div>
                   }
@@ -182,7 +202,7 @@ export function NotificationSnoozeModal(props: TNotificationSnoozeModal) {
                         "bg-layer-1": watch("period") !== "AM",
                       })}
                     >
-                      AM
+                      {isPpmRu ? ppmT("ui.notification.am") : "AM"}
                     </div>
                     <div
                       onClick={() => {
@@ -193,19 +213,23 @@ export function NotificationSnoozeModal(props: TNotificationSnoozeModal) {
                         "bg-layer-1": watch("period") !== "PM",
                       })}
                     >
-                      PM
+                      {isPpmRu ? ppmT("ui.notification.pm") : "PM"}
                     </div>
                   </div>
                   {getTimeStamp().length > 0 ? (
                     getTimeStamp().map((time, index) => (
                       <CustomSelect.Option key={`${time}-${index}`} value={time.value}>
                         <div className="flex items-center">
-                          <span className="ml-3 block truncate">{time.label}</span>
+                          <span className="ml-3 block truncate">
+                            {isPpmRu ? toPpm24HourTime(time.value, watch("period")) : time.label}
+                          </span>
                         </div>
                       </CustomSelect.Option>
                     ))
                   ) : (
-                    <p className="p-3 text-center text-secondary">No available time for this date.</p>
+                    <p className="p-3 text-center text-secondary">
+                      {ppmText("ui.notification.no_time_left", "No available time for this date.")}
+                    </p>
                   )}
                 </CustomSelect>
               )}
@@ -216,10 +240,12 @@ export function NotificationSnoozeModal(props: TNotificationSnoozeModal) {
         <div className="mt-5 flex items-center justify-between gap-2">
           <div className="flex w-full items-center justify-end gap-2">
             <Button variant="secondary" size="lg" onClick={handleClose}>
-              Cancel
+              {ppmText("ui.common.cancel", "Cancel")}
             </Button>
             <Button variant="primary" size="lg" type="submit" loading={isSubmitting}>
-              {isSubmitting ? "Submitting..." : "Submit"}
+              {isSubmitting
+                ? ppmText("ui.notification.snooze_submitting", "Submitting...")
+                : ppmText("ui.notification.snooze_submit", "Submit")}
             </Button>
           </div>
         </div>

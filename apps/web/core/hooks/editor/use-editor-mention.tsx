@@ -15,6 +15,7 @@ import { Avatar } from "@plane/ui";
 import { getFileURL } from "@plane/utils";
 // plane web hooks
 import { useAdditionalEditorMention } from "@/hooks/use-additional-editor-mention";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type TArgs = {
   enableAdvancedMentions?: boolean;
@@ -27,6 +28,7 @@ export const useEditorMention = (args: TArgs) => {
   const { editorMentionTypes, updateAdditionalSections } = useAdditionalEditorMention({
     enableAdvancedMentions,
   });
+  const ppmText = usePpmText();
   // fetch mentions handler
   const fetchMentions = useCallback(
     async (query: string): Promise<TMentionSection[]> => {
@@ -59,7 +61,7 @@ export const useEditorMention = (args: TArgs) => {
             }));
             suggestionSections.push({
               key: "users",
-              title: "Users",
+              title: ppmText("ui.editor.mention_users", "Users"),
               items,
             });
           }
@@ -73,7 +75,7 @@ export const useEditorMention = (args: TArgs) => {
         throw error;
       }
     },
-    [editorMentionTypes, searchEntity, updateAdditionalSections]
+    [editorMentionTypes, ppmText, searchEntity, updateAdditionalSections]
   );
 
   return {

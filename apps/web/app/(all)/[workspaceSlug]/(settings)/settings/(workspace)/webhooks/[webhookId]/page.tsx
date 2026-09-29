@@ -22,6 +22,7 @@ import { DeleteWebhookModal, WebhookDeleteSection, WebhookForm } from "@/compone
 import { useWebhook } from "@/hooks/store/use-webhook";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserPermissions } from "@/hooks/store/user";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // local imports
 import type { Route } from "./+types/page";
 import { WebhookDetailsWorkspaceSettingsHeader } from "./header";
@@ -36,6 +37,7 @@ function WebhookDetailsPage({ params }: Route.ComponentProps) {
   const { currentWorkspace } = useWorkspace();
   const { allowPermissions } = useUserPermissions();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
 
   // TODO: fix this error
   // useEffect(() => {
@@ -72,15 +74,15 @@ function WebhookDetailsPage({ params }: Route.ComponentProps) {
       await updateWebhook(workspaceSlug, formData.id, payload);
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success!",
-        message: "Webhook updated successfully.",
+        title: ppmText("ui.toast.success", "Success!"),
+        message: ppmText("ui.webhook.updated", "Webhook updated successfully."),
       });
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: error?.error ?? "Something went wrong. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: error?.error ?? ppmText("ui.toast.try_again_now", "Something went wrong. Please try again."),
       });
     }
   };
@@ -90,7 +92,9 @@ function WebhookDetailsPage({ params }: Route.ComponentProps) {
       <>
         <PageHead title={pageTitle} />
         <div className="mt-10 flex h-full w-full justify-center p-4">
-          <p className="text-13 text-tertiary">You are not authorized to access this page.</p>
+          <p className="text-13 text-tertiary">
+            {ppmText("ui.webhook.not_authorized", "You are not authorized to access this page.")}
+          </p>
         </div>
       </>
     );

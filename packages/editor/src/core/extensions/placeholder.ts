@@ -7,6 +7,8 @@
 import { Placeholder } from "@tiptap/extension-placeholder";
 // constants
 import { CORE_EXTENSIONS } from "@/constants/extension";
+// helpers
+import { editorText } from "@/helpers/ppm-text";
 // types
 import type { IEditorProps } from "@/types";
 
@@ -22,7 +24,10 @@ export const CustomPlaceholderExtension = (args: TArgs) => {
     placeholder: ({ editor, node }) => {
       if (!editor.isEditable) return "";
 
-      if (node.type.name === CORE_EXTENSIONS.HEADING) return `Heading ${node.attrs.level}`;
+      if (node.type.name === CORE_EXTENSIONS.HEADING) {
+        const level = node.attrs.level as number;
+        return editorText("ui.editor.placeholder_heading", `Heading ${level}`, { level });
+      }
 
       const isUploadInProgress = editor.storage.utility?.uploadInProgress;
 
@@ -48,7 +53,7 @@ export const CustomPlaceholderExtension = (args: TArgs) => {
         else return placeholder(editor.isFocused, editor.getHTML());
       }
 
-      return "Press '/' for commands...";
+      return editorText("ui.editor.placeholder_commands", "Press '/' for commands...");
     },
     includeChildren: true,
   });

@@ -13,12 +13,14 @@ import type { TInboxIssueStatus } from "@plane/types";
 import { Tag } from "@plane/ui";
 // hooks
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
+import { usePpmText } from "@/hooks/use-ppm-text";
 import { InboxStatusIcon } from "../../inbox-status-icon";
 
 export const InboxIssueAppliedFiltersStatus = observer(function InboxIssueAppliedFiltersStatus() {
   // hooks
   const { inboxFilters, handleInboxIssueFilters } = useProjectInbox();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // derived values
   const filteredValues = inboxFilters?.status || [];
   const currentOptionDetail = (status: TInboxIssueStatus) => INBOX_STATUS.find((s) => s.status === status) || undefined;
@@ -29,7 +31,7 @@ export const InboxIssueAppliedFiltersStatus = observer(function InboxIssueApplie
   if (filteredValues.length === 0) return <></>;
   return (
     <Tag>
-      <div className="text-11 text-secondary">Status</div>
+      <div className="text-11 text-secondary">{ppmText("ui.intake.status_chip", "Status")}</div>
       {filteredValues.map((value) => {
         const optionDetail = currentOptionDetail(value);
         if (!optionDetail) return <></>;

@@ -15,6 +15,7 @@ import { useEditorConfig, useEditorMention } from "@/hooks/editor";
 import { useMember } from "@/hooks/store/use-member";
 import { useParseEditorContent } from "@/hooks/use-parse-editor-content";
 import { useEditorFlagging } from "@/hooks/use-editor-flagging";
+import { usePpmEditorLanguage } from "@/components/editor/ppm-editor-language";
 // local imports
 import { EditorMentionsRoot } from "../embeds/mentions";
 
@@ -71,6 +72,8 @@ export const DocumentEditor = forwardRef(function DocumentEditor(
   });
   // editor config
   const { getEditorFileHandlers } = useEditorConfig();
+  // PPM: the editor's own texts in the interface language (line R2)
+  usePpmEditorLanguage();
 
   return (
     <DocumentEditorWithRef

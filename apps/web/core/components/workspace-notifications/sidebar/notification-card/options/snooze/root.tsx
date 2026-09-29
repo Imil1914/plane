@@ -18,6 +18,8 @@ import { cn } from "@plane/utils";
 // hooks
 import { useWorkspaceNotifications } from "@/hooks/store/notifications";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // store
 import type { INotification } from "@/store/notifications/notification";
 // local imports
@@ -39,6 +41,8 @@ export const NotificationItemSnoozeOption = observer(function NotificationItemSn
   const { isMobile } = usePlatformOS();
   const {} = useWorkspaceNotifications();
   const { t } = useTranslation();
+  const isPpmRu = usePpmRu();
+  const ppmT = usePpmTranslation();
   const { asJson: data, snoozeNotification, unSnoozeNotification } = notification;
 
   const handleNotificationSnoozeDate = async (snoozeTill: Date | undefined) => {
@@ -46,7 +50,7 @@ export const NotificationItemSnoozeOption = observer(function NotificationItemSn
       try {
         await snoozeNotification(workspaceSlug, snoozeTill);
         setToast({
-          title: `${t("common.success")}!`,
+          title: isPpmRu ? ppmT("ui.toast.success") : `${t("common.success")}!`,
           message: t("notification.toasts.snoozed"),
           type: TOAST_TYPE.SUCCESS,
         });
@@ -57,7 +61,7 @@ export const NotificationItemSnoozeOption = observer(function NotificationItemSn
       try {
         await unSnoozeNotification(workspaceSlug);
         setToast({
-          title: `${t("common.success")}!`,
+          title: isPpmRu ? ppmT("ui.toast.success") : `${t("common.success")}!`,
           message: t("notification.toasts.unsnoozed"),
           type: TOAST_TYPE.SUCCESS,
         });

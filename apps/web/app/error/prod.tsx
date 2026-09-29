@@ -8,7 +8,7 @@ import { useTheme } from "next-themes";
 // plane imports
 import { Button } from "@plane/propel/button";
 import { useTranslation } from "@plane/i18n";
-import { getPpmTranslation, isPpmShellEnabled } from "@ppm/brand";
+import { getPpmTranslation, isPpmBrandEnabled } from "@ppm/brand";
 import { PpmState } from "@/components/ppm-shell/state";
 // assets
 import maintenanceModeDarkModeImage from "@/app/assets/instance/maintenance-mode-dark.svg?url";
@@ -16,23 +16,9 @@ import maintenanceModeLightModeImage from "@/app/assets/instance/maintenance-mod
 // layouts
 import DefaultLayout from "@/layouts/default-layout";
 
-const linkMap = [
-  {
-    key: "mail_to",
-    label: "Contact Support",
-    value: "mailto:support@plane.so",
-  },
-  {
-    key: "status",
-    label: "Status Page",
-    value: "https://status.plane.so/",
-  },
-  {
-    key: "twitter_handle",
-    label: "@planepowers",
-    value: "https://x.com/planepowers",
-  },
-];
+// Line R2-5: under the PPM brand (not only the full shell) the page offers no Plane support address, status page or
+// X account — the PPM state asks the PPM administrator. PPM_BRAND_ENABLED=0 keeps the upstream page and its links.
+const IS_PPM_BRAND_ENABLED = isPpmBrandEnabled(process.env.PPM_BRAND_ENABLED);
 
 // Production Error Component
 interface ProdErrorComponentProps {
@@ -48,13 +34,13 @@ export function ProdErrorComponent({ onGoHome, onReload }: ProdErrorComponentPro
   // derived values
   const maintenanceModeImage = resolvedTheme === "dark" ? maintenanceModeDarkModeImage : maintenanceModeLightModeImage;
 
-  if (isPpmShellEnabled(process.env.PPM_SHELL_ENABLED, process.env.PPM_BRAND_ENABLED)) {
+  if (IS_PPM_BRAND_ENABLED) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-canvas">
         <PpmState
           variant="error"
           title={getPpmTranslation(currentLocale, "state.error_title")}
-          description={getPpmTranslation(currentLocale, "state.error_description")}
+          description={`${getPpmTranslation(currentLocale, "state.error_description")} ${getPpmTranslation(currentLocale, "ui.support.error_contact")}`}
           actions={
             <div className="flex flex-wrap justify-center gap-3">
               <Button variant="primary" size="lg" onClick={onGoHome}>
@@ -69,6 +55,25 @@ export function ProdErrorComponent({ onGoHome, onReload }: ProdErrorComponentPro
       </div>
     );
   }
+
+  // The upstream page only (PPM_BRAND_ENABLED=0): Plane's support, status page and X account.
+  const upstreamLinks = [
+    {
+      key: "mail_to",
+      label: "Contact Support",
+      value: "mailto:support@plane.so",
+    },
+    {
+      key: "status",
+      label: "Status Page",
+      value: "https://status.plane.so/",
+    },
+    {
+      key: "twitter_handle",
+      label: "@planepowers",
+      value: "https://x.com/planepowers",
+    },
+  ];
 
   return (
     <DefaultLayout>
@@ -92,7 +97,7 @@ export function ProdErrorComponent({ onGoHome, onReload }: ProdErrorComponentPro
           </div>
 
           <div className="mt-1 flex items-center justify-start gap-6">
-            {linkMap.map((link) => (
+            {upstreamLinks.map((link) => (
               <div key={link.key}>
                 <a
                   href={link.value}

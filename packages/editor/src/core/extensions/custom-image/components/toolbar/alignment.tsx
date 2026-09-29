@@ -9,6 +9,8 @@ import { useEffect, useRef, useState } from "react";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { ChevronDownIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
+// helpers
+import { editorText } from "@/helpers/ppm-text";
 // local imports
 import type { TCustomImageAlignment } from "../../types";
 import { IMAGE_ALIGNMENT_OPTIONS } from "../../utils";
@@ -37,7 +39,7 @@ export function ImageAlignmentAction(props: Props) {
 
   return (
     <div ref={dropdownRef} className="relative h-full">
-      <Tooltip disabled={isTouchDevice} tooltipContent="Align">
+      <Tooltip disabled={isTouchDevice} tooltipContent={editorText("ui.editor.image_align", "Align")}>
         <button
           type="button"
           className="flex h-full items-center gap-1 text-white/60 transition-colors hover:text-white"

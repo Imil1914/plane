@@ -25,6 +25,7 @@ import { NameDescriptionUpdateStatus } from "@/components/issues/issue-update-st
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // store types
 import type { IInboxIssueStore } from "@/store/inbox/inbox-issue.store";
 
@@ -81,6 +82,7 @@ export const InboxIssueActionsMobileHeader = observer(function InboxIssueActions
   } = props;
   const router = useAppRouter();
   const { getProjectIdentifierById } = useProject();
+  const ppmText = usePpmText();
 
   const issue = inboxIssue?.issue;
   const currentInboxIssueId = issue?.id;
@@ -116,14 +118,14 @@ export const InboxIssueActionsMobileHeader = observer(function InboxIssueActions
             variant="secondary"
             size="lg"
             icon={ChevronUpIcon}
-            aria-label="Previous work item"
+            aria-label={ppmText("ui.intake.previous", "Previous work item")}
             onClick={() => handleInboxIssueNavigation("prev")}
           />
           <IconButton
             variant="secondary"
             size="lg"
             icon={ChevronDownIcon}
-            aria-label="Next work item"
+            aria-label={ppmText("ui.intake.next", "Next work item")}
             onClick={() => handleInboxIssueNavigation("next")}
           />
         </div>
@@ -143,7 +145,7 @@ export const InboxIssueActionsMobileHeader = observer(function InboxIssueActions
               <CustomMenu.MenuItem onClick={handleCopyIssueLink}>
                 <div className="flex items-center gap-2">
                   <LinkIcon width={14} height={14} strokeWidth={2} />
-                  Copy work item link
+                  {ppmText("ui.intake.copy_link", "Copy work item link")}
                 </div>
               </CustomMenu.MenuItem>
             )}
@@ -151,7 +153,7 @@ export const InboxIssueActionsMobileHeader = observer(function InboxIssueActions
               <CustomMenu.MenuItem onClick={() => router.push(workItemLink)}>
                 <div className="flex items-center gap-2">
                   <NewTabIcon width={14} height={14} strokeWidth={2} />
-                  Open work item
+                  {ppmText("ui.intake.open", "Open work item")}
                 </div>
               </CustomMenu.MenuItem>
             )}
@@ -161,13 +163,15 @@ export const InboxIssueActionsMobileHeader = observer(function InboxIssueActions
                   handleActionWithPermission(
                     isProjectAdmin,
                     handleIssueSnoozeAction,
-                    "Only project admins can snooze/Un-snooze work items"
+                    ppmText("ui.intake.snooze_permission", "Only project admins can snooze/Un-snooze work items")
                   )
                 }
               >
                 <div className="flex items-center gap-2">
                   <Clock size={14} strokeWidth={2} />
-                  {inboxIssue?.snoozed_till && numberOfDaysLeft && numberOfDaysLeft > 0 ? "Un-snooze" : "Snooze"}
+                  {inboxIssue?.snoozed_till && numberOfDaysLeft && numberOfDaysLeft > 0
+                    ? ppmText("ui.intake.unsnooze", "Un-snooze")
+                    : ppmText("ui.intake.snooze", "Snooze")}
                 </div>
               </CustomMenu.MenuItem>
             )}
@@ -177,13 +181,16 @@ export const InboxIssueActionsMobileHeader = observer(function InboxIssueActions
                   handleActionWithPermission(
                     isProjectAdmin,
                     () => setSelectDuplicateIssue(true),
-                    "Only project admins can mark work items as duplicate"
+                    ppmText(
+                      "ui.intake.duplicate_permission_plural",
+                      "Only project admins can mark work items as duplicate"
+                    )
                   )
                 }
               >
                 <div className="flex items-center gap-2">
                   <FileStack size={14} strokeWidth={2} />
-                  Mark as duplicate
+                  {ppmText("ui.intake.mark_duplicate", "Mark as duplicate")}
                 </div>
               </CustomMenu.MenuItem>
             )}
@@ -193,13 +200,13 @@ export const InboxIssueActionsMobileHeader = observer(function InboxIssueActions
                   handleActionWithPermission(
                     isProjectAdmin,
                     () => setAcceptIssueModal(true),
-                    "Only project admins can accept work items"
+                    ppmText("ui.intake.accept_permission", "Only project admins can accept work items")
                   )
                 }
               >
                 <div className="flex items-center gap-2 text-success-secondary">
                   <CheckCircleFilledIcon width={14} height={14} />
-                  Accept
+                  {ppmText("ui.intake.accept", "Accept")}
                 </div>
               </CustomMenu.MenuItem>
             )}
@@ -209,13 +216,13 @@ export const InboxIssueActionsMobileHeader = observer(function InboxIssueActions
                   handleActionWithPermission(
                     isProjectAdmin,
                     () => setDeclineIssueModal(true),
-                    "Only project admins can deny work items"
+                    ppmText("ui.intake.decline_permission", "Only project admins can deny work items")
                   )
                 }
               >
                 <div className="flex items-center gap-2 text-danger-secondary">
                   <CloseCircleFilledIcon width={14} height={14} />
-                  Decline
+                  {ppmText("ui.intake.decline", "Decline")}
                 </div>
               </CustomMenu.MenuItem>
             )}
@@ -223,7 +230,7 @@ export const InboxIssueActionsMobileHeader = observer(function InboxIssueActions
               <CustomMenu.MenuItem onClick={() => setDeleteIssueModal(true)}>
                 <div className="flex items-center gap-2 text-danger-primary">
                   <TrashIcon height={14} width={14} strokeWidth={2} />
-                  Delete
+                  {ppmText("ui.common.delete", "Delete")}
                 </div>
               </CustomMenu.MenuItem>
             )}

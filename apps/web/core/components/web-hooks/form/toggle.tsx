@@ -10,15 +10,18 @@ import { Controller } from "react-hook-form";
 import type { IWebhook } from "@plane/types";
 // ui
 import { ToggleSwitch } from "@plane/ui";
+// hooks
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 interface IWebHookToggle {
   control: Control<IWebhook, any>;
 }
 
 export function WebhookToggle({ control }: IWebHookToggle) {
+  const ppmText = usePpmText();
   return (
     <div className="flex gap-6">
-      <div className="text-13 font-medium">Enable webhook</div>
+      <div className="text-13 font-medium">{ppmText("ui.webhook.enable", "Enable webhook")}</div>
       <Controller
         control={control}
         name="is_active"

@@ -13,13 +13,16 @@ import { PriorityIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
 import { Row, Avatar } from "@plane/ui";
 import { cn, renderFormattedDate, getFileURL } from "@plane/utils";
+import { PPM_BRAND } from "@ppm/brand";
 // components
 import { ButtonAvatars } from "@/components/dropdowns/member/avatar";
+import { usePpmPriorityTitle } from "@/components/ppm-shell/priority-title";
 // hooks
 import { useLabel } from "@/hooks/store/use-label";
 import { useMember } from "@/hooks/store/use-member";
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { IS_PPM_SHELL_TEXT, usePpmCount, usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
 // local imports
 import { InboxIssueStatus } from "../inbox-issue-status";
 
@@ -41,6 +44,10 @@ export const InboxIssueListItem = observer(function InboxIssueListItem(props: In
   const { projectLabels } = useLabel();
   const { isMobile } = usePlatformOS();
   const { getUserDetails } = useMember();
+  const isPpmRu = usePpmRu();
+  const ppmText = usePpmText();
+  const ppmCount = usePpmCount();
+  const priorityTitle = usePpmPriorityTitle();
   const inboxIssue = getIssueInboxByIssueId(inboxIssueId);
   const issue = inboxIssue?.issue;
 
@@ -82,7 +89,7 @@ export const InboxIssueListItem = observer(function InboxIssueListItem(props: In
           <div className="flex items-center justify-between">
             <div className="flex flex-wrap items-center gap-2">
               <Tooltip
-                tooltipHeading="Created on"
+                tooltipHeading={ppmText("ui.intake.created_on", "Created on")}
                 tooltipContent={`${renderFormattedDate(issue.created_at ?? "")}`}
                 isMobile={isMobile}
               >
@@ -92,7 +99,13 @@ export const InboxIssueListItem = observer(function InboxIssueListItem(props: In
               <div className="rounded-full border-2 border-strong-1" />
 
               {issue.priority && (
-                <Tooltip tooltipHeading="Priority" tooltipContent={`${issue.priority ?? "None"}`}>
+                <Tooltip
+                  tooltipHeading={ppmText("ui.filter.priority", "Priority")}
+                  tooltipContent={priorityTitle(
+                    issue.priority,
+                    `${issue.priority ?? ppmText("ui.common.none", "None")}`
+                  )}
+                >
                   <PriorityIcon priority={issue.priority} withContainer className="h-3 w-3" />
                 </Tooltip>
               )}
@@ -100,7 +113,9 @@ export const InboxIssueListItem = observer(function InboxIssueListItem(props: In
               {issue.label_ids && issue.label_ids.length > 3 ? (
                 <div className="relative flex !h-[17.5px] items-center gap-1 rounded-sm border border-strong px-1 text-11">
                   <span className="bg-orange-400 h-2 w-2 rounded-full" />
-                  <span className="max-w-28 truncate normal-case">{`${issue.label_ids.length} labels`}</span>
+                  <span className="max-w-28 truncate normal-case">
+                    {isPpmRu ? ppmCount("ui.count.labels", issue.label_ids.length) : `${issue.label_ids.length} labels`}
+                  </span>
                 </div>
               ) : (
                 <>
@@ -127,7 +142,7 @@ export const InboxIssueListItem = observer(function InboxIssueListItem(props: In
             </div>
             {/* created by */}
             {createdByDetails && createdByDetails.email?.includes("intake@plane.so") ? (
-              <Avatar src={getFileURL("")} name={"Plane"} size="md" showTooltip />
+              <Avatar src={getFileURL("")} name={IS_PPM_SHELL_TEXT ? PPM_BRAND.name : "Plane"} size="md" showTooltip />
             ) : createdByDetails ? (
               <ButtonAvatars showTooltip={false} userIds={createdByDetails?.id} />
             ) : null}

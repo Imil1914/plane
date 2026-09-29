@@ -12,6 +12,7 @@ import { cn } from "@plane/utils";
 // components
 import { FiltersDropdown } from "@/components/issues/issue-layouts/filters";
 // hooks
+import { usePpmText } from "@/hooks/use-ppm-text";
 import useSize from "@/hooks/use-window-size";
 // local imports
 import { InboxIssueFilterSelection } from "./filters/filter-selection";
@@ -19,15 +20,17 @@ import { InboxIssueOrderByDropdown } from "./sorting/order-by";
 
 const smallButton = <ListFilter className="size-3" />;
 
-const largeButton = (
-  <div className={cn(getButtonStyling("secondary", "base"), "px-2 text-tertiary")}>
-    <ListFilter className="size-3" />
-    <span>Filters</span>
-    <ChevronDownIcon className="size-3" strokeWidth={2} />
-  </div>
-);
 export function FiltersRoot() {
   const windowSize = useSize();
+  const ppmText = usePpmText();
+
+  const largeButton = (
+    <div className={cn(getButtonStyling("secondary", "base"), "px-2 text-tertiary")}>
+      <ListFilter className="size-3" />
+      <span>{ppmText("ui.common.filters", "Filters")}</span>
+      <ChevronDownIcon className="size-3" strokeWidth={2} />
+    </div>
+  );
 
   return (
     <div className="relative flex items-center gap-2">

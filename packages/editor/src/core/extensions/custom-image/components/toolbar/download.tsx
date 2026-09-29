@@ -7,6 +7,8 @@
 import { Download } from "lucide-react";
 // plane imports
 import { Tooltip } from "@plane/propel/tooltip";
+// helpers
+import { editorText } from "@/helpers/ppm-text";
 
 type Props = {
   src: string;
@@ -16,12 +18,12 @@ export function ImageDownloadAction(props: Props) {
   const { src } = props;
 
   return (
-    <Tooltip tooltipContent="Download">
+    <Tooltip tooltipContent={editorText("ui.editor.download", "Download")}>
       <button
         type="button"
         onClick={() => window.open(src, "_blank")}
         className="grid h-full flex-shrink-0 place-items-center text-white/60 transition-colors hover:text-white"
-        aria-label="Download image"
+        aria-label={editorText("ui.editor.download_image", "Download image")}
       >
         <Download className="size-3" />
       </button>

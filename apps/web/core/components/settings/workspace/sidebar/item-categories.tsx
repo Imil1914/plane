@@ -25,6 +25,10 @@ import { useUserPermissions } from "@/hooks/store/user";
 // local imports
 import { WORKSPACE_SETTINGS_ICONS } from "./item-icon";
 
+// PPM is installed by its owner and has no payments: the shell leaves «Оплата и тарифы» out of the menu. The page
+// itself and its logic stay as upstream (reachable by its address); PPM_SHELL_ENABLED=0 shows the item again.
+const PPM_HIDDEN_WORKSPACE_SETTINGS = new Set(["billing-and-plans"]);
+
 export const WorkspaceSettingsSidebarItemCategories = observer(function WorkspaceSettingsSidebarItemCategories() {
   // params
   const { workspaceSlug } = useParams();
@@ -39,8 +43,10 @@ export const WorkspaceSettingsSidebarItemCategories = observer(function Workspac
     <div className="mt-3 flex flex-col divide-y divide-subtle px-3">
       {WORKSPACE_SETTINGS_CATEGORIES.map((category) => {
         const categoryItems = GROUPED_WORKSPACE_SETTINGS[category];
-        const accessibleItems = categoryItems.filter((item) =>
-          allowPermissions(item.access, EUserPermissionsLevel.WORKSPACE, workspaceSlug)
+        const accessibleItems = categoryItems.filter(
+          (item) =>
+            !(isPpmShell && PPM_HIDDEN_WORKSPACE_SETTINGS.has(item.key)) &&
+            allowPermissions(item.access, EUserPermissionsLevel.WORKSPACE, workspaceSlug)
         );
 
         if (accessibleItems.length === 0) return null;

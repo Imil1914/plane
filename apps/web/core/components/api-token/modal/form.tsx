@@ -18,6 +18,8 @@ import { CustomSelect, Input, TextArea, ToggleSwitch } from "@plane/ui";
 import { cn, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 // components
 import { DateDropdown } from "@/components/dropdowns/date";
+import type { TPpmTranslationKey } from "@ppm/brand";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // helpers
 type Props = {
   handleClose: () => void;
@@ -48,6 +50,14 @@ const EXPIRY_DATE_OPTIONS = [
     value: { years: 1 },
   },
 ];
+
+// PPM names of the expiry presets for the Russian interface; EXPIRY_DATE_OPTIONS keeps the upstream labels.
+const TOKEN_EXPIRY_TEXT_KEYS: Record<string, TPpmTranslationKey> = {
+  "1_week": "ui.token.expiry_1_week",
+  "1_month": "ui.token.expiry_1_month",
+  "3_months": "ui.token.expiry_3_months",
+  "1_year": "ui.token.expiry_1_year",
+};
 
 const defaultValues: Partial<IApiToken> = {
   label: "",
@@ -84,14 +94,15 @@ export function CreateApiTokenForm(props: Props) {
   } = useForm<IApiToken>({ defaultValues });
   // hooks
   const { t } = useTranslation();
+  const ppmText = usePpmText();
 
   const handleFormSubmit = async (data: IApiToken) => {
     // if never expires is toggled off, and the user has not selected a custom date or a predefined date, show an error
     if (!neverExpires && (!data.expired_at || (data.expired_at === "custom" && !customDate)))
       return setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "Please select an expiration date.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: ppmText("ui.token.expiry_required", "Please select an expiration date."),
       });
 
     const payload: Partial<IApiToken> = {
@@ -189,10 +200,10 @@ export function CreateApiTokenForm(props: Props) {
                         >
                           <Calendar className="h-3 w-3" />
                           {value === "custom"
-                            ? "Custom date"
+                            ? ppmText("ui.token.custom_date", "Custom date")
                             : selectedOption
-                              ? selectedOption.label
-                              : "Set expiration date"}
+                              ? ppmText(TOKEN_EXPIRY_TEXT_KEYS[selectedOption.key], selectedOption.label)
+                              : ppmText("ui.token.set_expiry", "Set expiration date")}
                         </div>
                       }
                       value={value}
@@ -201,10 +212,10 @@ export function CreateApiTokenForm(props: Props) {
                     >
                       {EXPIRY_DATE_OPTIONS.map((option) => (
                         <CustomSelect.Option key={option.key} value={option.key}>
-                          {option.label}
+                          {ppmText(TOKEN_EXPIRY_TEXT_KEYS[option.key], option.label)}
                         </CustomSelect.Option>
                       ))}
-                      <CustomSelect.Option value="custom">Custom</CustomSelect.Option>
+                      <CustomSelect.Option value="custom">{ppmText("ui.token.custom", "Custom")}</CustomSelect.Option>
                     </CustomSelect>
                   );
                 }}
@@ -217,7 +228,7 @@ export function CreateApiTokenForm(props: Props) {
                     minDate={tomorrow}
                     icon={<Calendar className="h-3 w-3" />}
                     buttonVariant="border-with-text"
-                    placeholder="Set date"
+                    placeholder={ppmText("ui.token.set_date", "Set date")}
                     disabled={neverExpires}
                   />
                 </div>
@@ -227,10 +238,24 @@ export function CreateApiTokenForm(props: Props) {
               <span className="text-11 text-placeholder">
                 {expiredAt === "custom"
                   ? customDate
-                    ? `Expires ${renderFormattedDate(customDateFormatted ?? "")} at ${renderFormattedTime(customDateFormatted ?? "")}`
+                    ? ppmText(
+                        "ui.token.expires_at",
+                        `Expires ${renderFormattedDate(customDateFormatted ?? "")} at ${renderFormattedTime(customDateFormatted ?? "")}`,
+                        {
+                          date: renderFormattedDate(customDateFormatted ?? "") ?? "",
+                          time: renderFormattedTime(customDateFormatted ?? ""),
+                        }
+                      )
                     : null
                   : expiredAt
-                    ? `Expires ${renderFormattedDate(expiryDate ?? "")} at ${renderFormattedTime(expiryDate ?? "")}`
+                    ? ppmText(
+                        "ui.token.expires_at",
+                        `Expires ${renderFormattedDate(expiryDate ?? "")} at ${renderFormattedTime(expiryDate ?? "")}`,
+                        {
+                          date: renderFormattedDate(expiryDate ?? "") ?? "",
+                          time: renderFormattedTime(expiryDate ?? ""),
+                        }
+                      )
                     : null}
               </span>
             )}

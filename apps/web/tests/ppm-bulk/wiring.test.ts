@@ -180,3 +180,37 @@ describe("раунд 3: проводка (поведение — в bulk-flow.te
     );
   });
 });
+
+describe("D-2: обёртка Combobox панели действий отдаёт клавишу чистой функции, а не решает сама (review-W5 №7)", () => {
+  // action-bar-view.test.tsx (D-2) закрепляет только shouldPpmBulkPickerConsumeKeyDown саму по себе: если
+  // handleMenuKeyDown в bulk-picker.tsx перестанет её звать первым делом (вернётся к старому `if (inactive) return;`),
+  // те тесты остаются зелёными — регрессия не поймана. Здесь — проверка исходника самого обработчика.
+  const source = read("components/issues/bulk-operations/bulk-picker.tsx");
+  const match = source.match(
+    /const handleMenuKeyDown = \(event: KeyboardEvent<HTMLDivElement>\) => \{\n([\s\S]*?)\n {2}\};/
+  );
+
+  it("handleMenuKeyDown найден в bulk-picker.tsx", () => {
+    expect(
+      match,
+      "не нашли const handleMenuKeyDown = (event) => {…}; в bulk-picker.tsx — обновите регэксп теста"
+    ).not.toBeNull();
+  });
+
+  it("первая строка обработчика — guard через shouldPpmBulkPickerConsumeKeyDown, не свой `if (inactive) return;`", () => {
+    const body = match?.[1] ?? "";
+    const firstLine = body.split("\n")[0]?.trim();
+    // Старый `if (inactive) return;` (до D-2) не смотрел на isOpen: Esc уже закрытого меню всё равно доходил до
+    // handleKeyDown ниже, тот глотал событие (stopPropagation+preventDefault), и второй Esc не снимал выделение
+    // панели (root.tsx:156). Проверяем именно первую строку — guard должен стоять до handleKeyDown, а не после.
+    expect(firstLine).toBe("if (!shouldPpmBulkPickerConsumeKeyDown(event.key, isOpen, inactive)) return;");
+  });
+
+  it("guard стоит раньше вызова handleKeyDown — решение не подменяется по пути", () => {
+    const body = match?.[1] ?? "";
+    const guardAt = body.indexOf("shouldPpmBulkPickerConsumeKeyDown(");
+    const consumeAt = body.indexOf("handleKeyDown(event)");
+    expect(guardAt).toBeGreaterThanOrEqual(0);
+    expect(consumeAt).toBeGreaterThan(guardAt);
+  });
+});

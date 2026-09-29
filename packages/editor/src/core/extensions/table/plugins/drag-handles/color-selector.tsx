@@ -13,6 +13,8 @@ import { cn } from "@plane/utils";
 // constants
 import { COLORS_LIST } from "@/constants/common";
 import { CORE_EXTENSIONS } from "@/constants/extension";
+// helpers
+import { editorText } from "@/helpers/ppm-text";
 
 // TODO: implement text color selector
 
@@ -55,7 +57,7 @@ export function TableDragHandleDropdownColorSelector(props: Props) {
           <>
             <span className="flex items-center gap-2">
               <Palette className="size-3 shrink-0" />
-              Color
+              {editorText("ui.editor.color", "Color")}
             </span>
             <ChevronRightIcon
               className={cn("size-3 shrink-0 transition-transform duration-200", {
@@ -90,7 +92,9 @@ export function TableDragHandleDropdownColorSelector(props: Props) {
           </div>
         </div> */}
         <div className="space-y-1">
-          <p className="text-11 font-semibold text-tertiary">Background colors</p>
+          <p className="text-11 font-semibold text-tertiary">
+            {editorText("ui.editor.background_colors", "Background colors")}
+          </p>
           <div className="flex flex-wrap items-center gap-2">
             {COLORS_LIST.map((color) => (
               <button

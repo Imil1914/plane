@@ -15,6 +15,7 @@ import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/fi
 // constants
 // hooks
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
 import { InboxStatusIcon } from "../../inbox-status-icon";
 
 type Props = {
@@ -26,6 +27,8 @@ export const FilterStatus = observer(function FilterStatus(props: Props) {
   // hooks
   const { currentTab, inboxFilters, handleInboxIssueFilters } = useProjectInbox();
   const { t } = useTranslation();
+  const isPpmRu = usePpmRu();
+  const ppmText = usePpmText();
   // states
   const [previewEnabled, setPreviewEnabled] = useState(true);
   // derived values
@@ -35,7 +38,8 @@ export const FilterStatus = observer(function FilterStatus(props: Props) {
     (s) =>
       ((currentTab === "open" && [-2, 0].includes(s.status)) ||
         (currentTab === "closed" && [-1, 1, 2].includes(s.status))) &&
-      s.key.includes(searchQuery.toLowerCase())
+      // In the Russian PPM interface the search also finds the shown name («отлож»).
+      (isPpmRu ? `${s.key} ${t(s.i18n_title)}`.toLowerCase() : s.key).includes(searchQuery.toLowerCase())
   );
 
   const handleFilterValue = (value: TInboxIssueStatus): TInboxIssueStatus[] =>
@@ -49,7 +53,7 @@ export const FilterStatus = observer(function FilterStatus(props: Props) {
   return (
     <>
       <FilterHeader
-        title={`Work item Status ${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
+        title={`${ppmText("ui.intake.status", "Work item Status")} ${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
         isPreviewEnabled={previewEnabled}
         handleIsPreviewEnabled={() => setPreviewEnabled(!previewEnabled)}
       />
@@ -66,7 +70,7 @@ export const FilterStatus = observer(function FilterStatus(props: Props) {
               />
             ))
           ) : (
-            <p className="text-11 text-placeholder italic">No matches found</p>
+            <p className="text-11 text-placeholder italic">{ppmText("ui.common.no_matches", "No matches found")}</p>
           )}
         </div>
       )}

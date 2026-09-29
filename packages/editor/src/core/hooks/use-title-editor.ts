@@ -15,6 +15,7 @@ import { CORE_EDITOR_META } from "@/constants/meta";
 import { TitleExtensions } from "@/extensions/title-extension";
 // helpers
 import { getEditorRefHelpers } from "@/helpers/editor-ref";
+import { editorText } from "@/helpers/ppm-text";
 // types
 import type { IEditorPropsExtended, IEditorProps } from "@/types";
 import type { EditorTitleRefApi, ICollaborativeDocumentEditorProps } from "@/types/editor";
@@ -64,7 +65,7 @@ export const useTitleEditor = (props: TUseTitleEditorProps) => {
         ...TitleExtensions,
         ...(extensions ?? []),
         Placeholder.configure({
-          placeholder: () => "Untitled",
+          placeholder: () => editorText("ui.editor.untitled", "Untitled"),
           includeChildren: true,
           showOnlyWhenEditable: false,
         }),

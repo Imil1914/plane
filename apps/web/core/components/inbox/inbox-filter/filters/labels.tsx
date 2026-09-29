@@ -12,6 +12,7 @@ import { Loader } from "@plane/ui";
 import { FilterHeader, FilterOption } from "@/components/issues/issue-layouts/filters";
 // hooks
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 function LabelIcons({ color }: { color: string }) {
   return <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />;
@@ -29,6 +30,7 @@ export const FilterLabels = observer(function FilterLabels(props: Props) {
   const [previewEnabled, setPreviewEnabled] = useState(true);
 
   const { inboxFilters, handleInboxIssueFilters } = useProjectInbox();
+  const ppmText = usePpmText();
 
   const filterValue = inboxFilters?.labels || [];
 
@@ -49,7 +51,7 @@ export const FilterLabels = observer(function FilterLabels(props: Props) {
   return (
     <>
       <FilterHeader
-        title={`Label${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
+        title={`${ppmText("ui.filter.label", "Label")}${appliedFiltersCount > 0 ? ` (${appliedFiltersCount})` : ""}`}
         isPreviewEnabled={previewEnabled}
         handleIsPreviewEnabled={() => setPreviewEnabled(!previewEnabled)}
       />
@@ -73,12 +75,14 @@ export const FilterLabels = observer(function FilterLabels(props: Props) {
                     className="ml-8 text-11 font-medium text-accent-primary"
                     onClick={handleViewToggle}
                   >
-                    {itemsToRender === filteredOptions.length ? "View less" : "View all"}
+                    {itemsToRender === filteredOptions.length
+                      ? ppmText("ui.common.view_less", "View less")
+                      : ppmText("ui.common.view_all", "View all")}
                   </button>
                 )}
               </>
             ) : (
-              <p className="text-11 text-placeholder italic">No matches found</p>
+              <p className="text-11 text-placeholder italic">{ppmText("ui.common.no_matches", "No matches found")}</p>
             )
           ) : (
             <Loader className="space-y-2">

@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import { Header, EHeaderVariant } from "@plane/ui";
 // hooks
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // local imports
 import { InboxIssueAppliedFiltersDate } from "./date";
 import { InboxIssueAppliedFiltersLabel } from "./label";
@@ -19,6 +20,7 @@ import { InboxIssueAppliedFiltersStatus } from "./status";
 
 export const InboxIssueAppliedFilters = observer(function InboxIssueAppliedFilters() {
   const { getAppliedFiltersCount } = useProjectInbox();
+  const ppmText = usePpmText();
 
   if (getAppliedFiltersCount === 0) return <></>;
   return (
@@ -30,15 +32,15 @@ export const InboxIssueAppliedFilters = observer(function InboxIssueAppliedFilte
       {/* priority */}
       <InboxIssueAppliedFiltersPriority />
       {/* assignees */}
-      <InboxIssueAppliedFiltersMember filterKey="assignees" label="Assignees" />
+      <InboxIssueAppliedFiltersMember filterKey="assignees" label={ppmText("ui.filter.assignees", "Assignees")} />
       {/* created_by */}
-      <InboxIssueAppliedFiltersMember filterKey="created_by" label="Created By" />
+      <InboxIssueAppliedFiltersMember filterKey="created_by" label={ppmText("ui.intake.created_by", "Created By")} />
       {/* label */}
       <InboxIssueAppliedFiltersLabel />
       {/* created_at */}
-      <InboxIssueAppliedFiltersDate filterKey="created_at" label="Created date" />
+      <InboxIssueAppliedFiltersDate filterKey="created_at" label={ppmText("ui.filter.created_date", "Created date")} />
       {/* updated_at */}
-      <InboxIssueAppliedFiltersDate filterKey="updated_at" label="Updated date" />
+      <InboxIssueAppliedFiltersDate filterKey="updated_at" label={ppmText("ui.intake.updated_date", "Updated date")} />
     </Header>
   );
 });

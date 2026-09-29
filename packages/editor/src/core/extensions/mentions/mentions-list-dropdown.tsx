@@ -13,6 +13,7 @@ import { debounce } from "lodash-es";
 import { useOutsideClickDetector } from "@plane/hooks";
 import { cn } from "@plane/utils";
 // helpers
+import { editorText } from "@/helpers/ppm-text";
 import { DROPDOWN_NAVIGATION_KEYS, getNextValidIndex } from "@/helpers/tippy";
 // types
 import type { TMentionHandler, TMentionSection, TMentionSuggestion } from "@/types";
@@ -158,7 +159,7 @@ export const MentionsListDropdown = forwardRef(function MentionsListDropdown(pro
         }}
       >
         {isLoading ? (
-          <div className="text-center text-13 text-placeholder">Loading...</div>
+          <div className="text-center text-13 text-placeholder">{editorText("ui.editor.loading", "Loading...")}</div>
         ) : sections.length ? (
           sections.map((section, sectionIndex) => (
             <div key={section.key} className="space-y-2">
@@ -200,7 +201,7 @@ export const MentionsListDropdown = forwardRef(function MentionsListDropdown(pro
             </div>
           ))
         ) : (
-          <div className="text-center text-13 text-placeholder">No results</div>
+          <div className="text-center text-13 text-placeholder">{editorText("ui.editor.no_results", "No results")}</div>
         )}
       </div>
     </>

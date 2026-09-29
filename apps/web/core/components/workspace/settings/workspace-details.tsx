@@ -22,6 +22,7 @@ import { TimezoneSelect } from "@/components/global/timezone-select";
 // hooks
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserPermissions } from "@/hooks/store/user";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // plane web components
 import { DeleteWorkspaceSection } from "@/components/workspace/delete-workspace-section";
 
@@ -41,6 +42,7 @@ export const WorkspaceDetails = observer(function WorkspaceDetails() {
   const { currentWorkspace, updateWorkspace } = useWorkspace();
   const { allowPermissions } = useUserPermissions();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
 
   // form info
   const {
@@ -69,9 +71,9 @@ export const WorkspaceDetails = observer(function WorkspaceDetails() {
     try {
       await updateWorkspace(currentWorkspace.slug, payload);
       setToast({
-        title: "Success!",
+        title: ppmText("ui.toast.success", "Success!"),
         type: TOAST_TYPE.SUCCESS,
-        message: "Workspace updated successfully",
+        message: ppmText("ui.ws.updated", "Workspace updated successfully"),
       });
     } catch (err: unknown) {
       console.error(err);
@@ -91,14 +93,17 @@ export const WorkspaceDetails = observer(function WorkspaceDetails() {
       });
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success!",
-        message: "Workspace picture removed successfully.",
+        title: ppmText("ui.toast.success", "Success!"),
+        message: ppmText("ui.ws.logo_removed", "Workspace picture removed successfully."),
       });
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: "There was some error in deleting your profile picture. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: ppmText(
+          "ui.ws.logo_remove_failed",
+          "There was some error in deleting your profile picture. Please try again."
+        ),
       });
     }
   };
@@ -110,7 +115,7 @@ export const WorkspaceDetails = observer(function WorkspaceDetails() {
       .then(() => {
         setToast({
           type: TOAST_TYPE.SUCCESS,
-          title: "Workspace URL copied to the clipboard.",
+          title: ppmText("ui.ws.url_copied", "Workspace URL copied to the clipboard."),
         });
         return undefined;
       })
@@ -154,7 +159,7 @@ export const WorkspaceDetails = observer(function WorkspaceDetails() {
                   <img
                     src={getFileURL(workspaceLogo)}
                     className="absolute top-0 left-0 size-full rounded-md object-cover"
-                    alt="Workspace Logo"
+                    alt={ppmText("ui.ws.logo_alt", "Workspace Logo")}
                   />
                 </div>
               ) : (

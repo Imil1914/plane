@@ -23,6 +23,8 @@ import { useWebhook } from "@/hooks/store/use-webhook";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 // types
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 // utils
 import { getCurrentHookAsCSV } from "../utils";
 // hooks
@@ -43,6 +45,9 @@ export const WebhookSecretKey = observer(function WebhookSecretKey(props: Props)
   const { currentWebhook, regenerateSecretKey, webhookSecretKey } = useWebhook();
   const { isMobile } = usePlatformOS();
   const { t } = useTranslation();
+  const isPpmRu = usePpmRu();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
   const handleCopySecretKey = () => {
     if (!webhookSecretKey) return;
 
@@ -57,7 +62,7 @@ export const WebhookSecretKey = observer(function WebhookSecretKey(props: Props)
       .catch(() =>
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: `${t("error")}!`,
+          title: isPpmRu ? ppmT("ui.toast.error") : `${t("error")}!`,
           message: t("workspace_settings.settings.webhooks.toasts.secret_key_not_copied.message"),
         })
       );
@@ -73,7 +78,7 @@ export const WebhookSecretKey = observer(function WebhookSecretKey(props: Props)
         setToast({
           type: TOAST_TYPE.SUCCESS,
           title: `${t("success")}`,
-          message: "New key regenerated successfully.",
+          message: ppmText("ui.webhook.key_regenerated", "New key regenerated successfully."),
         });
 
         if (currentWebhook && webhookSecretKey) {
@@ -84,7 +89,7 @@ export const WebhookSecretKey = observer(function WebhookSecretKey(props: Props)
       .catch((err) =>
         setToast({
           type: TOAST_TYPE.ERROR,
-          title: `${t("error")}!`,
+          title: isPpmRu ? ppmT("ui.toast.error") : `${t("error")}!`,
           message: err?.error ?? t("something_went_wrong_please_try_again"),
         })
       )
@@ -94,8 +99,18 @@ export const WebhookSecretKey = observer(function WebhookSecretKey(props: Props)
   const toggleShowKey = () => setShouldShowKey((prevState) => !prevState);
 
   const SECRET_KEY_OPTIONS = [
-    { label: "View secret key", Icon: shouldShowKey ? EyeOff : Eye, onClick: toggleShowKey, key: "eye" },
-    { label: "Copy secret key", Icon: CopyIcon, onClick: handleCopySecretKey, key: "copy" },
+    {
+      label: ppmText("ui.webhook.view_key", "View secret key"),
+      Icon: shouldShowKey ? EyeOff : Eye,
+      onClick: toggleShowKey,
+      key: "eye",
+    },
+    {
+      label: ppmText("ui.webhook.copy_key", "Copy secret key"),
+      Icon: CopyIcon,
+      onClick: handleCopySecretKey,
+      key: "copy",
+    },
   ];
 
   return (

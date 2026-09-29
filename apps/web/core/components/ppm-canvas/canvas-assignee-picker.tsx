@@ -99,9 +99,11 @@ function assigneeWordLetters(word: string): string[] {
  * «Иван Петров» → «ИП», «ivan.petrov» → «IP», одно слово («олег») → «О»: буква слова — её первая *буква*, а не первый
  * символ, поэтому «Посторонний (демо)» → «ПД», а не «П(» (у «(демо)» первая буква — «д», скобка не в счёт). Слово без
  * единой буквы (только цифры/скобки/эмодзи) пропускается и во «первые два слова» не входит — «Сотрудник 1 ROBOT» →
- * «СR», не «С1». Букв нет вовсе ни в одном слове — первый символ e-mail, если он есть, иначе «?».
+ * «СR», не «С1». Букв нет вовсе ни в одном слове (только цифры/скобки/эмодзи или пусто) — первая *кодовая точка*
+ * обрезанного имени, не половина суррогатной пары («12345» → «1», «007» → «0», «🙂» → «🙂»); обрезанное имя пустое —
+ * «?» (e-mail тут ни при чём: у TPpmCanvasAssignee его нет, вызывающий код его и не передавал).
  */
-export function assigneeInitials(name: string, email?: string | null): string {
+export function assigneeInitials(name: string): string {
   const initials = name
     .trim()
     .split(/[\s._-]+/u)
@@ -112,8 +114,8 @@ export function assigneeInitials(name: string, email?: string | null): string {
     .join("")
     .toLocaleUpperCase();
   if (initials) return initials;
-  const emailChar = email?.trim().charAt(0);
-  return emailChar ? emailChar.toLocaleUpperCase() : "?";
+  const trimmed = name.trim();
+  return trimmed ? Array.from(trimmed)[0].toLocaleUpperCase() : "?";
 }
 
 export function assigneeStack<T>(assignees: readonly T[], limit = PPM_ASSIGNEE_AVATAR_LIMIT) {

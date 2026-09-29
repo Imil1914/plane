@@ -117,6 +117,13 @@ def serialize_link(link):
         # AF2.2 M-6: состояние Git-объекта (у PR — `open`, `closed` — закрыт без слияния, `merged`); у ручной ссылки без
         # объекта — None. Запросы, чьи строки идут сюда, берут объект через select_related("git_object").
         "git_object_state": link.git_object.state if link.git_object_id else None,
+        # G2.1 M-1: настоящее время слияния PR (для надписи «Слит 28 сент., 14:05» в блоке Git задачи); есть только у
+        # слитого PR, иначе null. Объект уже выбран вместе со ссылкой (select_related("git_object")) — без запроса.
+        "git_object_merged_at": (
+            link.git_object.provider_merged_at.isoformat()
+            if link.git_object_id and link.git_object.provider_merged_at
+            else None
+        ),
         "created_at": link.created_at.isoformat(),
         "updated_at": link.updated_at.isoformat(),
     }
@@ -176,6 +183,9 @@ def serialize_git_object(git_object):
         "commit_sha": git_object.commit_sha,
         "is_active": git_object.is_active,
         "provider_updated_at": (git_object.provider_updated_at.isoformat() if git_object.provider_updated_at else None),
+        # G2.1 M-1: настоящее время слияния PR («Слит 28 сент., 14:05» в разделе «Код»); только у слитого PR, иначе
+        # null (открытые/закрытые PR, ветки, коммиты).
+        "provider_merged_at": (git_object.provider_merged_at.isoformat() if git_object.provider_merged_at else None),
         "last_seen_at": git_object.last_seen_at.isoformat(),
     }
 

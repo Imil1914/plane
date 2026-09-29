@@ -26,6 +26,7 @@ import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
 import { useUser } from "@/hooks/store/user";
+import { usePpmText } from "@/hooks/use-ppm-text";
 import useReloadConfirmations from "@/hooks/use-reload-confirmation";
 // services
 import { IntakeWorkItemVersionService } from "@/services/inbox";
@@ -54,6 +55,7 @@ export const InboxIssueMainContent = observer(function InboxIssueMainContent(pro
   const { getUserDetails } = useMember();
   const { loader } = useProjectInbox();
   const { removeIssue, archiveIssue } = useIssueDetail();
+  const ppmText = usePpmText();
   // reload confirmation
   const { setShowAlert } = useReloadConfirmations(isSubmitting === "submitting");
 
@@ -82,16 +84,16 @@ export const InboxIssueMainContent = observer(function InboxIssueMainContent(pro
         try {
           await removeIssue(workspaceSlug, projectId, _issueId);
           setToast({
-            title: "Success!",
+            title: ppmText("ui.toast.success", "Success!"),
             type: TOAST_TYPE.SUCCESS,
-            message: "Work item deleted successfully",
+            message: ppmText("ui.intake.deleted", "Work item deleted successfully"),
           });
         } catch (error) {
           console.log("Error in deleting work item:", error);
           setToast({
-            title: "Error!",
+            title: ppmText("ui.toast.error", "Error!"),
             type: TOAST_TYPE.ERROR,
-            message: "Work item delete failed",
+            message: ppmText("ui.intake.delete_failed", "Work item delete failed"),
           });
         }
       },
@@ -100,9 +102,9 @@ export const InboxIssueMainContent = observer(function InboxIssueMainContent(pro
           await inboxIssue.updateIssue(data);
         } catch (_error) {
           setToast({
-            title: "Work item update failed",
+            title: ppmText("ui.intake.update_failed_title", "Work item update failed"),
             type: TOAST_TYPE.ERROR,
-            message: "Work item update failed",
+            message: ppmText("ui.intake.update_failed", "Work item update failed"),
           });
         }
       },
@@ -116,7 +118,7 @@ export const InboxIssueMainContent = observer(function InboxIssueMainContent(pro
       },
     }),
     // oxlint-disable-next-line eslint-plugin-react-hooks/exhaustive-deps
-    [inboxIssue]
+    [inboxIssue, ppmText]
   );
 
   if (!issue) return <></>;
@@ -179,7 +181,7 @@ export const InboxIssueMainContent = observer(function InboxIssueMainContent(pro
                 createdAt: issue.created_at ? new Date(issue.created_at) : new Date(),
                 createdByDisplayName:
                   inboxIssue.source === EInboxIssueSource.FORMS
-                    ? "Intake Form user"
+                    ? ppmText("ui.intake.form_user", "Intake Form user")
                     : (getUserDetails(issue.created_by ?? "")?.display_name ?? ""),
                 id: issue.id,
                 isRestoreDisabled: !isEditable,

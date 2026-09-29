@@ -1,6 +1,7 @@
 // G2.1 (R11): how «Код» names Git providers. A repository or a connection shows its own provider — «GitHub» or
 // «Наш Git-сервер» (Forgejo next to PPM); a text about a connected repository in general says «Git-сервер». GitHub-only
 // flows (the GitHub App installation, the G1.3 branch and draft PR) keep «GitHub» and see only GitHub connections.
+import { getDate, getDateFormatLanguage, renderFormattedDate, renderFormattedTime } from "@plane/utils";
 import { resolvePpmLocale } from "@ppm/brand";
 import type {
   TPpmGitConnection,
@@ -38,24 +39,58 @@ export function getGitRepositoryOpenLabel(provider: string | null | undefined): 
 }
 
 /**
- * G2.1 D-3: PR status for a Git object/link row in «Код» — «Открыт» / «Черновик» / «Закрыт» / «Слит». Same for every
- * provider (GitHub, our Git server, …): the raw `state` is already provider-neutral («open»/«closed»/«merged»,
+ * G2.1 D-3/M-3: PR status for a Git object/link row in «Код» — «Открыт» / «Черновик» / «Закрыт» / «Слит». Same for
+ * every provider (GitHub, our Git server, …): the raw `state` is already provider-neutral («open»/«closed»/«merged»,
  * `providers/github.py:924-934`, `providers/forgejo.py:244-258`). `isDraft` is only known for a `TPpmGitObject`
  * (`GET .../objects/`); a `TPpmGitLink` row carries just `git_object_state`, so a draft PR shows as «Открыт» there —
  * still correct, just less specific. Not a PR (branch/commit: `state` is `"committed"`/`"active"`/`"deleted"`, an
- * unrelated vocabulary) or an unknown/empty state → null, so the row shows nothing extra. The API does not return a
- * merge timestamp on these list endpoints (`serialize_git_object`/`serialize_link` — no `provider_merged_at`, even
- * though the field exists on the model), so only the status is shown here — no «слит <дата>» (see task-W-report.md,
- * «Раунд E»).
+ * unrelated vocabulary) or an unknown/empty state → null, so the row shows nothing extra.
+ *
+ * M-3: a merged PR now also carries the API's `provider_merged_at`/`git_object_merged_at` (only ever set on a
+ * merged PR) — see `formatMergedAtLabel` for the exact rendering («Слит 28 сент., 14:05»). A missing/unparseable
+ * time (older records, GitHub before this field existed) keeps the bare «Слит», exactly as before M-3.
  */
 export function getGitPullRequestStatusLabel(
   state: string | null | undefined,
-  isDraft?: boolean | null
+  isDraft?: boolean | null,
+  mergedAt?: string | null
 ): string | null {
-  if (state === "merged") return "Слит";
+  if (state === "merged") return formatMergedAtLabel(mergedAt);
   if (state === "closed") return "Закрыт";
   if (state === "open") return isDraft ? "Черновик" : "Открыт";
   return null;
+}
+
+/**
+ * «Слит 28 сент., 14:05» — day + month in the short genitive form (`renderFormattedDate`/`@plane/utils`, already
+ * switched to Russian by `setDateFormatLanguage`, same as every other date in the app), the year added only when it
+ * is not the current one («Слит 28 сент. 2025, 14:05»), then HH:mm in the browser's own timezone
+ * (`renderFormattedTime`). English interface — «Merged Sep 28, 14:05» (and «Merged Sep 28, 2025, 14:05» for another
+ * year) through the same formatter and `getDateFormatLanguage`, no separate locale parameter needed. No self-written
+ * month table: every piece comes from the project's own date formatter. An unknown or unparseable time falls back to
+ * the plain «Слит», unchanged from before M-3.
+ */
+function formatMergedAtLabel(mergedAt: string | null | undefined): string {
+  if (!mergedAt) return "Слит";
+  const parsedDate = getDate(mergedAt);
+  if (!parsedDate) return "Слит";
+  const sameYear = parsedDate.getFullYear() === new Date().getFullYear();
+  const datePart = renderFormattedDate(mergedAt, sameYear ? "MMM d" : "MMM d, yyyy");
+  const timePart = renderFormattedTime(mergedAt);
+  if (!datePart || !timePart) return "Слит";
+  return `${getDateFormatLanguage() === "ru" ? "Слит" : "Merged"} ${datePart}, ${timePart}`;
+}
+
+/**
+ * Full merge date-time for a hover tooltip on the short label above — the same «date, time» pattern already used
+ * for activity and comment timestamps elsewhere in the app (`activity-block.tsx`), always with the year (unlike the
+ * short label, which drops it in the current year).
+ */
+export function getGitMergedAtTitle(mergedAt: string | null | undefined): string | undefined {
+  if (!mergedAt || !getDate(mergedAt)) return undefined;
+  const datePart = renderFormattedDate(mergedAt);
+  const timePart = renderFormattedTime(mergedAt);
+  return datePart && timePart ? `${datePart}, ${timePart}` : undefined;
 }
 
 const CONNECTION_STATUS_LABELS: Record<TPpmGitConnection["status"], string> = {

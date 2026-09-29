@@ -22,10 +22,12 @@ import { MemberListFiltersDropdown } from "@/components/project/dropdowns/filter
 import { WorkspaceMembersList } from "@/components/workspace/settings/members-list";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import { SendWorkspaceInvitationModal } from "@/components/workspace/members";
+import { usePpmMemberErrorMessage } from "@/components/workspace/settings/ppm-member-errors";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserPermissions } from "@/hooks/store/user";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // local imports
 import type { Route } from "./+types/page";
 import { MembersWorkspaceSettingsHeader } from "./header";
@@ -43,6 +45,8 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
   } = useMember();
   const { currentWorkspace } = useWorkspace();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
+  const memberErrorMessage = usePpmMemberErrorMessage();
 
   // derived values
   const canPerformWorkspaceAdminActions = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
@@ -59,7 +63,7 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
 
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success!",
+        title: ppmText("ui.toast.success", "Success!"),
         message: t("workspace_settings.settings.members.invitations_sent_successfully"),
       });
     } catch (error: unknown) {
@@ -70,8 +74,8 @@ const WorkspaceMembersSettingsPage = observer(function WorkspaceMembersSettingsP
       }
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: `${message ?? t("something_went_wrong_please_try_again")}`,
+        title: ppmText("ui.toast.error", "Error!"),
+        message: memberErrorMessage(message, `${message ?? t("something_went_wrong_please_try_again")}`),
       });
 
       throw error;

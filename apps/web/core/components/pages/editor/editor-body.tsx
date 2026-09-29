@@ -38,6 +38,7 @@ import { useRealtimePageEvents } from "@/hooks/use-realtime-page-events";
 import type { TExtendedEditorExtensionsConfig } from "@/hooks/pages";
 import type { EPageStoreType } from "@/hooks/store";
 import { useEditorFlagging } from "@/hooks/use-editor-flagging";
+import { usePpmEditorLanguage } from "@/components/editor/ppm-editor-language";
 // store
 import type { TPageInstance } from "@/store/pages/base-page";
 // local imports
@@ -97,6 +98,8 @@ export const PageEditorBody = observer(function PageEditorBody(props: Props) {
   const { data: currentUser } = useUser();
   const { getWorkspaceBySlug } = useWorkspace();
   const { getUserDetails } = useMember();
+  // PPM: the editor's own texts in the interface language (line R2)
+  usePpmEditorLanguage();
   // derived values
   const {
     id: pageId,

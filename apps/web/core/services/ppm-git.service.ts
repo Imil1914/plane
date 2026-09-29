@@ -119,6 +119,9 @@ export type TPpmGitObject = {
   commit_sha: string;
   is_active: boolean;
   provider_updated_at: string | null;
+  /** G2.1 M-1/M-2: true time of the merge (`PpmGitObject.provider_merged_at`), only ever set on a merged PR — null
+   * for branches, commits and open/closed PRs. Optional: an older cached response may not have it yet. */
+  provider_merged_at?: string | null;
   last_seen_at: string;
 };
 
@@ -199,6 +202,10 @@ export type TPpmGitLink = {
   /** G2.1 D-3: state of the linked Git object («open», «closed», «merged» for a PR); null without one. Already sent
    * by the API (`serialize_link`) but missing from this type until now — added so «Код» can show it on PR rows. */
   git_object_state: string | null;
+  /** G2.1 M-1/M-2: true time of the merge, in the naming style of the field above (`git_object_*`); only ever set
+   * when `git_object_state` is «merged» — null otherwise, and without a Git object. Optional: an older cached
+   * response may not have it yet. */
+  git_object_merged_at?: string | null;
   created_at: string;
   updated_at: string;
 };

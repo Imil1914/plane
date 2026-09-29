@@ -580,3 +580,519 @@ describe("no English leftovers on the PPM main routes (line R)", () => {
       expect(readFileSync(new URL(file, CORE), "utf8"), file).toMatch(/usePpmPriorityTitle\(\)/);
   });
 });
+
+// Line R2 (after line R): notifications, intake (Заявки), the workspace settings (members, invitations, logo, delete,
+// webhooks, API tokens, exports) and the document/description editor. Same AST rule as line R; the editor package has
+// no i18n of its own, so its texts go through `editorText(key, <upstream>)` (@plane/editor core/helpers/ppm-text) and
+// the web registers the Russian dictionary only in the Russian PPM interface.
+const EDITOR_SRC = new URL("../../../../packages/editor/src/", import.meta.url);
+const HEADINGS = ["Heading 1", "Heading 2", "Heading 3", "Heading 4", "Heading 5", "Heading 6"];
+
+const R2_CASES: Array<[URL, string[]]> = [
+  // R2-5 (round 1): no Plane support address under the PPM brand — gated by the brand flag (a ternary or an early
+  // return on IS_PPM_BRAND_ENABLED), the upstream text stays only for PPM_BRAND_ENABLED=0.
+  [
+    new URL("instance/maintenance-message.tsx", CORE),
+    ["Looks like Plane didn", "Some services might have failed to start", "Contact Support", "support@plane.so"],
+  ],
+  [new URL("global/product-updates/footer.tsx", CORE), ["support@plane.so"]],
+  [
+    new URL("error/prod.tsx", APP),
+    ["Looks like something went wrong", "Contact Support", "support@plane.so", "status.plane.so", "Go to home"],
+  ],
+  [
+    new URL("../../../space/app/error.tsx", import.meta.url),
+    ["Yikes!", "That crashed Plane", "support@plane.so", "forum.plane.so", "Refresh"],
+  ],
+  // R2-1: notifications
+  [new URL("workspace-notifications/sidebar/notification-card/item.tsx", CORE), ["Till"]],
+  [
+    new URL("workspace-notifications/sidebar/notification-card/options/snooze/modal.tsx", CORE),
+    [
+      "Customize Snooze Time",
+      "Pick a date",
+      "Please select a date",
+      "Select date",
+      "Pick a time",
+      "Please select a time",
+      "Select a time",
+      "No available time for this date.",
+      "Cancel",
+      "Submitting...",
+      "Submit",
+    ],
+  ],
+  // R2-2: intake
+  [
+    new URL("inbox/content/inbox-issue-header.tsx", CORE),
+    [
+      "Permission denied",
+      "Previous work item",
+      "Next work item",
+      "Only project admins can mark work item as duplicate",
+    ],
+  ],
+  [
+    new URL("inbox/content/inbox-issue-mobile-header.tsx", CORE),
+    [
+      "Previous work item",
+      "Next work item",
+      "Copy work item link",
+      "Open work item",
+      "Only project admins can snooze/Un-snooze work items",
+      "Un-snooze",
+      "Snooze",
+      "Only project admins can mark work items as duplicate",
+      "Mark as duplicate",
+      "Only project admins can accept work items",
+      "Accept",
+      "Only project admins can deny work items",
+      "Decline",
+      "Delete",
+    ],
+  ],
+  [
+    new URL("inbox/content/issue-properties.tsx", CORE),
+    [
+      "Properties",
+      "State",
+      "Assignees",
+      "Add assignees",
+      "Priority",
+      "Due date",
+      "Add due date",
+      "Labels",
+      "Duplicate of",
+    ],
+  ],
+  [
+    new URL("inbox/content/issue-root.tsx", CORE),
+    [
+      "Success!",
+      "Work item deleted successfully",
+      "Error!",
+      "Work item delete failed",
+      "Work item update failed",
+      "Intake Form user",
+    ],
+  ],
+  [
+    new URL("inbox/inbox-filter/applied-filters/root.tsx", CORE),
+    ["Assignees", "Created By", "Created date", "Updated date"],
+  ],
+  [new URL("inbox/inbox-filter/applied-filters/label.tsx", CORE), ["Label"]],
+  [new URL("inbox/inbox-filter/applied-filters/state.tsx", CORE), ["State"]],
+  [new URL("inbox/inbox-filter/applied-filters/status.tsx", CORE), ["Status"]],
+  [new URL("inbox/inbox-filter/filters/date.tsx", CORE), ["Created date", "Custom", "No matches found"]],
+  [
+    new URL("inbox/inbox-filter/filters/filter-selection.tsx", CORE),
+    ["Search", "Assignees", "Created By", "Created date", "Last updated date"],
+  ],
+  [new URL("inbox/inbox-filter/filters/labels.tsx", CORE), ["Label", "View less", "View all", "No matches found"]],
+  [
+    new URL("inbox/inbox-filter/filters/members.tsx", CORE),
+    ["Members", "You", "View less", "View all", "No matches found"],
+  ],
+  [new URL("inbox/inbox-filter/filters/state.tsx", CORE), ["State", "View less", "View all", "No matches found"]],
+  [new URL("inbox/inbox-filter/filters/status.tsx", CORE), ["Work item Status", "No matches found"]],
+  [new URL("inbox/inbox-filter/root.tsx", CORE), ["Filters"]],
+  [
+    new URL("inbox/modals/create-modal/create-root.tsx", CORE),
+    [
+      "Error!",
+      "Editor is still processing changes",
+      "Success!",
+      "Work item created successfully.",
+      "Some error occurred. Please try again.",
+    ],
+  ],
+  [
+    new URL("inbox/modals/create-modal/issue-properties.tsx", CORE),
+    [
+      "Assignees",
+      "Start date",
+      "Due date",
+      "Cycle",
+      "Modules",
+      "Estimate",
+      "Add parent",
+      "Change parent work item",
+      "Remove parent work item",
+    ],
+  ],
+  [new URL("inbox/modals/select-duplicate.tsx", CORE), ["Error", "Select work item", "Search..."]],
+  [new URL("inbox/sidebar/inbox-list-item.tsx", CORE), ["Created on", "Priority", "None", "labels"]],
+  [
+    new URL("inbox/sidebar/root.tsx", CORE),
+    ["No request closed yet", "All the work items whether accepted or declined"],
+  ],
+  // R2-3: workspace settings
+  [new URL("(all)/[workspaceSlug]/(settings)/settings/(workspace)/members/page.tsx", APP), ["Success!", "Error!"]],
+  [
+    new URL("(all)/[workspaceSlug]/(settings)/settings/(workspace)/webhooks/[webhookId]/page.tsx", APP),
+    [
+      "Success!",
+      "Webhook updated successfully.",
+      "Error!",
+      "Something went wrong. Please try again.",
+      "You are not authorized to access this page.",
+    ],
+  ],
+  [new URL("settings/workspace/sidebar/header.tsx", CORE), ["Workspace settings"]],
+  [
+    new URL("workspace/settings/invitations-list-item.tsx", CORE),
+    [
+      "Success!",
+      "Invitation removed successfully.",
+      "Error!",
+      "Something went wrong. Please try again.",
+      "An error occurred while updating member role",
+    ],
+  ],
+  [new URL("workspace/settings/members-list-item.tsx", CORE), ["Error!"]],
+  [
+    new URL("workspace/settings/workspace-details.tsx", CORE),
+    [
+      "Success!",
+      "Workspace updated successfully",
+      "Workspace picture removed successfully.",
+      "Error!",
+      "There was some error in deleting your profile picture",
+      "Workspace URL copied to the clipboard.",
+      "Workspace Logo",
+    ],
+  ],
+  [
+    new URL("workspace/delete-workspace-form.tsx", CORE),
+    [
+      "You are about to delete the workspace",
+      "Tread very carefully",
+      "Type in this workspace",
+      "For final confirmation, type",
+      "delete my workspace",
+    ],
+  ],
+  [
+    new URL("core/modals/workspace-image-upload-modal.tsx", CORE),
+    [
+      "Something went wrong",
+      "Upload image",
+      "Edit",
+      "Drop image here to upload",
+      "Drag & drop image here",
+      "The image size cannot exceed 5 MB.",
+      "Please upload a file in a valid format.",
+      "File formats supported",
+      "Removing",
+      "Remove",
+      "Cancel",
+      "Uploading",
+      "Upload & Save",
+    ],
+  ],
+  [
+    new URL("web-hooks/empty-state.tsx", CORE),
+    ["No webhooks", "Create webhooks to receive real-time updates", "Add webhook"],
+  ],
+  [new URL("web-hooks/form/delete-section.tsx", CORE), ["Danger zone", "Once a webhook is deleted", "Delete webhook"]],
+  [
+    new URL("web-hooks/form/secret-key.tsx", CORE),
+    ["New key regenerated successfully.", "View secret key", "Copy secret key"],
+  ],
+  [new URL("web-hooks/form/toggle.tsx", CORE), ["Enable webhook"]],
+  [new URL("web-hooks/generated-hook-details.tsx", CORE), ["Close"]],
+  [new URL("api-token/empty-state.tsx", CORE), ["No API tokens", "Create API tokens for safe", "Add token"]],
+  [new URL("api-token/token-list-item.tsx", CORE), ["Delete token", "Active", "Expired", "Expires", "Never expires"]],
+  [
+    new URL("api-token/modal/form.tsx", CORE),
+    [
+      "Error!",
+      "Please select an expiration date.",
+      "Custom date",
+      "Set expiration date",
+      "Custom",
+      "Set date",
+      "Expires",
+    ],
+  ],
+  [new URL("api-token/modal/generated-token-details.tsx", CORE), ["Copy secret key", "Expires", "Never expires"]],
+  [new URL("api-token/modal/create-token-modal.tsx", CORE), ["Error!"]],
+  [new URL("exporter/column.tsx", CORE), ["project(s)", "Expired"]],
+  [new URL("exporter/export-form.tsx", CORE), ["All projects"]],
+  // R2-4: editor wrappers in web
+  [new URL("editor/sticky-editor/color-palette.tsx", CORE), ["Background colors"]],
+  [new URL("editor/sticky-editor/toolbar.tsx", CORE), ["Background color", "Delete"]],
+  [new URL("editor/embeds/mentions/user.tsx", CORE), ["@suspended user"]],
+  [new URL("pages/editor/toolbar/toolbar.tsx", CORE), ["Text"]],
+  [new URL("../hooks/editor/use-editor-mention.tsx", CORE), ["Users"]],
+  // R2-4: the editor package (menus «/», formatting, links, tables, images, upload errors)
+  [
+    new URL("core/constants/common.ts", EDITOR_SRC),
+    [
+      "Text",
+      ...HEADINGS,
+      "Left align",
+      "Center align",
+      "Right align",
+      "Bold",
+      "Italic",
+      "Underline",
+      "Strikethrough",
+      "Bulleted list",
+      "Numbered list",
+      "To-do list",
+      "Quote",
+      "Code",
+      "Table",
+      "Image",
+      "Gray",
+      "Peach",
+      "Pink",
+      "Orange",
+      "Green",
+      "Light blue",
+      "Dark blue",
+      "Purple",
+      "Sans serif",
+      "Serif",
+      "Mono",
+    ],
+  ],
+  [
+    new URL("core/components/menus/menu-items.ts", EDITOR_SRC),
+    [
+      "Text",
+      ...HEADINGS,
+      "Bold",
+      "Italic",
+      "Underline",
+      "Strikethrough",
+      "Bulleted list",
+      "Numbered list",
+      "To-do list",
+      "Quote",
+      "Code",
+      "Table",
+      "Image",
+      "Divider",
+      "Link",
+      "Color",
+      "Background color",
+      "Text align",
+    ],
+  ],
+  [new URL("core/components/menus/block-menu.tsx", EDITOR_SRC), ["Delete", "Duplicate"]],
+  [new URL("core/components/menus/block-menu-options.tsx", EDITOR_SRC), ["Fit to width"]],
+  [
+    new URL("core/components/menus/bubble-menu/color-selector.tsx", EDITOR_SRC),
+    ["Color", "Text colors", "Background colors"],
+  ],
+  [
+    new URL("core/components/menus/bubble-menu/link-selector.tsx", EDITOR_SRC),
+    ["Link", "Enter or paste a link", "Please enter a valid URL"],
+  ],
+  [new URL("core/components/menus/bubble-menu/node-selector.tsx", EDITOR_SRC), ["Multiple"]],
+  [
+    new URL("core/components/links/link-edit-view.tsx", EDITOR_SRC),
+    ["Enter or paste URL", "Text", "Enter Text to display", "Remove Link"],
+  ],
+  [new URL("core/extensions/callout/color-selector.tsx", EDITOR_SRC), ["Color"]],
+  [new URL("core/extensions/code/code-block-node-view.tsx", EDITOR_SRC), ["Copy code"]],
+  [new URL("core/extensions/custom-image/components/toolbar/alignment.tsx", EDITOR_SRC), ["Align"]],
+  [new URL("core/extensions/custom-image/components/toolbar/download.tsx", EDITOR_SRC), ["Download", "Download image"]],
+  [
+    new URL("core/extensions/custom-image/components/toolbar/full-screen/modal.tsx", EDITOR_SRC),
+    ["Fullscreen image viewer", "Close image viewer", "Zoom out", "Zoom in", "Download image", "Open image in new tab"],
+  ],
+  [
+    new URL("core/extensions/custom-image/components/toolbar/full-screen/root.tsx", EDITOR_SRC),
+    ["View in full screen", "View image in full screen"],
+  ],
+  [
+    new URL("core/extensions/custom-image/components/uploader.tsx", EDITOR_SRC),
+    ["Error loading image", "Uploading...", "Drop image here", "Add an image", "Retry duplication", "Retry"],
+  ],
+  [new URL("core/extensions/custom-image/utils.ts", EDITOR_SRC), ["Left", "Center", "Right"]],
+  [new URL("core/helpers/file.ts", EDITOR_SRC), ["No file selected", "Invalid file type.", "File size too large"]],
+  [new URL("core/extensions/emoji/components/emojis-list.tsx", EDITOR_SRC), ["No emojis found"]],
+  [new URL("core/extensions/mentions/mentions-list-dropdown.tsx", EDITOR_SRC), ["Loading...", "No results"]],
+  [new URL("core/extensions/placeholder.ts", EDITOR_SRC), ["Heading ", "Press '/' for commands..."]],
+  [new URL("core/hooks/use-title-editor.ts", EDITOR_SRC), ["Untitled"]],
+  [
+    new URL("core/extensions/slash-commands/command-items-list.tsx", EDITOR_SRC),
+    [
+      "Just start typing with plain text.",
+      ...HEADINGS,
+      "Big section heading.",
+      "Medium section heading.",
+      "Small section heading.",
+      "Numbered list",
+      "Create a numbered list.",
+      "Bulleted list",
+      "Create a bulleted list.",
+      "To-do list",
+      "Create a to-do list.",
+      "Create a table",
+      "Capture a quote.",
+      "Capture a code snippet.",
+      "Callout",
+      "Insert callout",
+      "Divider",
+      "Visually divide blocks.",
+      "Emoji",
+      "Insert an emoji",
+      "Colors",
+      "Default",
+      "Change text color",
+      "Background colors",
+      "Change background color",
+      "Insert an image",
+    ],
+  ],
+  [
+    new URL("core/extensions/table/plugins/drag-handles/color-selector.tsx", EDITOR_SRC),
+    ["Color", "Background colors"],
+  ],
+  [
+    new URL("core/extensions/table/plugins/drag-handles/column/dropdown.tsx", EDITOR_SRC),
+    ["Insert left", "Insert right", "Duplicate", "Clear contents", "Delete", "Header column"],
+  ],
+  [
+    new URL("core/extensions/table/plugins/drag-handles/row/dropdown.tsx", EDITOR_SRC),
+    ["Insert above", "Insert below", "Duplicate", "Clear contents", "Delete", "Header row"],
+  ],
+  [new URL("core/extensions/table/plugins/insert-handlers/utils.ts", EDITOR_SRC), ["Insert columns", "Insert rows"]],
+];
+
+describe("no English leftovers in notifications, intake, workspace settings and the editor (line R2)", () => {
+  it.each(R2_CASES)("%s shows no bare English", (file, phrases) => {
+    const { present, ungated } = scanPpmLiterals(file, phrases);
+    expect(ungated).toEqual([]);
+    expect(present.length, `${file.pathname}: none of the phrases is left even as a fallback`).toBeGreaterThan(0);
+  });
+
+  it("the scanner counts the brand flag and an early return on a flag as a gate (synthetic file)", () => {
+    const sample = [
+      'const a = IS_PPM_BRAND_ENABLED ? ppmT("k") : "Support gated";',
+      'const b = isPpmBrandEnabled(process.env.PPM_BRAND_ENABLED) ? ppmT("k") : "Support call";',
+      "function C() {",
+      "  if (IS_PPM_BRAND_ENABLED) return <b />;",
+      '  const links = [{ label: "Support early" }];',
+      "  return <p>{links.length} Support after</p>;",
+      "}",
+      "function D() {",
+      "  if (IS_PPM_BRAND_ENABLED) {",
+      "    log();",
+      "  }",
+      '  return "Support no return";',
+      "}",
+      "function E() {",
+      "  if (!IS_PPM_BRAND_ENABLED) return <b />;",
+      '  return "Support negated";',
+      "}",
+      "function F() {",
+      '  const before = "Support before";',
+      "  if (isPpmShell) {",
+      "    return <b />;",
+      "  }",
+      '  return before + "Support block return";',
+      "}",
+      "function G() {",
+      "  if (IS_PPM_BRAND_ENABLED) return <b />;",
+      "  else log();",
+      '  return "Support with else";',
+      "}",
+    ].join("\n");
+    const { ungated } = scanPpmSource(sample, ["Support"]);
+    expect(ungated.map((entry) => entry.split(": ")[0])).toEqual(["12", "16", "19", "28"]);
+  });
+
+  it("the scanner counts editorText(key, <upstream>) as a fallback (synthetic file)", () => {
+    const sample = [
+      'const a = editorText("ui.editor.bold", "Bold gated");',
+      'const b = editorText("Bold as the key only");',
+      'const c = "Bold bare";',
+      'const d = { get label() { return editorText("ui.editor.bold", "Bold getter"); } };',
+    ].join("\n");
+    const { ungated } = scanPpmSource(sample, ["Bold"]);
+    expect(ungated.map((entry) => entry.split(": ")[0])).toEqual(["3"]);
+  });
+
+  it("module-level option lists keep the upstream labels and are rendered by key in the Russian PPM interface", () => {
+    const source = (file: string) => readFileSync(new URL(file, CORE), "utf8");
+    // Webhook events: labels and descriptions of INDIVIDUAL_WEBHOOK_OPTIONS.
+    const webhookEvents = source("web-hooks/form/individual-event-options.tsx");
+    expect(webhookEvents).toMatch(/ppmText\(WEBHOOK_EVENT_TEXT_KEYS\[option\.key\]\.label, option\.label\)/);
+    expect(webhookEvents).toMatch(
+      /ppmText\(WEBHOOK_EVENT_TEXT_KEYS\[option\.key\]\.description, option\.description\)/
+    );
+    // API token expiry presets: EXPIRY_DATE_OPTIONS.
+    const tokenForm = source("api-token/modal/form.tsx");
+    expect(tokenForm.match(/ppmText\(TOKEN_EXPIRY_TEXT_KEYS\[option\.key\], option\.label\)/g)?.length).toBe(1);
+    expect(tokenForm).toMatch(/ppmText\(TOKEN_EXPIRY_TEXT_KEYS\[selectedOption\.key\], selectedOption\.label\)/);
+    // Intake date presets: PAST_DURATION_FILTER_OPTIONS of @plane/constants.
+    expect(source("inbox/inbox-filter/filters/date.tsx")).toMatch(
+      /intakeDatePresetName\(option\.value, option\.name\)/
+    );
+    expect(source("inbox/inbox-filter/applied-filters/date.tsx")).toMatch(
+      /intakeDatePresetName\(currentDate\.value, currentDate\.name\)/
+    );
+    // Export history: column headers and statuses.
+    const exportColumns = source("exporter/column.tsx");
+    for (const [key, upstream] of [
+      ["ui.export.exported_by", "Exported By"],
+      ["ui.export.exported_on", "Exported On"],
+      ["ui.export.projects", "Exported projects"],
+      ["ui.export.format", "Format"],
+      ["ui.export.status", "Status"],
+      ["ui.export.download", "Download"],
+    ])
+      expect(exportColumns).toContain(`content: ppmText("${key}", "${upstream}")`);
+    expect(exportColumns).toMatch(/exportStatus\(rowData\.status\)/);
+    // Comment access tooltips: the Plane keys (en = "Private"/"Public") in the Russian PPM interface.
+    expect(source("editor/lite-text/toolbar.tsx")).toMatch(
+      /tooltipContent=\{isPpmRu \? t\(access\.i18nLabel\) : access\.label\}/
+    );
+  });
+
+  it("the notification card speaks Russian through the PPM phrase map in the Russian PPM interface", () => {
+    const source = readFileSync(new URL("workspace-notifications/sidebar/notification-card/content.tsx", CORE), "utf8");
+    expect(source).toMatch(
+      /if \(isPpmRu\) \{\s*const ppm = resolvePpmNotificationPhrase\(fieldData, renderCommentBox\);/
+    );
+    expect(source).toMatch(/template=\{ppmT\(ppm\.phrase\)\}/);
+    const snooze = readFileSync(
+      new URL("workspace-notifications/sidebar/notification-card/options/snooze/root.tsx", CORE),
+      "utf8"
+    );
+    expect(snooze.match(/isPpmRu \? ppmT\("ui\.toast\.success"\) : `\$\{t\("common\.success"\)\}!`/g)).toHaveLength(2);
+    const modal = readFileSync(
+      new URL("workspace-notifications/sidebar/notification-card/options/snooze/modal.tsx", CORE),
+      "utf8"
+    );
+    expect(modal).toMatch(/isPpmRu \? ppmT\("ui\.notification\.am"\) : "AM"/);
+    expect(modal).toMatch(/isPpmRu \? ppmT\("ui\.notification\.pm"\) : "PM"/);
+  });
+
+  it("the workspace delete confirmation follows the interface language («удалить это пространство», no «ё» to mistype)", () => {
+    const source = readFileSync(new URL("workspace/delete-workspace-form.tsx", CORE), "utf8");
+    expect(source).toContain('ppmText("ui.ws.delete_phrase", "delete my workspace")');
+    expect(source).toMatch(/watch\("confirmDelete"\) === confirmPhrase/);
+    expect(getPpmTranslation("ru", "ui.ws.delete_phrase")).toBe("удалить это пространство");
+    expect(getPpmTranslation("en", "ui.ws.delete_phrase")).toBe("delete my workspace");
+  });
+
+  it("the web registers the editor texts in every editor wrapper and toolbar", () => {
+    for (const file of [
+      "editor/document/editor.tsx",
+      "editor/lite-text/editor.tsx",
+      "editor/rich-text/editor.tsx",
+      "editor/sticky-editor/editor.tsx",
+      "pages/editor/editor-body.tsx",
+      "pages/editor/toolbar/toolbar.tsx",
+      "editor/lite-text/toolbar.tsx",
+      "editor/sticky-editor/toolbar.tsx",
+    ])
+      expect(readFileSync(new URL(file, CORE), "utf8"), file).toMatch(/usePpmEditorLanguage\(\);/);
+  });
+});

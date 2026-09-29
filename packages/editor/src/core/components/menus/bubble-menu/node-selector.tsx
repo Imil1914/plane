@@ -27,6 +27,8 @@ import {
 } from "@/components/menus";
 // types
 import type { TEditorCommands } from "@/types";
+// helpers
+import { editorText } from "@/helpers/ppm-text";
 // local imports
 import { FloatingMenuRoot } from "../floating-menu/root";
 import { useFloatingMenu } from "../floating-menu/use-floating-menu";
@@ -56,7 +58,7 @@ export function BubbleMenuNodeSelector(props: Props) {
   ] as EditorMenuItem<TEditorCommands>[];
 
   const activeItem = items.filter((item) => item.isActive()).pop() ?? {
-    name: "Multiple",
+    name: editorText("ui.editor.multiple", "Multiple"),
   };
 
   return (

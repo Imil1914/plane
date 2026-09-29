@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { LinkViewProps, LinkViews } from "@/components/links";
 // helpers
 import { isValidHttpUrl } from "@/helpers/common";
+import { editorText } from "@/helpers/ppm-text";
 
 type InputViewProps = {
   label: string;
@@ -144,13 +145,24 @@ export function LinkEditView({ viewProps }: LinkEditViewProps) {
       }}
       tabIndex={0}
     >
-      <InputView label="URL" placeholder="Enter or paste URL" value={localUrl} onChange={setLocalUrl} autoFocus />
-      <InputView label="Text" placeholder="Enter Text to display" value={localText} onChange={handleTextChange} />
+      <InputView
+        label="URL"
+        placeholder={editorText("ui.editor.url_placeholder", "Enter or paste URL")}
+        value={localUrl}
+        onChange={setLocalUrl}
+        autoFocus
+      />
+      <InputView
+        label={editorText("ui.editor.text", "Text")}
+        placeholder={editorText("ui.editor.link_text_placeholder", "Enter Text to display")}
+        value={localText}
+        onChange={handleTextChange}
+      />
       <div className="bg-strong mb-1 h-[1px] w-full gap-2" />
       <div className="flex items-center gap-2 text-13 text-secondary">
         <Link2Off size={14} className="inline-block" />
         <button onClick={removeLink} className="cursor-pointer transition-colors hover:text-placeholder">
-          Remove Link
+          {editorText("ui.editor.remove_link", "Remove Link")}
         </button>
       </div>
     </div>

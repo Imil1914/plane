@@ -15,6 +15,9 @@ import { useWorkspaceNotifications } from "@/hooks/store/notifications";
 import { useNotification } from "@/hooks/store/notifications/use-notification";
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { formatPpmTemplate } from "@/components/ppm-tasks/format";
 // local imports
 import { NotificationContent } from "./content";
 import { NotificationOption } from "./options";
@@ -31,6 +34,8 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
   const { asJson: notification, markNotificationAsRead } = useNotification(notificationId);
   const { getIsIssuePeeked, setPeekIssue } = useIssueDetail();
   const { getWorkspaceBySlug } = useWorkspace();
+  const isPpmRu = usePpmRu();
+  const ppmT = usePpmTranslation();
   // states
   const [isSnoozeStateModalOpen, setIsSnoozeStateModalOpen] = useState(false);
   const [customSnoozeModal, setCustomSnoozeModal] = useState(false);
@@ -126,8 +131,18 @@ export const NotificationItem = observer(function NotificationItem(props: TNotif
                 <p className="flex flex-shrink-0 items-center justify-end gap-x-1 text-tertiary">
                   <Clock className="h-4 w-4" />
                   <span>
-                    Till {renderFormattedDate(notification.snoozed_till)},&nbsp;
-                    {renderFormattedTime(notification.snoozed_till, "12-hour")}
+                    {isPpmRu ? (
+                      // «До 28 сент., 14:30»: the date in the interface language and a 24-hour time.
+                      formatPpmTemplate(ppmT("ui.notification.snoozed_till"), {
+                        date: renderFormattedDate(notification.snoozed_till) ?? "",
+                        time: renderFormattedTime(notification.snoozed_till, "24-hour"),
+                      })
+                    ) : (
+                      <>
+                        Till {renderFormattedDate(notification.snoozed_till)},&nbsp;
+                        {renderFormattedTime(notification.snoozed_till, "12-hour")}
+                      </>
+                    )}
                   </span>
                 </p>
               ) : (

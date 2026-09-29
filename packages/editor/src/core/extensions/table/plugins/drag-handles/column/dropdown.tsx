@@ -12,6 +12,7 @@ import type { LucideIcon } from "lucide-react";
 import type { ISvgIcons } from "@plane/propel/icons";
 import { CopyIcon, TrashIcon, CloseIcon } from "@plane/propel/icons";
 import { findTable, getSelectedColumns } from "@/extensions/table/table/utilities/helpers";
+import { editorText } from "@/helpers/ppm-text";
 // local imports
 import { duplicateColumns } from "../actions";
 import { TableDragHandleDropdownColorSelector } from "../color-selector";
@@ -24,19 +25,25 @@ const DROPDOWN_ITEMS: {
 }[] = [
   {
     key: "insert-left",
-    label: "Insert left",
+    get label() {
+      return editorText("ui.editor.insert_left", "Insert left");
+    },
     icon: ArrowLeft,
     action: (editor) => editor.chain().focus().addColumnBefore().run(),
   },
   {
     key: "insert-right",
-    label: "Insert right",
+    get label() {
+      return editorText("ui.editor.insert_right", "Insert right");
+    },
     icon: ArrowRight,
     action: (editor) => editor.chain().focus().addColumnAfter().run(),
   },
   {
     key: "duplicate",
-    label: "Duplicate",
+    get label() {
+      return editorText("ui.editor.duplicate", "Duplicate");
+    },
     icon: CopyIcon,
     action: (editor) => {
       const table = findTable(editor.state.selection);
@@ -51,13 +58,17 @@ const DROPDOWN_ITEMS: {
   },
   {
     key: "clear-contents",
-    label: "Clear contents",
+    get label() {
+      return editorText("ui.editor.clear_contents", "Clear contents");
+    },
     icon: CloseIcon,
     action: (editor) => editor.chain().focus().clearSelectedCells().run(),
   },
   {
     key: "delete",
-    label: "Delete",
+    get label() {
+      return editorText("ui.editor.delete", "Delete");
+    },
     icon: TrashIcon,
     action: (editor) => editor.chain().focus().deleteColumn().run(),
   },
@@ -83,7 +94,7 @@ export function ColumnOptionsDropdown(props: Props) {
           onClose();
         }}
       >
-        <div className="flex-grow truncate">Header column</div>
+        <div className="flex-grow truncate">{editorText("ui.editor.header_column", "Header column")}</div>
         <ToggleRight className="size-3 shrink-0" />
       </button>
       <hr className="my-2 border-subtle" />

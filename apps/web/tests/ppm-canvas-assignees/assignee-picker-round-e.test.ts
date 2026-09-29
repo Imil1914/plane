@@ -1,6 +1,11 @@
 // G2.1 · линия C, раунд E (правка D-5, task-E-report.md §6): инициалы аватарки брали первый *символ* второго
 // «слова» имени, даже если это открывающая скобка — «Посторонний (демо)» → «П(». Теперь буква слова — его первая
 // *буква* (цифры/скобки/пунктуация/эмодзи пропускаются), а слово вовсе без букв не считается словом. Env node, без DOM.
+//
+// Линия F (review-W5-findings.md №6): запасной вариант через email не срабатывал (единственный вызов передаёт
+// только display_name, у TPpmCanvasAssignee нет почты) — регрессия для имён без единой буквы («12345», «007», «🙂»
+// раньше давали «1», «0», «🙂», с email-заглушкой стали «?»). Параметр email убран; букв нет — первая *кодовая точка*
+// обрезанного имени (не половина суррогатной пары).
 import { describe, expect, it } from "vitest";
 import { assigneeInitials } from "@/components/ppm-canvas/canvas-assignee-picker";
 
@@ -23,16 +28,16 @@ describe("раунд E · D-5: инициалы аватарки — буквы 
     expect(assigneeInitials("Madonna")).toBe("M");
   });
 
-  it("букв нет вовсе (пусто или только цифры/эмодзи) — первый символ e-mail, если он есть", () => {
-    expect(assigneeInitials("", "jane@example.com")).toBe("J");
-    expect(assigneeInitials("42", "z@example.com")).toBe("Z");
-    expect(assigneeInitials("🙂🙂", "  q@example.com")).toBe("Q");
+  it("букв нет вовсе (только цифры/скобки/эмодзи) — первая кодовая точка обрезанного имени, не половина суррогатной пары", () => {
+    expect(assigneeInitials("12345")).toBe("1");
+    expect(assigneeInitials("007")).toBe("0");
+    expect(assigneeInitials("🙂🙂")).toBe("🙂");
+    // Обрамляющие пробелы обрезаются до взятия первой кодовой точки.
+    expect(assigneeInitials("  42  ")).toBe("4");
   });
 
-  it("букв нет и e-mail не дан (или пуст) — «?»", () => {
+  it("имя пустое (или только пробелы) — «?», как и до правки D-5", () => {
     expect(assigneeInitials("")).toBe("?");
-    expect(assigneeInitials("", null)).toBe("?");
-    expect(assigneeInitials("", "")).toBe("?");
-    expect(assigneeInitials("🙂🙂")).toBe("?");
+    expect(assigneeInitials("   ")).toBe("?");
   });
 });

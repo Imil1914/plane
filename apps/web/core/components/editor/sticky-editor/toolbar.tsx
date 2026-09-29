@@ -17,6 +17,9 @@ import type { TSticky } from "@plane/types";
 import { cn } from "@plane/utils";
 import type { ToolbarMenuItem } from "@plane/editor";
 import { TOOLBAR_ITEMS } from "@plane/editor";
+// hooks
+import { usePpmEditorLanguage } from "@/components/editor/ppm-editor-language";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // helpers
 import { ColorPalette } from "./color-palette";
 
@@ -31,6 +34,9 @@ const toolbarItems = TOOLBAR_ITEMS.sticky;
 
 export function StickyEditorToolbar(props: Props) {
   const { executeCommand, editorRef, handleColorChange, handleDelete } = props;
+  // PPM: the editor's own texts in the interface language (line R2)
+  usePpmEditorLanguage();
+  const ppmText = usePpmText();
 
   // State to manage active states of toolbar items
   const [activeStates, setActiveStates] = useState<Record<string, boolean>>({});
@@ -71,7 +77,7 @@ export function StickyEditorToolbar(props: Props) {
         <Tooltip
           tooltipContent={
             <p className="flex flex-col gap-1 text-center text-11">
-              <span className="font-medium">Background color</span>
+              <span className="font-medium">{ppmText("ui.editor.background_color", "Background color")}</span>
             </p>
           }
         >
@@ -121,7 +127,7 @@ export function StickyEditorToolbar(props: Props) {
       <Tooltip
         tooltipContent={
           <p className="flex flex-col gap-1 text-center text-11">
-            <span className="font-medium">Delete</span>
+            <span className="font-medium">{ppmText("ui.editor.delete", "Delete")}</span>
           </p>
         }
       >

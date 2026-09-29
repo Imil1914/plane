@@ -20,8 +20,10 @@ import { useMember } from "@/hooks/store/use-member";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUser, useUserPermissions, useUserSettings } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // plane web imports
 import { useMemberColumns } from "@/components/workspace/settings/useMemberColumns";
+import { usePpmMemberErrorMessage } from "@/components/workspace/settings/ppm-member-errors";
 
 type Props = {
   memberDetails: (IWorkspaceMember | null)[];
@@ -41,6 +43,8 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
   const { getWorkspaceRedirectionUrl } = useWorkspace();
   const { fetchCurrentUserSettings } = useUserSettings();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
+  const memberErrorMessage = usePpmMemberErrorMessage();
   // derived values
 
   const handleLeaveWorkspace = async () => {
@@ -54,8 +58,8 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
       const error = err as { error?: string };
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: error?.error || t("something_went_wrong_please_try_again"),
+        title: ppmText("ui.toast.error", "Error!"),
+        message: memberErrorMessage(error?.error, error?.error || t("something_went_wrong_please_try_again")),
       });
     }
   };
@@ -69,8 +73,8 @@ export const WorkspaceMembersListItem = observer(function WorkspaceMembersListIt
       const error = err as { error?: string };
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: error?.error || t("something_went_wrong_please_try_again"),
+        title: ppmText("ui.toast.error", "Error!"),
+        message: memberErrorMessage(error?.error, error?.error || t("something_went_wrong_please_try_again")),
       });
     }
   };

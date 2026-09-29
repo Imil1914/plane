@@ -18,6 +18,7 @@ import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { getAssetIdFromUrl, getFileURL, checkURLValidity } from "@plane/utils";
 // hooks
 import { useWorkspace } from "@/hooks/store/use-workspace";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // services
 import { FileService } from "@/services/file.service";
 
@@ -42,6 +43,7 @@ export const WorkspaceImageUploadModal = observer(function WorkspaceImageUploadM
   const { workspaceSlug } = useParams();
   // store hooks
   const { currentWorkspace, updateWorkspaceLogo } = useWorkspace();
+  const ppmText = usePpmText();
 
   const onDrop = (acceptedFiles: File[]) => setImage(acceptedFiles[0]);
 
@@ -79,8 +81,8 @@ export const WorkspaceImageUploadModal = observer(function WorkspaceImageUploadM
       console.log("error", error);
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error",
-        message: error.error || "Something went wrong",
+        title: ppmText("ui.toast.error_plain", "Error"),
+        message: error.error || ppmText("ui.error.something_went_wrong", "Something went wrong"),
       });
     } finally {
       setIsImageUploading(false);
@@ -109,7 +111,9 @@ export const WorkspaceImageUploadModal = observer(function WorkspaceImageUploadM
   return (
     <ModalCore isOpen={isOpen} handleClose={handleClose} position={EModalPosition.CENTER} width={EModalWidth.XL}>
       <div className="space-y-5 px-5 py-8 sm:p-6">
-        <h3 className="text-16 leading-6 font-medium text-primary">Upload image</h3>
+        <h3 className="text-16 leading-6 font-medium text-primary">
+          {ppmText("ui.ws.image_upload_title", "Upload image")}
+        </h3>
         <div className="space-y-3">
           <div className="flex items-center justify-center gap-3">
             <div
@@ -126,7 +130,7 @@ export const WorkspaceImageUploadModal = observer(function WorkspaceImageUploadM
                     type="button"
                     className="absolute top-0 right-0 z-40 translate-x-1/2 -translate-y-1/2 rounded-sm bg-surface-2 px-2 py-0.5 text-11 font-medium text-secondary"
                   >
-                    Edit
+                    {ppmText("ui.ws.image_edit", "Edit")}
                   </button>
                   <img
                     src={image ? URL.createObjectURL(image) : value ? getFileURL(value) : ""}
@@ -138,7 +142,9 @@ export const WorkspaceImageUploadModal = observer(function WorkspaceImageUploadM
                 <div>
                   <UserCirclePropertyIcon className="mx-auto h-16 w-16 text-secondary" />
                   <span className="mt-2 block text-13 font-medium text-secondary">
-                    {isDragActive ? "Drop image here to upload" : "Drag & drop image here"}
+                    {isDragActive
+                      ? ppmText("ui.ws.image_drop", "Drop image here to upload")
+                      : ppmText("ui.ws.image_drag", "Drag & drop image here")}
                   </span>
                 </div>
               )}
@@ -149,22 +155,26 @@ export const WorkspaceImageUploadModal = observer(function WorkspaceImageUploadM
           {fileRejections.length > 0 && (
             <p className="text-13 text-danger-primary">
               {fileRejections[0].errors[0].code === "file-too-large"
-                ? "The image size cannot exceed 5 MB."
-                : "Please upload a file in a valid format."}
+                ? ppmText("ui.ws.image_too_large", "The image size cannot exceed 5 MB.")
+                : ppmText("ui.ws.image_invalid_format", "Please upload a file in a valid format.")}
             </p>
           )}
         </div>
-        <p className="my-4 text-13 text-secondary">File formats supported- .jpeg, .jpg, .png, .webp</p>
+        <p className="my-4 text-13 text-secondary">
+          {ppmText("ui.ws.image_formats", "File formats supported- .jpeg, .jpg, .png, .webp")}
+        </p>
         <div className="flex items-center justify-between">
           <Button variant="error-fill" size="lg" onClick={handleImageRemove} disabled={!value} loading={isRemoving}>
-            {isRemoving ? "Removing" : "Remove"}
+            {isRemoving ? ppmText("ui.ws.image_removing", "Removing") : ppmText("ui.ws.image_remove", "Remove")}
           </Button>
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="lg" onClick={handleClose}>
-              Cancel
+              {ppmText("ui.common.cancel", "Cancel")}
             </Button>
             <Button variant="primary" size="lg" onClick={handleSubmit} disabled={!image} loading={isImageUploading}>
-              {isImageUploading ? "Uploading" : "Upload & Save"}
+              {isImageUploading
+                ? ppmText("ui.ws.image_uploading", "Uploading")
+                : ppmText("ui.ws.image_upload_save", "Upload & Save")}
             </Button>
           </div>
         </div>

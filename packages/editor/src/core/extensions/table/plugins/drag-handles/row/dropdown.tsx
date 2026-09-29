@@ -12,6 +12,7 @@ import type { LucideIcon } from "lucide-react";
 import type { ISvgIcons } from "@plane/propel/icons";
 import { CopyIcon, TrashIcon, CloseIcon } from "@plane/propel/icons";
 import { findTable, getSelectedRows } from "@/extensions/table/table/utilities/helpers";
+import { editorText } from "@/helpers/ppm-text";
 // local imports
 import { duplicateRows } from "../actions";
 import { TableDragHandleDropdownColorSelector } from "../color-selector";
@@ -24,19 +25,25 @@ const DROPDOWN_ITEMS: {
 }[] = [
   {
     key: "insert-above",
-    label: "Insert above",
+    get label() {
+      return editorText("ui.editor.insert_above", "Insert above");
+    },
     icon: ArrowUp,
     action: (editor) => editor.chain().focus().addRowBefore().run(),
   },
   {
     key: "insert-below",
-    label: "Insert below",
+    get label() {
+      return editorText("ui.editor.insert_below", "Insert below");
+    },
     icon: ArrowDown,
     action: (editor) => editor.chain().focus().addRowAfter().run(),
   },
   {
     key: "duplicate",
-    label: "Duplicate",
+    get label() {
+      return editorText("ui.editor.duplicate", "Duplicate");
+    },
     icon: CopyIcon,
     action: (editor) => {
       const table = findTable(editor.state.selection);
@@ -51,13 +58,17 @@ const DROPDOWN_ITEMS: {
   },
   {
     key: "clear-contents",
-    label: "Clear contents",
+    get label() {
+      return editorText("ui.editor.clear_contents", "Clear contents");
+    },
     icon: CloseIcon,
     action: (editor) => editor.chain().focus().clearSelectedCells().run(),
   },
   {
     key: "delete",
-    label: "Delete",
+    get label() {
+      return editorText("ui.editor.delete", "Delete");
+    },
     icon: TrashIcon,
     action: (editor) => editor.chain().focus().deleteRow().run(),
   },
@@ -83,7 +94,7 @@ export function RowOptionsDropdown(props: Props) {
           onClose();
         }}
       >
-        <div className="flex-grow truncate">Header row</div>
+        <div className="flex-grow truncate">{editorText("ui.editor.header_row", "Header row")}</div>
         <ToggleRight className="size-3 shrink-0" />
       </button>
       <hr className="my-2 border-subtle" />

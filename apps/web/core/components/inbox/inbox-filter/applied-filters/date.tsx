@@ -13,7 +13,11 @@ import { Tag } from "@plane/ui";
 import { renderFormattedDate } from "@plane/utils";
 // constants
 // hooks
+import { usePpmDateFilterName } from "@/components/ppm-shell/date-filter-name";
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
+import { usePpmRu } from "@/hooks/use-ppm-text";
+// local imports
+import { useIntakeDatePresetName } from "../ppm-date-presets";
 
 type InboxIssueAppliedFiltersDate = {
   filterKey: TInboxIssueFilterDateKeys;
@@ -26,14 +30,20 @@ export const InboxIssueAppliedFiltersDate = observer(function InboxIssueAppliedF
   const { filterKey, label } = props;
   // hooks
   const { inboxFilters, handleInboxIssueFilters } = useProjectInbox();
+  const isPpmRu = usePpmRu();
+  const intakeDatePresetName = useIntakeDatePresetName();
+  const { customName } = usePpmDateFilterName();
   // derived values
   const filteredValues = inboxFilters?.[filterKey] || [];
   const currentOptionDetail = (date: string) => {
     const currentDate = PAST_DURATION_FILTER_OPTIONS.find((d) => d.value === date);
-    if (currentDate) return currentDate;
+    if (currentDate) return { ...currentDate, name: intakeDatePresetName(currentDate.value, currentDate.name) };
     const dateSplit = date.split(";");
     return {
-      name: `${dateSplit[1].charAt(0).toUpperCase() + dateSplit[1].slice(1)} ${renderFormattedDate(dateSplit[0])}`,
+      // «После 22 сент. 2026» in the Russian PPM interface (line R's date filter names).
+      name: isPpmRu
+        ? customName(date)
+        : `${dateSplit[1].charAt(0).toUpperCase() + dateSplit[1].slice(1)} ${renderFormattedDate(dateSplit[0])}`,
       value: date,
     };
   };

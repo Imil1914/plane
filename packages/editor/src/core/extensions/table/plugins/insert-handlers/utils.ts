@@ -10,6 +10,8 @@ import { addColumn, removeColumn, addRow, removeRow, TableMap } from "@tiptap/pm
 import type { TableRect } from "@tiptap/pm/tables";
 // local imports
 import { isCellEmpty } from "../../table/utilities/helpers";
+// helpers
+import { editorText } from "@/helpers/ppm-text";
 
 const addSvg = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
 <path
@@ -31,8 +33,8 @@ export const createColumnInsertButton = (editor: Editor, tableInfo: TableInfo): 
   const button = document.createElement("button");
   button.type = "button";
   button.className = "table-column-insert-button";
-  button.title = "Insert columns";
-  button.ariaLabel = "Insert columns";
+  button.title = editorText("ui.editor.insert_columns", "Insert columns");
+  button.ariaLabel = editorText("ui.editor.insert_columns", "Insert columns");
 
   const icon = document.createElement("span");
   icon.innerHTML = addSvg;
@@ -129,8 +131,8 @@ export const createRowInsertButton = (editor: Editor, tableInfo: TableInfo): HTM
   const button = document.createElement("button");
   button.type = "button";
   button.className = "table-row-insert-button";
-  button.title = "Insert rows";
-  button.ariaLabel = "Insert rows";
+  button.title = editorText("ui.editor.insert_rows", "Insert rows");
+  button.ariaLabel = editorText("ui.editor.insert_rows", "Insert rows");
 
   const icon = document.createElement("span");
   icon.innerHTML = addSvg;

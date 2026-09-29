@@ -35,6 +35,7 @@ import { useProject } from "@/hooks/store/use-project";
 import { useProjectInbox } from "@/hooks/store/use-project-inbox";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // store
 import type { IInboxIssueStore } from "@/store/inbox/inbox-issue.store";
 // local imports
@@ -80,6 +81,7 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
   const { getPartialProjectById } = useProject();
   const currentProjectDetails = getPartialProjectById(projectId);
   const { t } = useTranslation();
+  const ppmText = usePpmText();
 
   const router = useAppRouter();
   const { getProjectById } = useProject();
@@ -217,7 +219,7 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
     else {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Permission denied",
+        title: ppmText("ui.intake.permission_denied", "Permission denied"),
         message: errorMessage,
       });
     }
@@ -311,14 +313,14 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
                 variant="secondary"
                 size="lg"
                 icon={ChevronUpIcon}
-                aria-label="Previous work item"
+                aria-label={ppmText("ui.intake.previous", "Previous work item")}
                 onClick={() => handleInboxIssueNavigation("prev")}
               />
               <IconButton
                 variant="secondary"
                 size="lg"
                 icon={ChevronDownIcon}
-                aria-label="Next work item"
+                aria-label={ppmText("ui.intake.next", "Next work item")}
                 onClick={() => handleInboxIssueNavigation("next")}
               />
             </div>
@@ -407,7 +409,10 @@ export const InboxIssueActionsHeader = observer(function InboxIssueActionsHeader
                           handleActionWithPermission(
                             isProjectAdmin,
                             () => setSelectDuplicateIssue(true),
-                            "Only project admins can mark work item as duplicate"
+                            ppmText(
+                              "ui.intake.duplicate_permission",
+                              "Only project admins can mark work item as duplicate"
+                            )
                           )
                         }
                       >

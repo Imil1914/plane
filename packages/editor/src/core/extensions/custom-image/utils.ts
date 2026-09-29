@@ -7,6 +7,8 @@
 import type { Editor } from "@tiptap/core";
 import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+// helpers
+import { editorText } from "@/helpers/ppm-text";
 // local imports
 import { ECustomImageAttributeNames, ECustomImageStatus } from "./types";
 import type { TCustomImageAlignment, Pixel, TCustomImageAttributes } from "./types";
@@ -44,17 +46,23 @@ export const IMAGE_ALIGNMENT_OPTIONS: {
   icon: LucideIcon;
 }[] = [
   {
-    label: "Left",
+    get label() {
+      return editorText("ui.editor.image_align_left", "Left");
+    },
     value: "left",
     icon: AlignLeft,
   },
   {
-    label: "Center",
+    get label() {
+      return editorText("ui.editor.image_align_center", "Center");
+    },
     value: "center",
     icon: AlignCenter,
   },
   {
-    label: "Right",
+    get label() {
+      return editorText("ui.editor.image_align_right", "Right");
+    },
     value: "right",
     icon: AlignRight,
   },

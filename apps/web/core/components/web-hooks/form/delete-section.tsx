@@ -8,6 +8,8 @@ import { Disclosure, Transition } from "@headlessui/react";
 import { WORKSPACE_SETTINGS_TRACKER_ELEMENTS } from "@plane/constants";
 import { Button } from "@plane/propel/button";
 import { ChevronDownIcon, ChevronUpIcon } from "@plane/propel/icons";
+// hooks
+import { usePpmText } from "@/hooks/use-ppm-text";
 
 type Props = {
   openDeleteModal: () => void;
@@ -15,13 +17,14 @@ type Props = {
 
 export function WebhookDeleteSection(props: Props) {
   const { openDeleteModal } = props;
+  const ppmText = usePpmText();
 
   return (
     <Disclosure as="div" className="border-t border-subtle">
       {({ open }) => (
         <div className="w-full">
           <Disclosure.Button as="button" type="button" className="flex w-full items-center justify-between py-4">
-            <span className="text-16 tracking-tight">Danger zone</span>
+            <span className="text-16 tracking-tight">{ppmText("ui.webhook.danger_zone", "Danger zone")}</span>
             {open ? <ChevronUpIcon className="h-5 w-5" /> : <ChevronDownIcon className="h-5 w-5" />}
           </Disclosure.Button>
 
@@ -37,8 +40,10 @@ export function WebhookDeleteSection(props: Props) {
             <Disclosure.Panel>
               <div className="flex flex-col gap-8">
                 <span className="text-13 tracking-tight">
-                  Once a webhook is deleted, it cannot be restored. Future events will no longer be delivered to this
-                  webhook.
+                  {ppmText(
+                    "ui.webhook.delete_warning",
+                    "Once a webhook is deleted, it cannot be restored. Future events will no longer be delivered to this webhook."
+                  )}
                 </span>
                 <div>
                   <Button
@@ -47,7 +52,7 @@ export function WebhookDeleteSection(props: Props) {
                     onClick={openDeleteModal}
                     data-ph-element={WORKSPACE_SETTINGS_TRACKER_ELEMENTS.WEBHOOK_DELETE_BUTTON}
                   >
-                    Delete webhook
+                    {ppmText("ui.confirm.delete_webhook_title", "Delete webhook")}
                   </Button>
                 </div>
               </div>

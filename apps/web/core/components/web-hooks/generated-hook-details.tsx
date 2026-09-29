@@ -10,6 +10,8 @@ import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import type { IWebhook } from "@plane/types";
 // types
+// hooks
+import { usePpmText } from "@/hooks/use-ppm-text";
 import { WebhookSecretKey } from "./form";
 
 type Props = {
@@ -20,6 +22,7 @@ type Props = {
 export function GeneratedHookDetails(props: Props) {
   const { handleClose, webhookDetails } = props;
   const { t } = useTranslation();
+  const ppmText = usePpmText();
 
   return (
     <>
@@ -32,7 +35,7 @@ export function GeneratedHookDetails(props: Props) {
       </div>
       <div className="flex items-center justify-end gap-2 border-t-[0.5px] border-subtle px-5 py-4">
         <Button variant="secondary" size="lg" onClick={handleClose}>
-          Close
+          {ppmText("ui.webhook.close", "Close")}
         </Button>
       </div>
     </>

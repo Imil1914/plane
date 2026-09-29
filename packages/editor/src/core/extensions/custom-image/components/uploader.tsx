@@ -14,6 +14,7 @@ import { ACCEPTED_IMAGE_MIME_TYPES } from "@/constants/config";
 import { CORE_EXTENSIONS } from "@/constants/extension";
 // helpers
 import type { EFileError } from "@/helpers/file";
+import { editorText } from "@/helpers/ppm-text";
 // hooks
 import { useUploader, useDropZone, uploadFirstFileAndInsertRemaining } from "@/hooks/use-file-upload";
 // local imports
@@ -184,18 +185,18 @@ export function CustomImageUploader(props: CustomImageUploaderProps) {
   const getDisplayMessage = useCallback(() => {
     const isUploading = isImageBeingUploaded;
     if (isErrorState) {
-      return "Error loading image";
+      return editorText("ui.editor.image_error", "Error loading image");
     }
 
     if (isUploading) {
-      return "Uploading...";
+      return editorText("ui.editor.image_uploading", "Uploading...");
     }
 
     if (draggedInside && editor.isEditable) {
-      return "Drop image here";
+      return editorText("ui.editor.image_drop", "Drop image here");
     }
 
-    return "Add an image";
+    return editorText("ui.editor.image_add", "Add an image");
   }, [draggedInside, editor.isEditable, isErrorState, isImageBeingUploaded]);
 
   const handleRetryClick = useCallback(
@@ -247,10 +248,10 @@ export function CustomImageUploader(props: CustomImageUploaderProps) {
               "hover:bg-danger-subtle-hover": selected,
             }
           )}
-          title="Retry duplication"
+          title={editorText("ui.editor.retry_duplication", "Retry duplication")}
         >
           <RotateCcw className="size-3" />
-          <span className="text-11">Retry</span>
+          <span className="text-11">{editorText("ui.editor.retry", "Retry")}</span>
         </button>
       )}
       <input

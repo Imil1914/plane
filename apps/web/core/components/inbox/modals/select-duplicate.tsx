@@ -24,6 +24,7 @@ import { SimpleEmptyState } from "@/components/empty-state/simple-empty-state-ro
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import useDebounce from "@/hooks/use-debounce";
+import { usePpmText } from "@/hooks/use-ppm-text";
 // services
 import { ProjectService } from "@/services/project";
 
@@ -49,6 +50,7 @@ export function SelectDuplicateInboxIssueModal(props: Props) {
   // hooks
   const { getProjectById } = useProject();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // derived values
   const debouncedSearchTerm: string = useDebounce(query, 500);
   const searchResolvedPath = resolvedTheme === "light" ? lightSearchAsset : darkSearchAsset;
@@ -77,7 +79,7 @@ export function SelectDuplicateInboxIssueModal(props: Props) {
   const handleSubmit = (selectedItem: string) => {
     if (!selectedItem || selectedItem.length === 0)
       return setToast({
-        title: "Error",
+        title: ppmText("ui.toast.error_plain", "Error"),
         type: TOAST_TYPE.ERROR,
       });
     onSubmit(selectedItem);
@@ -87,7 +89,11 @@ export function SelectDuplicateInboxIssueModal(props: Props) {
   const issueList =
     filteredIssues.length > 0 ? (
       <li className="p-2">
-        {query === "" && <h2 className="mt-4 mb-2 px-3 text-11 font-semibold text-primary">Select work item</h2>}
+        {query === "" && (
+          <h2 className="mt-4 mb-2 px-3 text-11 font-semibold text-primary">
+            {ppmText("ui.intake.select_task", "Select work item")}
+          </h2>
+        )}
         <ul className="text-13 text-primary">
           {filteredIssues.map((issue) => {
             const stateColor = issue.state__color || "";
@@ -141,7 +147,7 @@ export function SelectDuplicateInboxIssueModal(props: Props) {
           <input
             type="text"
             className="h-12 w-full border-0 bg-transparent pr-4 pl-11 text-primary outline-none focus:ring-0 sm:text-13"
-            placeholder="Search..."
+            placeholder={ppmText("ui.intake.search_placeholder", "Search...")}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>

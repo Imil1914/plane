@@ -12,9 +12,19 @@ import { ROLE } from "@plane/constants";
 import { Popover } from "@plane/propel/popover";
 import { Avatar } from "@plane/ui";
 import { cn, getFileURL } from "@plane/utils";
+import type { TPpmTranslationKey } from "@ppm/brand";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useUser } from "@/hooks/store/user";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+
+// Project roles by their PPM names (as in the project members settings): 20 — project lead, 15 — member, 5 — guest.
+const PROJECT_ROLE_ACCESS_KEYS: Record<number, TPpmTranslationKey> = {
+  20: "access.project_lead",
+  15: "access.member",
+  5: "access.guest",
+};
 
 type Props = {
   id: string;
@@ -28,6 +38,9 @@ export const EditorUserMention = observer(function EditorUserMention(props: Prop
   const { workspaceSlug } = useParams();
   // store hooks
   const { data: currentUser } = useUser();
+  const isPpmRu = usePpmRu();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
   const {
     getUserDetails,
     project: { getProjectMemberDetails },
@@ -40,7 +53,7 @@ export const EditorUserMention = observer(function EditorUserMention(props: Prop
   if (!userDetails) {
     return (
       <div className="not-prose inline rounded-sm bg-layer-1 px-1 py-0.5 text-tertiary no-underline">
-        @suspended user
+        {ppmText("ui.editor.suspended_user", "@suspended user")}
       </div>
     );
   }
@@ -74,7 +87,13 @@ export const EditorUserMention = observer(function EditorUserMention(props: Prop
                 <Link to={profileLink} className="not-prose text-13 font-medium text-primary hover:underline">
                   {userDetails?.first_name} {userDetails?.last_name}
                 </Link>
-                {roleDetails && <p className="text-11 text-secondary">{ROLE[roleDetails]}</p>}
+                {roleDetails && (
+                  <p className="text-11 text-secondary">
+                    {isPpmRu && PROJECT_ROLE_ACCESS_KEYS[roleDetails]
+                      ? ppmT(PROJECT_ROLE_ACCESS_KEYS[roleDetails])
+                      : ROLE[roleDetails]}
+                  </p>
+                )}
               </div>
             </div>
           </div>

@@ -10,6 +10,8 @@ import { ChevronDownIcon } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
 // constants
 import { COLORS_LIST } from "@/constants/common";
+// helpers
+import { editorText } from "@/helpers/ppm-text";
 
 type Props = {
   disabled: boolean;
@@ -49,7 +51,7 @@ export function CalloutBlockColorSelector(props: Props) {
           )}
           disabled={disabled}
         >
-          <span className="text-12">Color</span>
+          <span className="text-12">{editorText("ui.editor.color", "Color")}</span>
           <ChevronDownIcon className="size-3 flex-shrink-0" />
         </button>
         {isOpen && (

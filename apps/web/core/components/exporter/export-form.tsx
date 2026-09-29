@@ -26,6 +26,7 @@ import { CustomSearchSelect, CustomSelect } from "@plane/ui";
 // import { WorkItemFiltersRow } from "@/components/work-item-filters/filters-row";
 import { useProject } from "@/hooks/store/use-project";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
+import { usePpmText } from "@/hooks/use-ppm-text";
 import { ProjectExportService } from "@/services/project/project-export.service";
 // local imports
 import { SettingsBoxedControlItem } from "../settings/boxed-control-item";
@@ -65,6 +66,7 @@ export const ExportForm = observer(function ExportForm(props: Props) {
   const { data: user, canPerformAnyCreateAction, projectsWithCreatePermissions } = useUser();
   const { workspaceProjectIds, getProjectById } = useProject();
   const { t } = useTranslation();
+  const ppmText = usePpmText();
   // form
   const { handleSubmit, control } = useForm<FormData>({
     defaultValues: {
@@ -169,7 +171,7 @@ export const ExportForm = observer(function ExportForm(props: Props) {
                             return projectDetails?.identifier;
                           })
                           .join(", ")
-                      : "All projects"
+                      : ppmText("ui.export.all_projects", "All projects")
                   }
                   optionsClassName="max-w-48 sm:max-w-[532px]"
                   placement="bottom-end"

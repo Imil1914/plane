@@ -17,7 +17,10 @@ import { cn } from "@plane/utils";
 // hooks
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserSettings } from "@/hooks/store/user";
+import { PpmTemplateText } from "@/components/ppm-shell/template-text";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 
 type Props = {
   data: IWorkspace | null;
@@ -38,6 +41,11 @@ export const DeleteWorkspaceForm = observer(function DeleteWorkspaceForm(props: 
   const { t } = useTranslation();
   const { getWorkspaceRedirectionUrl } = useWorkspace();
   const { fetchCurrentUserSettings } = useUserSettings();
+  const isPpmRu = usePpmRu();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
+  // The typed confirmation follows the interface language («удалить это пространство» in the Russian PPM UI).
+  const confirmPhrase = ppmText("ui.ws.delete_phrase", "delete my workspace");
   // form info
   const {
     control,
@@ -47,7 +55,7 @@ export const DeleteWorkspaceForm = observer(function DeleteWorkspaceForm(props: 
     watch,
   } = useForm({ defaultValues });
 
-  const canDelete = watch("workspaceName") === data?.name && watch("confirmDelete") === "delete my workspace";
+  const canDelete = watch("workspaceName") === data?.name && watch("confirmDelete") === confirmPhrase;
 
   const handleClose = () => {
     const timer = setTimeout(() => {
@@ -94,14 +102,25 @@ export const DeleteWorkspaceForm = observer(function DeleteWorkspaceForm(props: 
           <div className="text-center sm:text-left">
             <h3 className="text-h5-medium">{t("workspace_settings.settings.general.delete_modal.title")}</h3>
             <p className="mt-1 text-body-xs-regular text-secondary">
-              You are about to delete the workspace{" "}
-              <span className="text-body-xs-semibold break-words">{data?.name}</span>. If you confirm, you will lose
-              access to all your work data in this workspace without any way to restore it. Tread very carefully.
+              {isPpmRu ? (
+                <PpmTemplateText
+                  template={ppmT("ui.ws.delete_content")}
+                  values={{ name: <span className="text-body-xs-semibold break-words">{data?.name}</span> }}
+                />
+              ) : (
+                <>
+                  You are about to delete the workspace{" "}
+                  <span className="text-body-xs-semibold break-words">{data?.name}</span>. If you confirm, you will lose
+                  access to all your work data in this workspace without any way to restore it. Tread very carefully.
+                </>
+              )}
             </p>
           </div>
 
           <div className="mt-4 text-secondary">
-            <p className="text-body-xs-regular break-words">Type in this workspace&apos;s name to continue.</p>
+            <p className="text-body-xs-regular break-words">
+              {isPpmRu ? ppmT("ui.ws.delete_name_prompt") : <>Type in this workspace&apos;s name to continue.</>}
+            </p>
             <Controller
               control={control}
               name="workspaceName"
@@ -124,9 +143,18 @@ export const DeleteWorkspaceForm = observer(function DeleteWorkspaceForm(props: 
 
           <div className="mt-4 text-secondary">
             <p className="text-body-xs-regular">
-              For final confirmation, type{" "}
-              <span className="text-body-xs-medium text-primary">delete my workspace </span>
-              below.
+              {isPpmRu ? (
+                <PpmTemplateText
+                  template={ppmT("ui.ws.delete_phrase_prompt")}
+                  values={{ phrase: <span className="text-body-xs-medium text-primary">{confirmPhrase}</span> }}
+                />
+              ) : (
+                <>
+                  For final confirmation, type{" "}
+                  <span className="text-body-xs-medium text-primary">delete my workspace </span>
+                  below.
+                </>
+              )}
             </p>
             <Controller
               control={control}

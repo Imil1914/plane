@@ -24,6 +24,7 @@ import { useMember } from "@/hooks/store/use-member";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { usePpmAdminAccess } from "@/hooks/use-ppm-admin-access";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { usePpmMemberErrorMessage } from "./ppm-member-errors";
 
 export interface RowData {
   member: IWorkspaceMember;
@@ -133,6 +134,7 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
   const { data: currentUser } = useUser();
   const { isGlobalAdmin: isCurrentUserGlobalAdmin } = usePpmAdminAccess();
   const ppmT = usePpmTranslation();
+  const memberErrorMessage = usePpmMemberErrorMessage();
 
   // derived values
   const isCurrentUser = currentUser?.id === rowData.member.id;
@@ -180,7 +182,7 @@ export const AccountTypeColumn = observer(function AccountTypeColumn(props: Acco
                   setToast({
                     type: TOAST_TYPE.ERROR,
                     title: ppmT("members.role_update_error_title"),
-                    message: errorString ?? ppmT("members.role_update_error_message"),
+                    message: memberErrorMessage(errorString, errorString ?? ppmT("members.role_update_error_message")),
                   });
                 }
               }}

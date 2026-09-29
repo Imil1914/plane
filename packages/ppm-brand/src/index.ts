@@ -3,6 +3,7 @@ import { AF21_CANVAS_TRANSLATIONS } from "./translations/af21-canvas";
 import { AF22_LIVING_MAP_TRANSLATIONS } from "./translations/af22-living-map";
 import { G21_CANVAS_ASSIGNEES_TRANSLATIONS } from "./translations/g21-canvas-assignees";
 import { R_RU_UI_TRANSLATIONS } from "./translations/r-ru-ui";
+import { R2_RU_UI_TRANSLATIONS } from "./translations/r2-ru-ui";
 import { S_LIVE_STATS_TRANSLATIONS } from "./translations/s-live-stats";
 import { UX11_CANVAS_TRANSLATIONS } from "./translations/ux11-canvas";
 import { UX11_SYSTEM_TRANSLATIONS } from "./translations/ux11-system";
@@ -1044,6 +1045,8 @@ export const PPM_TRANSLATIONS = {
     // Lines R and S (G2.1 wave): own key prefixes (`ui.*`, S — its own), so the order does not change any value;
     // they stay before AF2.1/AF2.2, whose test pins the living map module as the last spread.
     ...R_RU_UI_TRANSLATIONS.en,
+    // Line R2 (G2.1 wave): notifications, intake, workspace settings, the editor — own `ui.*` prefixes.
+    ...R2_RU_UI_TRANSLATIONS.en,
     ...S_LIVE_STATS_TRANSLATIONS.en,
     // Line C (G2.1 wave): canvas assignee picker, own `canvas.assignees_*` keys.
     ...G21_CANVAS_ASSIGNEES_TRANSLATIONS.en,
@@ -2061,6 +2064,7 @@ export const PPM_TRANSLATIONS = {
     ...UX11_TASKS_TRANSLATIONS.ru,
     ...UX11_CANVAS_TRANSLATIONS.ru,
     ...R_RU_UI_TRANSLATIONS.ru,
+    ...R2_RU_UI_TRANSLATIONS.ru,
     ...S_LIVE_STATS_TRANSLATIONS.ru,
     ...G21_CANVAS_ASSIGNEES_TRANSLATIONS.ru,
     ...AF21_CANVAS_TRANSLATIONS.ru,

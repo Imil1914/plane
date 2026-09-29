@@ -11,6 +11,8 @@ import { useMemo } from "react";
 import { cn } from "@plane/utils";
 // constants
 import { COLORS_LIST } from "@/constants/common";
+// helpers
+import { editorText } from "@/helpers/ppm-text";
 // local imports
 import { FloatingMenuRoot } from "../floating-menu/root";
 import { useFloatingMenu } from "../floating-menu/use-floating-menu";
@@ -39,7 +41,7 @@ export function BubbleMenuColorSelector(props: Props) {
       }}
       menuButton={
         <>
-          <span>Color</span>
+          <span>{editorText("ui.editor.color", "Color")}</span>
           <span
             className={cn("grid size-6 flex-shrink-0 place-items-center rounded-sm border-[0.5px] border-strong", {
               "bg-surface-1": !activeBackgroundColor,
@@ -65,7 +67,7 @@ export function BubbleMenuColorSelector(props: Props) {
     >
       <section className="mt-1 space-y-2 rounded-md border-[0.5px] border-strong bg-surface-1 p-2 shadow-raised-200">
         <div className="space-y-1.5">
-          <p className="text-11 font-semibold text-tertiary">Text colors</p>
+          <p className="text-11 font-semibold text-tertiary">{editorText("ui.editor.text_colors", "Text colors")}</p>
           <div className="flex items-center gap-2">
             {COLORS_LIST.map((color) => (
               <button
@@ -88,7 +90,9 @@ export function BubbleMenuColorSelector(props: Props) {
           </div>
         </div>
         <div className="space-y-1.5">
-          <p className="text-11 font-semibold text-tertiary">Background colors</p>
+          <p className="text-11 font-semibold text-tertiary">
+            {editorText("ui.editor.background_colors", "Background colors")}
+          </p>
           <div className="flex items-center gap-2">
             {COLORS_LIST.map((color) => (
               <button

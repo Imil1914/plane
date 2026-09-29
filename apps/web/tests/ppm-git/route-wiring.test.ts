@@ -59,27 +59,81 @@ describe("fix round 1", () => {
 describe("D-3: «Код» rows show the PR status", () => {
   it("imports the status helper", () => {
     expect(source).toMatch(/import\s*\{[^}]*getGitPullRequestStatusLabel[^}]*\}\s*from\s*"\.\/git-provider-labels";/s);
+    expect(source).toMatch(/import\s*\{[^}]*getGitMergedAtTitle[^}]*\}\s*from\s*"\.\/git-provider-labels";/s);
   });
 
-  it("GitObjectRow shows the status of a pull_request object only, using its own state and is_draft", () => {
+  it("GitObjectRow shows the status of a pull_request object only, using its own state, is_draft and merge time", () => {
     const start = source.indexOf("function GitObjectRow(");
     const end = source.indexOf("function GitLinkRow(");
     expect(start).toBeGreaterThan(-1);
     const body = source.slice(start, end);
     expect(body).toMatch(
-      /gitObject\.object_type === "pull_request"\s*\?\s*getGitPullRequestStatusLabel\(gitObject\.state, gitObject\.is_draft\)\s*:\s*null/
+      /gitObject\.object_type === "pull_request"\s*\?\s*getGitPullRequestStatusLabel\(gitObject\.state, gitObject\.is_draft, gitObject\.provider_merged_at\)\s*:\s*null/
     );
-    expect(body).toContain('{statusLabel ? ` · ${statusLabel}` : ""}');
+    expect(body).toContain('{statusLabel ? "· " : ""}');
   });
 
-  it("GitLinkRow shows the status of a pull_request link only, from git_object_state", () => {
+  it("GitLinkRow shows the status of a pull_request link only, from git_object_state and git_object_merged_at", () => {
     const start = source.indexOf("function GitLinkRow(");
     const end = source.indexOf("function RepositoryDialog(");
     expect(start).toBeGreaterThan(-1);
     const body = source.slice(start, end);
     expect(body).toMatch(
-      /link\.object_type === "pull_request" \? getGitPullRequestStatusLabel\(link\.git_object_state\) : null/
+      /link\.object_type === "pull_request"\s*\?\s*getGitPullRequestStatusLabel\(link\.git_object_state, undefined, link\.git_object_merged_at\)\s*:\s*null/
     );
-    expect(body).toContain('{statusLabel ? ` · ${statusLabel}` : ""}');
+    expect(body).toContain("· {statusLabel}");
+  });
+});
+
+describe("M review round 1: GitLinkRow's status carries the same full-date tooltip as GitObjectRow", () => {
+  const start = source.indexOf("function GitLinkRow(");
+  const end = source.indexOf("function RepositoryDialog(");
+  const body = source.slice(start, end);
+
+  it("computes statusTitle from getGitMergedAtTitle for a pull_request link only", () => {
+    expect(body).toMatch(
+      /link\.object_type === "pull_request"\s*\?\s*getGitMergedAtTitle\(link\.git_object_merged_at\)\s*:\s*undefined/
+    );
+  });
+
+  it("renders the status as its own flex-wrap sibling carrying that title, not concatenated into the tertiary text", () => {
+    expect(body).toContain('<span className="text-11 text-tertiary" title={statusTitle}>');
+    expect(body).not.toContain('{statusLabel ? ` · ${statusLabel}` : ""}');
+  });
+
+  it("keeps the identifier/repository text and the status inside the same flex-wrap container", () => {
+    const wrapStart = body.indexOf('className="flex flex-wrap items-center gap-2"');
+    const statusStart = body.indexOf('<span className="text-11 text-tertiary" title={statusTitle}>');
+    const containerEnd = body.indexOf("</div>", statusStart);
+    expect(wrapStart).toBeGreaterThan(-1);
+    expect(statusStart).toBeGreaterThan(wrapStart);
+    expect(containerEnd).toBeGreaterThan(statusStart);
+  });
+});
+
+describe("M-6 (review W5 #8): GitObjectRow's status survives truncation on a narrow row", () => {
+  const start = source.indexOf("function GitObjectRow(");
+  const end = source.indexOf("function GitLinkRow(");
+  const body = source.slice(start, end);
+
+  it("renders the status before the ref/repository text, not after it", () => {
+    const statusSpanIndex = body.indexOf("{statusLabel && (");
+    const restSpanIndex = body.indexOf("OBJECT_LABELS[gitObject.object_type]");
+    expect(statusSpanIndex).toBeGreaterThan(-1);
+    expect(restSpanIndex).toBeGreaterThan(-1);
+    expect(statusSpanIndex).toBeLessThan(restSpanIndex);
+  });
+
+  it("keeps the status element itself non-truncatable (no `truncate` class on its span)", () => {
+    const statusSpanStart = body.indexOf("{statusLabel && (");
+    const statusSpanEnd = body.indexOf("</span>", statusSpanStart);
+    const statusSpan = body.slice(statusSpanStart, statusSpanEnd);
+    expect(statusSpan).toContain("shrink-0");
+    expect(statusSpan).not.toContain("truncate");
+  });
+
+  it("only the ref/repository text truncates, and it is a separate flex-wrap sibling of the status", () => {
+    expect(body).toContain('className="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-12 text-secondary"');
+    expect(body).toContain('<span className="min-w-0 truncate">');
   });
 });

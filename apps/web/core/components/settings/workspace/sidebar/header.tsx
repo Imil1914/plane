@@ -15,6 +15,7 @@ import { WorkspaceLogo } from "@/components/workspace/logo";
 // hooks
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
+import { usePpmText } from "@/hooks/use-ppm-text";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 
 export const WorkspaceSettingsSidebarHeader = observer(function WorkspaceSettingsSidebarHeader() {
@@ -29,6 +30,7 @@ export const WorkspaceSettingsSidebarHeader = observer(function WorkspaceSetting
     : undefined;
   // translation
   const { t } = useTranslation();
+  const ppmText = usePpmText();
 
   if (!currentWorkspaceRole) return null;
 
@@ -41,7 +43,7 @@ export const WorkspaceSettingsSidebarHeader = observer(function WorkspaceSetting
           icon={ArrowLeft}
           onClick={() => router.push(`/${currentWorkspace?.slug}/`)}
         />
-        <p>Workspace settings</p>
+        <p>{ppmText("ui.ws.settings_title", "Workspace settings")}</p>
       </div>
       <div className="mt-1.5 flex items-center justify-between gap-2 px-5 py-0.5">
         <div className="flex items-center gap-2 truncate">

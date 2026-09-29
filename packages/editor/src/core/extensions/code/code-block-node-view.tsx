@@ -15,6 +15,8 @@ import { CopyIcon } from "@plane/propel/icons";
 import { Tooltip } from "@plane/propel/tooltip";
 // plane utils
 import { cn } from "@plane/utils";
+// helpers
+import { editorText } from "@/helpers/ppm-text";
 // types
 import type { TCodeBlockAttributes } from "./types";
 import { ECodeBlockAttributeNames } from "./types";
@@ -46,7 +48,7 @@ export function CodeBlockComponent({ node }: Props) {
 
   return (
     <NodeViewWrapper key={attrs[ECodeBlockAttributeNames.ID]} className="code-block group/code relative">
-      <Tooltip tooltipContent="Copy code">
+      <Tooltip tooltipContent={editorText("ui.editor.copy_code", "Copy code")}>
         <button
           type="button"
           className={cn(

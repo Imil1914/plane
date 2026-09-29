@@ -22,6 +22,8 @@ import type { ISvgIcons } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
 // constants
 import { CORE_EXTENSIONS } from "@/constants/extension";
+// helpers
+import { editorText } from "@/helpers/ppm-text";
 // types
 import type { IEditorProps } from "@/types";
 // components
@@ -152,7 +154,7 @@ export function BlockMenu(props: Props) {
     {
       icon: TrashIcon,
       key: "delete",
-      label: "Delete",
+      label: editorText("ui.editor.delete", "Delete"),
       onClick: (_e) => {
         // Execute the delete action
         editor.chain().deleteSelection().focus().run();
@@ -161,7 +163,7 @@ export function BlockMenu(props: Props) {
     {
       icon: CopyIcon,
       key: "duplicate",
-      label: "Duplicate",
+      label: editorText("ui.editor.duplicate", "Duplicate"),
       isDisabled:
         editor.state.selection.content().content.firstChild?.type.name === CORE_EXTENSIONS.IMAGE ||
         editor.isActive(CORE_EXTENSIONS.CUSTOM_IMAGE),

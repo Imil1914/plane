@@ -15,11 +15,22 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TContextMenuItem } from "@plane/ui";
 import { CustomSelect, CustomMenu } from "@plane/ui";
 import { cn, copyTextToClipboard } from "@plane/utils";
+import type { TPpmTranslationKey } from "@ppm/brand";
 // components
 import { ConfirmWorkspaceMemberRemove } from "@/components/workspace/confirm-workspace-member-remove";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
 import { useUserPermissions } from "@/hooks/store/user";
+import { usePpmRu, usePpmText } from "@/hooks/use-ppm-text";
+import { usePpmTranslation } from "@/hooks/use-ppm-translation";
+import { usePpmMemberErrorMessage } from "./ppm-member-errors";
+
+// Workspace roles by their PPM names (as in the members list): 20 — admin, 15 — member, 5 — guest.
+const WORKSPACE_ROLE_ACCESS_KEYS: Record<number, TPpmTranslationKey> = {
+  20: "access.workspace_admin",
+  15: "access.member",
+  5: "access.guest",
+};
 
 type Props = {
   invitationId: string;
@@ -33,6 +44,14 @@ export const WorkspaceInvitationsListItem = observer(function WorkspaceInvitatio
   const [removeMemberModal, setRemoveMemberModal] = useState(false);
   // plane hooks
   const { t } = useTranslation();
+  const isPpmRu = usePpmRu();
+  const ppmText = usePpmText();
+  const ppmT = usePpmTranslation();
+  const memberErrorMessage = usePpmMemberErrorMessage();
+  const roleLabel = (role: number) =>
+    isPpmRu && WORKSPACE_ROLE_ACCESS_KEYS[role]
+      ? ppmT(WORKSPACE_ROLE_ACCESS_KEYS[role])
+      : ROLE[role as keyof typeof ROLE];
   // store hooks
   const { allowPermissions, workspaceInfoBySlug } = useUserPermissions();
   const {
@@ -60,15 +79,18 @@ export const WorkspaceInvitationsListItem = observer(function WorkspaceInvitatio
       await deleteMemberInvitation(workspaceSlug.toString(), invitationDetails.id);
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: "Success!",
-        message: "Invitation removed successfully.",
+        title: ppmText("ui.toast.success", "Success!"),
+        message: ppmText("ui.ws.invitation_removed", "Invitation removed successfully."),
       });
     } catch (err: unknown) {
       const error = err as { error?: string };
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: "Error!",
-        message: error?.error || "Something went wrong. Please try again.",
+        title: ppmText("ui.toast.error", "Error!"),
+        message: memberErrorMessage(
+          error?.error,
+          error?.error || ppmText("ui.toast.try_again_now", "Something went wrong. Please try again.")
+        ),
       });
     }
   };
@@ -142,7 +164,7 @@ export const WorkspaceInvitationsListItem = observer(function WorkspaceInvitatio
                     hasRoleChangeAccess ? "" : "text-placeholder"
                   }`}
                 >
-                  {ROLE[invitationDetails.role]}
+                  {roleLabel(invitationDetails.role)}
                 </span>
                 {hasRoleChangeAccess && (
                   <span className="grid place-items-center">
@@ -161,8 +183,15 @@ export const WorkspaceInvitationsListItem = observer(function WorkspaceInvitatio
                 const error = err as { error?: string };
                 setToast({
                   type: TOAST_TYPE.ERROR,
-                  title: "Error!",
-                  message: error?.error || "An error occurred while updating member role. Please try again.",
+                  title: ppmText("ui.toast.error", "Error!"),
+                  message: memberErrorMessage(
+                    error?.error,
+                    error?.error ||
+                      ppmText(
+                        "ui.ws.invitation_role_failed",
+                        "An error occurred while updating member role. Please try again."
+                      )
+                  ),
                 });
               });
             }}
@@ -179,7 +208,7 @@ export const WorkspaceInvitationsListItem = observer(function WorkspaceInvitatio
 
               return (
                 <CustomSelect.Option key={key} value={parseInt(key, 10)}>
-                  <>{ROLE[parseInt(key) as keyof typeof ROLE]}</>
+                  <>{roleLabel(parseInt(key))}</>
                 </CustomSelect.Option>
               );
             })}
