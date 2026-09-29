@@ -21,6 +21,9 @@ import { getDescriptionPlaceholderI18n, getTabIndex } from "@plane/utils";
 // components
 import { GptAssistantPopover } from "@/components/core/modals/gpt-assistant-popover";
 import { RichTextEditor } from "@/components/editor/rich-text";
+// G2.3 (line G-Web): «Вставить коммит/PR» next to the existing AI actions bar.
+import { buildGitObjectHtmlLink } from "@/components/ppm-git/insert/format";
+import { InsertGitObjectButton } from "@/components/ppm-git/insert/insert-git-object-dialog";
 // helpers
 // hooks
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
@@ -244,6 +247,15 @@ export const IssueDescriptionEditor = observer(function IssueDescriptionEditor(p
             )}
           />
           <div className="border-0.5 z-10 flex items-center justify-end gap-2 p-3">
+            {projectId && (
+              <InsertGitObjectButton
+                workspaceId={workspaceId}
+                projectId={projectId}
+                onInsert={({ label, url }) =>
+                  editorRef.current?.setEditorValueAtCursorPosition(buildGitObjectHtmlLink(label, url))
+                }
+              />
+            )}
             {issueName && issueName.trim() !== "" && config?.has_llm_configured && (
               <button
                 type="button"

@@ -25,6 +25,9 @@ import { ERowVariant, Row } from "@plane/ui";
 import { cn, generateRandomColor, hslToHex } from "@plane/utils";
 // components
 import { EditorMentionsRoot } from "@/components/editor/embeds/mentions";
+// G2.3 (line G-Web): the "/" item «Коммит или PR» — this host registers the dialog opener the slash command calls
+// (packages/editor/src/ce/extensions/g23-insert-git-object.tsx); it renders nothing until the item is used.
+import { InsertGitObjectSlashHost } from "@/components/ppm-git/insert/insert-git-object-slash-host";
 // hooks
 import { useEditorMention } from "@/hooks/editor";
 import { useMember } from "@/hooks/store/use-member";
@@ -246,6 +249,7 @@ export const PageEditorBody = observer(function PageEditorBody(props: Props) {
       className="vertical-scrollbar relative flex scrollbar-md size-full flex-col overflow-x-hidden overflow-y-auto duration-200"
       variant={ERowVariant.HUGGING}
     >
+      <InsertGitObjectSlashHost projectId={projectId} workspaceId={workspaceId} />
       <div id="page-content-container" className="relative w-full flex-shrink-0">
         {/* table of content */}
         {!isNavigationPaneOpen && (

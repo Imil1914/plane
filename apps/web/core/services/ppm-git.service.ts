@@ -416,6 +416,56 @@ export type TPpmGitLinkRequest = {
   canonical_url: string;
 };
 
+// G2.3 (line G-Web): search Git objects of one project («Вставить коммит/PR») and the period work summary. Both
+// endpoints are built by line G-API against the fixed contract of docs/superpowers/plans/2026-09-29-g23-reports/
+// plan.md — this file only describes the response shapes and calls them; the search/summary logic itself lives in
+// `plane.ppm_git`.
+export type TPpmGitObjectSearchType = "commit" | "pull_request";
+
+/** A search result row: every `PpmGitObject` field plus the API's own ready-to-insert Russian `label`
+ * (e.g. «коммит a1b2c3d «Сообщение…»» or «PR #12 «Название» · Слит 28 сент.»). */
+export type TPpmGitSearchObject = TPpmGitObject & { label: string };
+
+export type TPpmGitObjectSearchResult = {
+  results: TPpmGitSearchObject[];
+};
+
+export type TPpmGitWorkSummaryStateGroup = "done" | "in_progress" | "other";
+
+export type TPpmGitWorkSummaryWorkItem = {
+  id: string;
+  key: string;
+  name: string;
+  url: string;
+  state_name: string;
+  state_group: TPpmGitWorkSummaryStateGroup;
+};
+
+export type TPpmGitWorkSummaryItem = {
+  work_item: TPpmGitWorkSummaryWorkItem;
+  commits: TPpmGitSearchObject[];
+  pull_requests: TPpmGitSearchObject[];
+};
+
+export type TPpmGitWorkSummaryTotals = {
+  done: number;
+  in_progress: number;
+  other: number;
+  commits: number;
+  pull_requests: number;
+};
+
+export type TPpmGitWorkSummary = {
+  from: string;
+  to: string;
+  totals: TPpmGitWorkSummaryTotals;
+  items: TPpmGitWorkSummaryItem[];
+  /** Ready Markdown text (for the Vault note), links only to this project's work items and Git objects. */
+  markdown: string;
+  /** Ready HTML text (for pages and task descriptions/comments), same restriction. */
+  html: string;
+};
+
 export class PpmGitServiceError extends Error {
   code?: string;
   status?: number;
@@ -690,6 +740,43 @@ export class PpmGitService extends APIService {
     try {
       const response = await this.post(`${this.gitPath(workspaceId, projectId)}write-actions/${actionId}/cancel/`);
       return response.data as TPpmGitWriteAction;
+    } catch (error) {
+      throw normalizeGitError(error);
+    }
+  }
+
+  /** G2.3 (G1): search this project's Git objects for the «Вставить коммит/PR» dialog. An empty/blank `q` asks for
+   * the most recent objects (the API's own default) rather than sending an empty `q` param. */
+  async searchGitObjects(
+    workspaceId: string,
+    projectId: string,
+    { q = "", type, limit = 20 }: { q?: string; type?: TPpmGitObjectSearchType; limit?: number } = {}
+  ): Promise<TPpmGitObjectSearchResult> {
+    const query = q.trim();
+    const params: Record<string, string | number> = { limit };
+    if (query) params.q = query;
+    if (type) params.type = type;
+    try {
+      const response = await this.get(`${this.gitPath(workspaceId, projectId)}objects/search/`, { params });
+      const payload = response.data as Partial<TPpmGitObjectSearchResult> | undefined;
+      return { results: Array.isArray(payload?.results) ? payload.results : [] };
+    } catch (error) {
+      throw normalizeGitError(error);
+    }
+  }
+
+  /** G2.3 (G2): the «Что сделано за период» summary — `from`/`to` are plain calendar dates (`YYYY-MM-DD`); the API
+   * interprets the inclusive range in the project's own timezone (≤ 92 days, else `WORK_SUMMARY_RANGE_INVALID`). */
+  async getWorkSummary(
+    workspaceId: string,
+    projectId: string,
+    { from, to }: { from: string; to: string }
+  ): Promise<TPpmGitWorkSummary> {
+    try {
+      const response = await this.get(`${this.gitPath(workspaceId, projectId)}work-summary/`, {
+        params: { from, to },
+      });
+      return response.data as TPpmGitWorkSummary;
     } catch (error) {
       throw normalizeGitError(error);
     }

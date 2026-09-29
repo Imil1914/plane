@@ -1,8 +1,10 @@
 import logging
+import re
 from urllib.parse import urlencode
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Case, F, IntegerField, Q, Value, When
 from django.http import HttpResponseRedirect
 from rest_framework import status
 from rest_framework.exceptions import AuthenticationFailed, NotAuthenticated, NotFound
@@ -17,7 +19,7 @@ from plane.ppm_canvas.responses import get_request_id, ppm_error_response
 from plane.db.models import Project, Workspace
 from plane.ppm_core.permissions import PpmProjectAccess, is_ppm_global_admin
 
-from . import forgejo_access_status
+from . import forgejo_access_status, work_summary
 from .forgejo_access import forgejo_sso_is_configured, schedule_access_sync
 from .models import (
     PpmGitAudit,
@@ -28,6 +30,7 @@ from .models import (
     PpmGitLink,
     PpmGitLinkStatus,
     PpmGitObject,
+    PpmGitObjectType,
     PpmGitProvider,
     PpmGitRepository,
     PpmGitRepositoryStatus,
@@ -1340,4 +1343,134 @@ class PpmForgejoWebhookView(APIView):
             code="FORGEJO_WEBHOOK_TOO_LARGE",
             message="Событие Git-сервера превышает допустимый размер.",
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        )
+
+
+# --- G2.3: Git objects in work reports — «Вставить коммит/PR» and «Что сделано за период» ----------------------------
+
+GIT_OBJECT_SEARCH_TYPES = (PpmGitObjectType.COMMIT, PpmGitObjectType.PULL_REQUEST)
+GIT_OBJECT_SEARCH_LIMIT = 20
+GIT_OBJECT_SEARCH_QUERY_CHARS = 200
+# A NUL byte would reach PostgreSQL as a text parameter and fail the request; control characters never match a title.
+SEARCH_CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
+SHA_PREFIX = re.compile(r"[0-9a-fA-F]{4,64}")
+PULL_REQUEST_NUMBER = re.compile(r"#?(\d{1,9})")
+
+
+def _git_object_search_types(raw):
+    if raw in (None, ""):
+        return GIT_OBJECT_SEARCH_TYPES
+    if raw in GIT_OBJECT_SEARCH_TYPES:
+        return (raw,)
+    raise PpmGitError(
+        "GIT_OBJECT_SEARCH_INVALID",
+        "Искать можно коммиты (commit) или PR (pull_request).",
+        {"field": "type"},
+    )
+
+
+def _git_object_search_limit(raw):
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return GIT_OBJECT_SEARCH_LIMIT
+    return min(max(value, 1), GIT_OBJECT_SEARCH_LIMIT)
+
+
+def _git_object_exact_match(query):
+    """The beginning of a commit SHA (4+ hex characters) or a PR number («#12» or «12») — shown before text matches."""
+    exact = None
+    if SHA_PREFIX.fullmatch(query):
+        exact = Q(object_type=PpmGitObjectType.COMMIT, commit_sha__istartswith=query)
+    number = PULL_REQUEST_NUMBER.fullmatch(query)
+    if number:
+        by_number = Q(object_type=PpmGitObjectType.PULL_REQUEST, ref=str(int(number.group(1))))
+        exact = by_number if exact is None else exact | by_number
+    return exact
+
+
+class PpmGitObjectSearchView(PpmGitAPIView):
+    """G2.3 G1: ``GET …/git/objects/search/?q=&type=commit|pull_request&limit=`` — «Вставить коммит/PR».
+
+    Only this project's active commits and PRs of its connected (active) repositories — the project comes from the URL
+    and the right is «Код» ``read``, so another project's objects cannot be found even by a guessed SHA. ``q`` looks in
+    the title (a commit's first message line), a commit's whole message, a PR's branch (``icontains``), the beginning
+    of a commit SHA (from 4 characters) and a PR number («#12»/«12»); SHA and number matches come first, then the
+    freshest (``provider_updated_at``). Empty ``q`` — the latest objects. At most 20; every row is
+    ``serialize_git_object`` plus the ready Russian ``label`` (``work_summary.git_object_label``).
+    """
+
+    def get(self, request, workspace_id, project_id):
+        _, denied = self.require_capability(request, workspace_id, project_id)
+        if denied:
+            return denied
+        types = _git_object_search_types(request.query_params.get("type"))
+        raw_query = SEARCH_CONTROL_CHARACTERS.sub(" ", request.query_params.get("q") or "")
+        query = " ".join(raw_query.split())[:GIT_OBJECT_SEARCH_QUERY_CHARS]
+        limit = _git_object_search_limit(request.query_params.get("limit"))
+        git_objects = PpmGitObject.objects.filter(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            is_active=True,
+            repository__status=PpmGitRepositoryStatus.ACTIVE,
+            object_type__in=types,
+        )
+        ordering = [F("provider_updated_at").desc(nulls_last=True), "-last_seen_at", "id"]
+        if query:
+            text = (
+                Q(title__icontains=query)
+                | Q(object_type=PpmGitObjectType.COMMIT, metadata__message__icontains=query)
+                | Q(object_type=PpmGitObjectType.PULL_REQUEST, head_ref__icontains=query)
+            )
+            exact = _git_object_exact_match(query)
+            if exact is None:
+                git_objects = git_objects.filter(text)
+            else:
+                git_objects = git_objects.filter(text | exact).alias(
+                    g23_rank=Case(When(exact, then=Value(0)), default=Value(1), output_field=IntegerField())
+                )
+                ordering.insert(0, "g23_rank")
+        tz = work_summary.project_timezone(
+            Project.objects.filter(id=project_id, workspace_id=workspace_id).values_list("timezone", flat=True).first()
+        )
+        reference_year = work_summary.current_year(tz)
+        return Response(
+            {
+                "results": [
+                    work_summary.labeled_git_object(
+                        git_object,
+                        serialize=serialize_git_object,
+                        tz=tz,
+                        reference_year=reference_year,
+                    )
+                    for git_object in git_objects.order_by(*ordering)[:limit]
+                ]
+            }
+        )
+
+
+class PpmGitWorkSummaryView(PpmGitAPIView):
+    """G2.3 G2: ``GET …/git/work-summary/?from=YYYY-MM-DD&to=YYYY-MM-DD`` — «Что сделано за период».
+
+    The right to read the project, as «Код» ``read`` (a limited guest sees only their own work items); the period —
+    whole days in the project's timezone, both ends included, at most 92 days (else 400 ``WORK_SUMMARY_RANGE_INVALID``,
+    checked after the right). The rules and the ready markdown/HTML — ``work_summary``.
+    """
+
+    def get(self, request, workspace_id, project_id):
+        _, denied = self.require_capability(request, workspace_id, project_id)
+        if denied:
+            return denied
+        start, end = work_summary.parse_period(request.query_params.get("from"), request.query_params.get("to"))
+        project = Project.objects.select_related("workspace").filter(id=project_id, workspace_id=workspace_id).first()
+        if project is None:
+            return self.permission_denied_response(request)
+        return Response(
+            work_summary.build_work_summary(
+                project=project,
+                user=request.user,
+                start=start,
+                end=end,
+                serialize=serialize_git_object,
+            )
         )

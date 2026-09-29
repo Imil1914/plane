@@ -16,9 +16,11 @@ from .views import (
     PpmGitHubWebhookView,
     PpmGitLinkDetailView,
     PpmGitLinkListView,
+    PpmGitObjectSearchView,
     PpmGitOverviewView,
     PpmGitRepositoryDetailView,
     PpmGitRepositoryListView,
+    PpmGitWorkSummaryView,
     PpmGitWriteActionApplyView,
     PpmGitWriteActionCancelView,
     PpmGitWriteActionDecisionView,
@@ -103,4 +105,7 @@ urlpatterns = [
         PpmGitWriteActionCancelView.as_view(),
         name="ppm-git-write-action-cancel",
     ),
+    # G2.3: commits and PRs in work reports — «Вставить коммит/PR» and «Что сделано за период».
+    path(f"{PROJECT}objects/search/", PpmGitObjectSearchView.as_view(), name="ppm-git-object-search"),
+    path(f"{PROJECT}work-summary/", PpmGitWorkSummaryView.as_view(), name="ppm-git-work-summary"),
 ]

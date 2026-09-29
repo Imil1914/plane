@@ -12,8 +12,14 @@ import { Tooltip } from "@plane/propel/tooltip";
 import { cn } from "@plane/utils";
 // components
 import { PageToolbar } from "@/components/pages/editor/toolbar";
+// G2.3 (line G-Web): «Вставить коммит/PR» и «Что сделано за период» — buttons next to the pages formatting toolbar
+// (the "/" item «Коммит или PR» is registered separately, see editor-body.tsx's InsertGitObjectSlashHost).
+import { buildGitObjectHtmlLink } from "@/components/ppm-git/insert/format";
+import { InsertGitObjectButton } from "@/components/ppm-git/insert/insert-git-object-dialog";
+import { WorkSummaryButton } from "@/components/ppm-git/insert/work-summary-dialog";
 // hooks
 import { usePageFilters } from "@/hooks/use-page-filters";
+import { useWorkspace } from "@/hooks/store/use-workspace";
 // store
 import type { TPageInstance } from "@/store/pages/base-page";
 
@@ -21,10 +27,12 @@ type Props = {
   handleOpenNavigationPane: () => void;
   isNavigationPaneOpen: boolean;
   page: TPageInstance;
+  projectId?: string;
+  workspaceSlug: string;
 };
 
 export const PageEditorToolbarRoot = observer(function PageEditorToolbarRoot(props: Props) {
-  const { handleOpenNavigationPane, isNavigationPaneOpen, page } = props;
+  const { handleOpenNavigationPane, isNavigationPaneOpen, page, projectId, workspaceSlug } = props;
   // translation
   const { t } = useTranslation();
   // derived values
@@ -32,6 +40,9 @@ export const PageEditorToolbarRoot = observer(function PageEditorToolbarRoot(pro
     isContentEditable,
     editor: { editorRef },
   } = page;
+  // G2.3 (line G-Web): the Git-object/work-summary services take the workspace id, not its slug.
+  const { getWorkspaceBySlug } = useWorkspace();
+  const workspaceId = getWorkspaceBySlug(workspaceSlug)?.id;
   // page filters
   const { isFullWidth, isStickyToolbarEnabled } = usePageFilters();
   // derived values
@@ -54,7 +65,25 @@ export const PageEditorToolbarRoot = observer(function PageEditorToolbarRoot(pro
           )}
         >
           <div className="flex w-full max-w-full items-center justify-between">
-            <div className="flex-1">{editorRef && <PageToolbar editorRef={editorRef} />}</div>
+            <div className="flex flex-1 items-center gap-1">
+              {editorRef && <PageToolbar editorRef={editorRef} />}
+              {editorRef && workspaceId && (
+                <>
+                  <InsertGitObjectButton
+                    workspaceId={workspaceId}
+                    projectId={projectId}
+                    onInsert={({ label, url }) =>
+                      editorRef.setEditorValueAtCursorPosition(buildGitObjectHtmlLink(label, url))
+                    }
+                  />
+                  <WorkSummaryButton
+                    workspaceId={workspaceId}
+                    projectId={projectId}
+                    onInsert={(summary) => editorRef.setEditorValueAtCursorPosition(summary.html)}
+                  />
+                </>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {!isNavigationPaneOpen && (
                 <button

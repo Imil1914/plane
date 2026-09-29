@@ -37,6 +37,12 @@ import { PageHead } from "@/components/core/page-title";
 import { usePpmConfirm } from "@/components/ppm-shell/use-ppm-confirm";
 import { handlePpmDialogKeyDown, shouldDismissPpmDialog } from "@/helpers/ppm-dialog-dismiss.helper";
 import { flattenVaultTree, getVaultTreeKeyAction } from "@/helpers/ppm-vault-tree.helper";
+// G2.3 (line G-Web): «Вставить коммит/PR» и «Что сделано за период» — the note is a plain <textarea> (no
+// @plane/editor here), so insertion goes through Markdown + the cursor-preserving textarea helper, not EditorRefApi.
+import { buildGitObjectMarkdownLink } from "@/components/ppm-git/insert/format";
+import { InsertGitObjectButton } from "@/components/ppm-git/insert/insert-git-object-dialog";
+import { insertTextIntoTextarea, needsLeadingNewline } from "@/components/ppm-git/insert/textarea-insert";
+import { WorkSummaryButton } from "@/components/ppm-git/insert/work-summary-dialog";
 import { useProject } from "@/hooks/store/use-project";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
@@ -718,6 +724,22 @@ function EntryContent({
   service: PpmVaultService;
   workspaceId: string;
 }) {
+  // G2.3 (line G-Web): inserts at the caret and keeps native undo when the browser allows it (execCommand); falls
+  // back to a plain value replacement + manual caret restore otherwise (see textarea-insert.ts for why).
+  const markdownTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const insertMarkdownAtCursor = (text: string, options?: { ensureOwnLine?: boolean }) => {
+    const textarea = markdownTextareaRef.current;
+    if (!textarea) return;
+    const position = textarea.selectionStart ?? textarea.value.length;
+    // Review round 2 (#3): the work summary's Markdown starts with a "### …" heading — mid-line it would not read as
+    // one. A single commit/PR link has no such requirement, so only the summary insertion opts in.
+    const content = options?.ensureOwnLine && needsLeadingNewline(textarea.value, position) ? `\n\n${text}` : text;
+    insertTextIntoTextarea(textarea, content, (next) => {
+      onChangeMarkdown(next.value);
+      requestAnimationFrame(() => textarea.setSelectionRange(next.cursorPosition, next.cursorPosition));
+    });
+  };
+
   if (entry.kind === "folder") {
     return <VaultEmptyState icon={Folder} text="Папка выбрана. Новые материалы будут созданы внутри неё." />;
   }
@@ -725,11 +747,28 @@ function EntryContent({
     return (
       <div className="mt-5 grid gap-4 xl:grid-cols-2">
         <div>
-          <label className="mb-2 block text-12 font-semibold text-secondary" htmlFor="ppm-vault-markdown-editor">
-            Markdown
-          </label>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <label className="block text-12 font-semibold text-secondary" htmlFor="ppm-vault-markdown-editor">
+              Markdown
+            </label>
+            {canEdit && (
+              <div className="flex items-center gap-1">
+                <InsertGitObjectButton
+                  workspaceId={workspaceId}
+                  projectId={projectId}
+                  onInsert={({ label, url }) => insertMarkdownAtCursor(buildGitObjectMarkdownLink(label, url))}
+                />
+                <WorkSummaryButton
+                  workspaceId={workspaceId}
+                  projectId={projectId}
+                  onInsert={(summary) => insertMarkdownAtCursor(summary.markdown, { ensureOwnLine: true })}
+                />
+              </div>
+            )}
+          </div>
           <textarea
             id="ppm-vault-markdown-editor"
+            ref={markdownTextareaRef}
             aria-label="Редактор Markdown"
             className="min-h-[420px] w-full resize-y rounded-lg border border-subtle bg-surface-2 p-4 font-code text-13 leading-6 text-primary outline-none focus:border-accent-strong"
             readOnly={!canEdit}

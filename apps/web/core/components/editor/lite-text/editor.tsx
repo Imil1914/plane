@@ -16,6 +16,10 @@ import { cn, isCommentEmpty } from "@plane/utils";
 // components
 import { EditorMentionsRoot } from "@/components/editor/embeds/mentions";
 import { IssueCommentToolbar } from "@/components/editor/lite-text/toolbar";
+// G2.3 (line G-Web): «Вставить коммит/PR» — a button next to the comment's formatting toolbar (research §5: this
+// editor has no "/" slash commands, so the toolbar button is the only insertion channel here).
+import { buildGitObjectHtmlLink } from "@/components/ppm-git/insert/format";
+import { InsertGitObjectButton } from "@/components/ppm-git/insert/insert-git-object-dialog";
 // hooks
 import { useEditorConfig, useEditorMention } from "@/hooks/editor";
 import { useMember } from "@/hooks/store/use-member";
@@ -202,25 +206,37 @@ export const LiteTextEditor = React.forwardRef(function LiteTextEditor(
             isFocused ? "mt-3 max-h-[200px] scale-y-100 opacity-100" : "invisible max-h-0 scale-y-0 opacity-0"
           )}
         >
-          <IssueCommentToolbar
-            accessSpecifier={accessSpecifier}
-            executeCommand={(item) => {
-              // TODO: update this while toolbar homogenization
-              // @ts-expect-error type mismatch here
-              editorRef?.executeMenuItemCommand({
-                itemKey: item.itemKey,
-                ...item.extraProps,
-              });
-            }}
-            handleAccessChange={handleAccessChange}
-            handleSubmit={(e) => rest.onEnterKeyPress?.(e)}
-            isCommentEmpty={isEmpty}
-            isSubmitting={isSubmitting}
-            showAccessSpecifier={showAccessSpecifier}
-            editorRef={editorRef}
-            showSubmitButton={showSubmitButton}
-            submitButtonText={submitButtonText}
-          />
+          <div className="flex items-stretch gap-1.5">
+            <div className="min-w-0 flex-1">
+              <IssueCommentToolbar
+                accessSpecifier={accessSpecifier}
+                executeCommand={(item) => {
+                  // TODO: update this while toolbar homogenization
+                  // @ts-expect-error type mismatch here
+                  editorRef?.executeMenuItemCommand({
+                    itemKey: item.itemKey,
+                    ...item.extraProps,
+                  });
+                }}
+                handleAccessChange={handleAccessChange}
+                handleSubmit={(e) => rest.onEnterKeyPress?.(e)}
+                isCommentEmpty={isEmpty}
+                isSubmitting={isSubmitting}
+                showAccessSpecifier={showAccessSpecifier}
+                editorRef={editorRef}
+                showSubmitButton={showSubmitButton}
+                submitButtonText={submitButtonText}
+              />
+            </div>
+            <InsertGitObjectButton
+              workspaceId={workspaceId}
+              projectId={projectId}
+              className="grid aspect-square size-9 shrink-0 place-items-center rounded-sm bg-surface-2 text-placeholder hover:bg-layer-1"
+              onInsert={({ label, url }) =>
+                editorRef?.setEditorValueAtCursorPosition(buildGitObjectHtmlLink(label, url))
+              }
+            />
+          </div>
         </div>
       )}
     </div>

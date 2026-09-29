@@ -165,6 +165,8 @@ export const PageRoot = observer(function PageRoot(props: TPageRootProps) {
           handleOpenNavigationPane={handleOpenNavigationPane}
           isNavigationPaneOpen={isNavigationPaneOpen}
           page={page}
+          projectId={projectId}
+          workspaceSlug={workspaceSlug}
         />
         {showContentTooLargeBanner && <ContentLimitBanner className="px-page-x" />}
         <PageEditorBody

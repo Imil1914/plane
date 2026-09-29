@@ -15,6 +15,11 @@ import type { EFileAssetType, TNameDescriptionLoader } from "@plane/types";
 import { getDescriptionPlaceholderI18n } from "@plane/utils";
 // components
 import { RichTextEditor } from "@/components/editor/rich-text";
+// G2.3 (line G-Web): «Вставить коммит/PR» — this editor (the issue detail page's description) has no fixed
+// formatting toolbar of its own (only the bubble menu + slash commands), so the button sits in a small bar right
+// under it, the same idea as the AI/«I'm feeling lucky» bar next to the creation-modal's description editor.
+import { buildGitObjectHtmlLink } from "@/components/ppm-git/insert/format";
+import { InsertGitObjectButton } from "@/components/ppm-git/insert/insert-git-object-dialog";
 // hooks
 import { useEditorAsset } from "@/hooks/store/use-editor-asset";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -225,73 +230,86 @@ export const DescriptionInput = observer(function DescriptionInput(props: Props)
   if (!localDescription.description_html) return <DescriptionInputLoader />;
 
   return (
-    <Controller
-      name="description_html"
-      control={control}
-      render={({ field: { onChange } }) => (
-        <RichTextEditor
-          key={entityId}
-          editable={!disabled}
-          ref={editorRef}
-          id={entityId}
-          issueSequenceId={issueSequenceId}
-          disabledExtensions={disabledExtensions}
-          initialValue={localDescription.description_html ?? "<p></p>"}
-          value={swrDescription ?? null}
-          workspaceSlug={workspaceSlug}
-          workspaceId={workspaceDetails.id}
-          projectId={projectId}
-          dragDropEnabled
-          onChange={(description_json, description_html, options) => {
-            if (description_html === lastSavedContent.current) return;
-            setIsSubmitting("submitting");
-            onChange(description_html);
-            setValue("isMigrationUpdate", !!options?.isMigrationUpdate);
-            setValue("description_json", description_json);
-            hasUnsavedChanges.current = true;
-            debouncedFormSave();
-          }}
-          placeholder={placeholder ?? ((isFocused, value) => t(getDescriptionPlaceholderI18n(isFocused, value)))}
-          searchMentionCallback={async (payload) =>
-            await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
-              ...payload,
-              project_id: projectId,
-            })
-          }
-          containerClassName={containerClassName}
-          uploadFile={async (blockId, file) => {
-            try {
-              const { asset_id } = await uploadEditorAsset({
-                blockId,
-                data: {
-                  entity_identifier: entityId,
-                  entity_type: fileAssetType,
-                },
-                file,
-                projectId,
-                workspaceSlug,
-              });
-              return asset_id;
-            } catch (error) {
-              console.log("Error in uploading asset:", error);
-              throw new Error("Asset upload failed. Please try again later.");
+    <div className="relative">
+      <Controller
+        name="description_html"
+        control={control}
+        render={({ field: { onChange } }) => (
+          <RichTextEditor
+            key={entityId}
+            editable={!disabled}
+            ref={editorRef}
+            id={entityId}
+            issueSequenceId={issueSequenceId}
+            disabledExtensions={disabledExtensions}
+            initialValue={localDescription.description_html ?? "<p></p>"}
+            value={swrDescription ?? null}
+            workspaceSlug={workspaceSlug}
+            workspaceId={workspaceDetails.id}
+            projectId={projectId}
+            dragDropEnabled
+            onChange={(description_json, description_html, options) => {
+              if (description_html === lastSavedContent.current) return;
+              setIsSubmitting("submitting");
+              onChange(description_html);
+              setValue("isMigrationUpdate", !!options?.isMigrationUpdate);
+              setValue("description_json", description_json);
+              hasUnsavedChanges.current = true;
+              debouncedFormSave();
+            }}
+            placeholder={placeholder ?? ((isFocused, value) => t(getDescriptionPlaceholderI18n(isFocused, value)))}
+            searchMentionCallback={async (payload) =>
+              await workspaceService.searchEntity(workspaceSlug?.toString() ?? "", {
+                ...payload,
+                project_id: projectId,
+              })
             }
-          }}
-          duplicateFile={async (assetId: string) => {
-            try {
-              const { asset_id } = await duplicateEditorAsset({
-                assetId,
-                entityType: fileAssetType,
-                projectId,
-                workspaceSlug,
-              });
-              return asset_id;
-            } catch {
-              throw new Error("Asset duplication failed. Please try again later.");
+            containerClassName={containerClassName}
+            uploadFile={async (blockId, file) => {
+              try {
+                const { asset_id } = await uploadEditorAsset({
+                  blockId,
+                  data: {
+                    entity_identifier: entityId,
+                    entity_type: fileAssetType,
+                  },
+                  file,
+                  projectId,
+                  workspaceSlug,
+                });
+                return asset_id;
+              } catch (error) {
+                console.log("Error in uploading asset:", error);
+                throw new Error("Asset upload failed. Please try again later.");
+              }
+            }}
+            duplicateFile={async (assetId: string) => {
+              try {
+                const { asset_id } = await duplicateEditorAsset({
+                  assetId,
+                  entityType: fileAssetType,
+                  projectId,
+                  workspaceSlug,
+                });
+                return asset_id;
+              } catch {
+                throw new Error("Asset duplication failed. Please try again later.");
+              }
+            }}
+          />
+        )}
+      />
+      {!disabled && (
+        <div className="mt-1 flex justify-end">
+          <InsertGitObjectButton
+            workspaceId={workspaceDetails.id}
+            projectId={projectId}
+            onInsert={({ label, url }) =>
+              editorRef?.current?.setEditorValueAtCursorPosition(buildGitObjectHtmlLink(label, url))
             }
-          }}
-        />
+          />
+        </div>
       )}
-    />
+    </div>
   );
 });
