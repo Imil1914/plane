@@ -232,6 +232,17 @@ class Adapter:
             return None
 
     def save_user_data(self, user):
+        # PPM G2.2 R15a: never switch back on a person whom a PPM global administrator switched off — the activation
+        # below is meant for accounts created inactive. Asked of the database, not of `user`: this sign-in may have
+        # read the person before the switch-off landed.
+        from plane.ppm_core.suspension import refuses_sign_in
+
+        if refuses_sign_in(user):
+            raise AuthenticationException(
+                error_code=AUTHENTICATION_ERROR_CODES["USER_ACCOUNT_DEACTIVATED"],
+                error_message="USER_ACCOUNT_DEACTIVATED",
+                payload={"email": user.email},
+            )
         # Update user details
         user.last_login_medium = self.provider
         user.last_active = timezone.now()

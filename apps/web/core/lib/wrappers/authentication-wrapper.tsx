@@ -58,8 +58,16 @@ export const AuthenticationWrapper = observer(function AuthenticationWrapper(pro
   // MobX/SWR-driven re-render before the browser actually tears this page down) and burning the id on an attempt
   // whose result the page never gets to show. The redirect itself now lives in an effect, guarded by a ref so it
   // fires at most once per mount regardless of how many times the component re-renders before navigation completes.
+  //
+  // Round 2 (Critical D-1, live-stack E): this condition used to skip the `currentUser?.id` check entirely — an
+  // anonymous visitor landing on `/?next_path=/auth/oidc/continue/<id>/` never reached the sign-in form below at
+  // all: the effect still fired on the very first commit and burned the (session-bound, S1) id on a request that
+  // carried no PPM session, bouncing back to sign-in and repeating until S1's `MAX_ANONYMOUS_VISITS` gave up with
+  // «Ссылка для входа устарела». `currentUser?.id` is `undefined` while the user is still loading, so this also
+  // cannot fire a moment too early — it only ever becomes true once loading has resolved to a real session.
   const hasRedirectedForOidcRef = useRef(false);
-  const shouldRedirectForOidc = pageType === EPageTypes.NON_AUTHENTICATED && isPpmOidcReturnPath(nextPath);
+  const shouldRedirectForOidc =
+    pageType === EPageTypes.NON_AUTHENTICATED && Boolean(currentUser?.id) && isPpmOidcReturnPath(nextPath);
   useEffect(() => {
     if (!shouldRedirectForOidc || !isPpmOidcReturnPath(nextPath)) return;
     if (shouldFireOidcRedirectOnce(hasRedirectedForOidcRef)) redirectToPpmOidcNextPath(nextPath);

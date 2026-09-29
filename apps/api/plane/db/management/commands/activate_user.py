@@ -31,6 +31,19 @@ class Command(BaseCommand):
         if not user:
             raise CommandError(f"Error: User with {email} does not exists")
 
+        # PPM G2.2 R15a: a person switched off in the PPM administration center is switched back on the way its
+        # «Включить» does it — the mark goes first; while it is there, saving the person keeps them switched off.
+        if not user.is_active:
+            from plane.ppm_core.models import PpmUserSuspension
+            from plane.ppm_core.suspension import resume_user
+
+            if PpmUserSuspension.objects.filter(user=user).exists():
+                resume_user(user.id)
+                self.stdout.write(
+                    self.style.SUCCESS("User activated successfully (was switched off in the PPM admin center)")
+                )
+                return
+
         # Activate the user
         user.is_active = True
         user.save()

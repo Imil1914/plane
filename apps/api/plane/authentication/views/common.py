@@ -35,6 +35,17 @@ class CSRFTokenEndpoint(APIView):
         return Response({"csrf_token": str(csrf_token)}, status=status.HTTP_200_OK)
 
 
+def switched_off_response():
+    """PPM G2.2 R15a: the person was switched off while this request ran (a PPM global administrator's «Отключить»
+    committed in between; the save kept them switched off — ``plane.ppm_core.suspension.keep_switched_off``). No new
+    session: 401 sends the browser to the sign-in page, which says the account is switched off."""
+    exc = AuthenticationException(
+        error_code=AUTHENTICATION_ERROR_CODES["USER_ACCOUNT_DEACTIVATED"],
+        error_message="USER_ACCOUNT_DEACTIVATED",
+    )
+    return Response(exc.get_error_dict(), status=status.HTTP_401_UNAUTHORIZED)
+
+
 def csrf_failure(request, reason=""):
     """Custom CSRF failure view"""
     return render(
@@ -92,6 +103,8 @@ class ChangePasswordEndpoint(APIView):
         user.set_password(new_password)
         user.is_password_autoset = False
         user.save()
+        if not user.is_active:
+            return switched_off_response()
         user_login(user=user, request=request, is_app=True)
         return Response({"message": "Password updated successfully"}, status=status.HTTP_200_OK)
 
@@ -131,6 +144,8 @@ class SetUserPasswordEndpoint(APIView):
         user.set_password(password)
         user.is_password_autoset = False
         user.save()
+        if not user.is_active:
+            return switched_off_response()
         # Login the user as the session is invalidated
         user_login(user=user, request=request, is_app=True)
         # Return the user

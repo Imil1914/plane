@@ -99,7 +99,6 @@ describe("PpmGitService — our Git server (Forgejo)", () => {
   });
 
   it.each([
-    [403, "GIT_PERMISSION_DENIED", "Подключать репозитории может только администратор проекта или администратор PPM"],
     [400, "FORGEJO_NOT_CONFIGURED", "Git-сервер не настроен"],
     [429, "GIT_PROVIDER_RATE_LIMITED", "Git-сервер просит подождать"],
     [502, "GIT_PROVIDER_UNAVAILABLE", "Git-сервер не отвечает"],
@@ -123,6 +122,42 @@ describe("PpmGitService — our Git server (Forgejo)", () => {
       expect((error as Error).message).toContain(text);
       expect((error as Error).message).not.toContain("Server text");
     }
+  });
+
+  // Round 2 (live-stack E, reconciled with S2b): unlike the codes above, a 403 GIT_PERMISSION_DENIED now shows S2b's
+  // own message as sent — the actual reason (no Forgejo-admin rights on that org, single sign-on off for the
+  // workspace, …) depends on the actor, and only the server knows which applies to this specific refusal.
+  it("shows the server's own message for 403 GIT_PERMISSION_DENIED (it depends on which actor was refused)", async () => {
+    const service = new PpmGitService();
+    vi.spyOn(service, "get").mockRejectedValue(
+      httpError(403, {
+        code: "GIT_PERMISSION_DENIED",
+        message: "У вашей учётки нет прав администратора в организации lab.",
+      })
+    );
+    vi.spyOn(service, "post").mockRejectedValue(
+      httpError(403, {
+        code: "GIT_PERMISSION_DENIED",
+        message: "У вашей учётки нет прав администратора в организации lab.",
+      })
+    );
+    const errors = await Promise.all(
+      [
+        service.listForgejoRepositories(WS, PROJECT, { search: "robot" }),
+        service.connectForgejoRepository(WS, PROJECT, 42),
+      ].map((call) => call.catch((reason: unknown) => reason))
+    );
+    for (const error of errors) {
+      expect(error).toBeInstanceOf(PpmGitServiceError);
+      expect(error).toMatchObject({ code: "GIT_PERMISSION_DENIED", status: 403 });
+      expect((error as Error).message).toBe("У вашей учётки нет прав администратора в организации lab.");
+    }
+  });
+
+  it("falls back to the generic 403 sentence only when the server sent no message at all", () => {
+    expect(getPpmForgejoErrorMessage({ code: "GIT_PERMISSION_DENIED", status: 403 })).toBe(
+      "Подключать репозитории может только администратор проекта или администратор PPM."
+    );
   });
 
   it("keeps the server's Russian message for other refusals and explains a lost connection", async () => {

@@ -36,6 +36,9 @@ services:
       FORGEJO__oauth2_client__UPDATE_AVATAR: "false"
       # 0: only the «Войти через PPM» button on the sign-in page (POST /user/login is refused); 1: the form is back.
       FORGEJO__service__ENABLE_INTERNAL_SIGNIN: ${PPM_GIT_LOCAL_SIGNIN:-0}
+      # An anonymous visitor of https://git.<domain>/ goes straight to that sign-in page instead of Forgejo's showcase
+      # (signed-in people still get their dashboard).
+      FORGEJO__server__LANDING_PAGE: login
 
   api:
     environment: *forgejo-sso-app-env

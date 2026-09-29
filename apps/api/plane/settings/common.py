@@ -114,6 +114,8 @@ INSTALLED_APPS = [
     "plane.authentication",
     "plane.ppm_brain",
     "plane.ppm_canvas",
+    # G2.2 R15a: the administration center's own table (PpmUserSuspension); its views were already mounted.
+    "plane.ppm_core",
     "plane.ppm_git",
     "plane.ppm_realtime",
     "plane.ppm_vault",

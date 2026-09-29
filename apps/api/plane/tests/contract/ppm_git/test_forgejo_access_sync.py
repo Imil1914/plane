@@ -808,3 +808,32 @@ def test_a_grant_made_meanwhile_is_not_overwritten_by_the_run_snapshot(api, worl
     run_full_reconcile()
 
     assert PpmForgejoAccount.objects.get(user_id=world.dev.id).admin_granted is True
+
+
+def test_accounts_ppm_does_not_keep_in_its_teams_are_reported_once_per_run(api, world):
+    login_all(world)
+    stranger = api.add_user("stranger", email="stranger@example.test")  # a local account added to the team by hand
+    team = api.team("team-alpha", "APP")
+    team["members"].add(stranger["id"])
+
+    # The person and the project in one run: the team is looked at through both, the warning comes once.
+    run = run_access_sync({"user_ids": [str(world.dev.id)], "project_ids": [str(world.project.id)]})
+
+    assert stranger["id"] in team["members"]
+    reported = [problem for problem in run.problems if problem["kind"] == "team"]
+    assert reported == [
+        {
+            "at": reported[0]["at"],
+            "kind": "team",
+            "subject": "APP / stranger",
+            "message": "В команде APP есть учётка stranger, которую ведёт не PPM — уберите её в Forgejo, если доступ "
+            "не нужен",
+            "level": "warning",
+        }
+    ]
+    assert run.status == "ok"
+
+    again = run_full_reconcile()
+
+    assert [problem["subject"] for problem in again.problems if problem["kind"] == "team"] == ["APP / stranger"]
+    assert again.counts["changes"] == 0 and stranger["id"] in team["members"]

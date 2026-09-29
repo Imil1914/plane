@@ -1510,6 +1510,16 @@ class _Run:
         for key in sorted(current.keys() - wanted.keys()):
             member = current[key]
             if not self._removable(member):
+                if self.ppm_record(member) is None:
+                    # Left where it is (R14), but the administrator should know who else reaches the project's code.
+                    # `problem` keeps one entry per (team, login) and run.
+                    self.problem(
+                        "team",
+                        f"{record.name} / {member['login']}",
+                        f"В команде {record.name} есть учётка {member['login']}, которую ведёт не PPM — уберите её в "
+                        "Forgejo, если доступ не нужен",
+                        level="warning",
+                    )
                 continue
             self.client.remove_team_member(record.forgejo_team_id, member["login"])
             self.change("members_removed")

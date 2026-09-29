@@ -50,6 +50,8 @@ const PROBLEM_KIND_KEYS: Record<string, TPpmTranslationKey> = {
   organization: "g22.admin.git_problem_kind_organization",
   project: "g22.admin.git_problem_kind_project",
   team: "g22.admin.git_problem_kind_team",
+  // Round 2 (Minor D-3, live-stack E): was missing — a repository-level problem showed its raw code untranslated.
+  repository: "g22.admin.git_problem_kind_repository",
   forgejo: "g22.admin.git_problem_kind_forgejo",
   ppm: "g22.admin.git_problem_kind_ppm",
 };
@@ -58,6 +60,14 @@ const PROBLEM_KIND_KEYS: Record<string, TPpmTranslationKey> = {
  * the caller can fall back to the raw code rather than guessing a translation. */
 export function getProblemKindLabelKey(kind: string): TPpmTranslationKey | undefined {
   return PROBLEM_KIND_KEYS[kind];
+}
+
+/**
+ * Round 2 (live-stack E, reconciled with S2b): a count of `null` means the sync engine does not know that number
+ * yet (not zero) — shown as «—», the same convention `formatDateTime`/`ProblemRow` already use for an absent value.
+ */
+export function formatCount(value: number | null | undefined): string {
+  return value === null || value === undefined ? "—" : String(value);
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

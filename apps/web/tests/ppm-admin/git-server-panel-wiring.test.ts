@@ -65,6 +65,11 @@ describe("GitServerPanel", () => {
     expect(panel).not.toContain("humanizeCountKey");
   });
 
+  it("round 2 (live-stack E): a count renders through formatCount, so null reads as «—», never a fabricated 0", () => {
+    expect(panel).toContain("{formatCount(data.last_full_sync?.counts[key])}");
+    expect(panel).not.toContain("data.last_full_sync?.counts[key] ?? 0");
+  });
+
   it("round 1 (#6): a problem row shows the translated kind and drops a raw UUID subject", () => {
     const start = panel.indexOf("function ProblemRow(");
     const body = panel.slice(start, panel.indexOf("\n}\n", start));

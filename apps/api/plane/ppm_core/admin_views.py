@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import status
@@ -19,6 +20,15 @@ from plane.ppm_canvas.models import (
 )
 from plane.ppm_canvas.responses import get_request_id, ppm_error_response
 from plane.ppm_core.permissions import is_ppm_global_admin
+from plane.ppm_core.suspension import (
+    REASON_MAX_LENGTH,
+    SuspensionRefused,
+    protected_ids,
+    protection_reason,
+    resume_user,
+    suspend_user,
+    suspensions_of,
+)
 
 
 ADMIN_REAUTH_SESSION_KEY = "ppm_admin_reauthenticated_at"
@@ -259,47 +269,7 @@ class PpmAdminUserListView(PpmAdminAPIView):
         total = users.count()
         offset = (page - 1) * page_size
         selected = list(users[offset : offset + page_size])
-        user_ids = [user.id for user in selected]
-        workspace_counts = {
-            row["member_id"]: row["count"]
-            for row in WorkspaceMember.objects.filter(
-                member_id__in=user_ids,
-                is_active=True,
-                deleted_at__isnull=True,
-            )
-            .values("member_id")
-            .annotate(count=Count("id"))
-        }
-        project_counts = {
-            row["member_id"]: row["count"]
-            for row in ProjectMember.objects.filter(
-                member_id__in=user_ids,
-                is_active=True,
-                deleted_at__isnull=True,
-            )
-            .values("member_id")
-            .annotate(count=Count("id"))
-        }
-        global_admin_ids = set(
-            PpmGlobalAdmin.objects.filter(user_id__in=user_ids, revoked_at__isnull=True).values_list(
-                "user_id", flat=True
-            )
-        )
-        results = [
-            {
-                "user_id": str(user.id),
-                "display_name": user.display_name,
-                "email": user.email,
-                "avatar_url": user.avatar_url,
-                "is_active": user.is_active,
-                "is_bot": user.is_bot,
-                "is_global_admin": user.id in global_admin_ids,
-                "workspace_count": workspace_counts.get(user.id, 0),
-                "project_count": project_counts.get(user.id, 0),
-                "last_active": user.last_active.isoformat() if user.last_active else None,
-            }
-            for user in selected
-        ]
+        results = admin_user_rows(request.user, selected)
         self.audit(request, "admin_users_list", metadata={"query": query, "page": page, "result_count": len(results)})
         return Response(
             {
@@ -313,6 +283,130 @@ class PpmAdminUserListView(PpmAdminAPIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+def admin_user_rows(actor, users):
+    """Rows of the center's user list (also the answer of «Отключить» / «Включить», so the row updates in place)."""
+    user_ids = [user.id for user in users]
+    workspace_counts = {
+        row["member_id"]: row["count"]
+        for row in WorkspaceMember.objects.filter(
+            member_id__in=user_ids,
+            is_active=True,
+            deleted_at__isnull=True,
+        )
+        .values("member_id")
+        .annotate(count=Count("id"))
+    }
+    project_counts = {
+        row["member_id"]: row["count"]
+        for row in ProjectMember.objects.filter(
+            member_id__in=user_ids,
+            is_active=True,
+            deleted_at__isnull=True,
+        )
+        .values("member_id")
+        .annotate(count=Count("id"))
+    }
+    global_admin_ids, instance_admin_ids = protected_ids(user_ids)
+    suspensions = suspensions_of(users)
+    rows = []
+    for user in users:
+        suspended_at = suspensions.get(user.id)
+        protection = protection_reason(
+            user,
+            actor_id=actor.id,
+            global_admin_ids=global_admin_ids,
+            instance_admin_ids=instance_admin_ids,
+        )
+        rows.append(
+            {
+                "user_id": str(user.id),
+                "display_name": user.display_name,
+                "email": user.email,
+                "avatar_url": user.avatar_url,
+                "is_active": user.is_active,
+                "is_bot": user.is_bot,
+                "is_global_admin": user.id in global_admin_ids,
+                "workspace_count": workspace_counts.get(user.id, 0),
+                "project_count": project_counts.get(user.id, 0),
+                "last_active": user.last_active.isoformat() if user.last_active else None,
+                # G2.2 R15a: switched off by a PPM global administrator (not Plane's own self-deactivation), and what
+                # the center may do with the person — the web shows «Отключить» / «Включить» by these two flags.
+                "is_suspended": suspended_at is not None,
+                "suspended_at": suspended_at.isoformat() if suspended_at else None,
+                "can_suspend": user.is_active and protection is None,
+                "can_resume": suspended_at is not None,
+            }
+        )
+    return rows
+
+
+class PpmAdminUserSuspendView(PpmAdminAPIView):
+    """G2.2 R15a «Отключить»: the person can no longer sign in to PPM and to the Git server; sessions end."""
+
+    def post(self, request, user_id):
+        data = request.data if isinstance(request.data, dict) else {}
+        reason = data.get("reason")
+        if reason is None:
+            reason = ""
+        if not isinstance(reason, str) or len(reason.strip()) > REASON_MAX_LENGTH:
+            return ppm_error_response(
+                request,
+                code="ADMIN_SUSPEND_REASON_INVALID",
+                message=f"Причина — необязательный текст не длиннее {REASON_MAX_LENGTH} символов.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        reason = reason.strip()
+        try:
+            with transaction.atomic():
+                user, change = suspend_user(user_id, actor=request.user, reason=reason)
+                if change is not None:
+                    self.audit(
+                        request,
+                        "user_suspended",
+                        metadata={
+                            "user_id": str(user.id),
+                            "email": user.email,
+                            "reason": reason,
+                            "sessions_ended": change["sessions_ended"],
+                        },
+                    )
+        except SuspensionRefused as refused:
+            return refused_response(request, refused)
+        return Response(admin_user_rows(request.user, [user])[0], status=status.HTTP_200_OK)
+
+
+class PpmAdminUserResumeView(PpmAdminAPIView):
+    """G2.2 R15a «Включить»: sign-in to PPM returns; the Git server's synchronization restores access."""
+
+    def post(self, request, user_id):
+        try:
+            with transaction.atomic():
+                user, change = resume_user(user_id)
+                if change is not None:
+                    self.audit(
+                        request,
+                        "user_resumed",
+                        metadata={
+                            "user_id": str(user.id),
+                            "email": user.email,
+                            "suspended_at": change["suspended_at"],
+                        },
+                    )
+        except SuspensionRefused as refused:
+            return refused_response(request, refused)
+        return Response(admin_user_rows(request.user, [user])[0], status=status.HTTP_200_OK)
+
+
+def refused_response(request, refused):
+    return ppm_error_response(
+        request,
+        code=refused.code,
+        message=refused.message,
+        status_code=refused.status_code,
+        details=refused.details,
+    )
 
 
 class PpmAdminAuditListView(PpmAdminAPIView):

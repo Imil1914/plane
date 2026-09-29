@@ -676,6 +676,12 @@ cfg="$(sso_cfg "$genv")"
   || fail "emergency sign-in: $(sso_cfg "$emerg" | grep '^forgejo')"
 ssooff="$tmp/ssooff.env"; cp -p "$genv" "$ssooff"; cp -p "$tmp/git.backup-passphrase" "$tmp/ssooff.backup-passphrase"
 rawput "$ssooff" PPM_BACKUP_PASSPHRASE_FILE ssooff.backup-passphrase; rawput "$ssooff" PPM_GIT_SSO_ENABLED 0
+landing() { compose_json "$1" | python3 -c '
+import json, sys
+print(json.load(sys.stdin)["services"]["forgejo"]["environment"].get("FORGEJO__server__LANDING_PAGE", "-"))'; }
+[[ "$(landing "$genv")" == login && "$(landing "$ssooff")" == - && "$(landing "$tmp/rc2.orig")" == - ]] \
+  && pass "sign-in on: an anonymous visitor of the Git server lands on its sign-in page (the «Войти через PPM» button), not the showcase" \
+  || fail "landing page: on=$(landing "$genv") off=$(landing "$ssooff") rc2=$(landing "$tmp/rc2.orig")"
 for pair in "ssooff:$ssooff" "rc2:$tmp/rc2.orig"; do
   cfg="$(sso_cfg "${pair#*:}")"
   [[ "$cfg" == *"forgejo -,-,-,-,- false basic:default"* && "$(grep -c '^\(api\|worker\|beat-worker\) -,-,- False False$' <<<"$cfg")" == 3 ]] \
@@ -943,7 +949,8 @@ creds="$PPM_RUNTIME_DIR/ppm-cli-gb/forgejo-admin-credentials.txt"
   || fail "reset-password: rc=$rc, got: $(tail -n 2 <<<"$out" | tr '\n' ' ')"
 : >"$fakelog"; rm -f "$creds"
 out="$(run gfake "$deploy" --env-file "$gb" git-admin --username owner --email owner@gb.localhost)" && rc=0 || rc=$?
-((rc == 0)) && [[ "$(sed -n 's/^password=//p' "$creds")" == "$adminpw" ]] && no_secret_in "$out" "$adminpw" \
+((rc == 0)) && [[ "$(sed -n 's/^password=//p' "$creds")" == "$adminpw" && "$out" != *PPM_GIT_LOCAL_SIGNIN* ]] \
+  && no_secret_in "$out" "$adminpw" \
   && pass "git-admin creates the administrator with Forgejo's own random password (no argument carries it)" \
   || fail "git-admin create: rc=$rc, got: $(tail -n 2 <<<"$out" | tr '\n' ' ')"
 : >"$fakelog"
@@ -1158,6 +1165,17 @@ out="$(run sfake "$deploy" --env-file "$emergency" up)" && rc=0 || rc=$?
 ((rc == 0)) && [[ "$out" == *"аварийный вход"* && "$out" == *"PPM_GIT_LOCAL_SIGNIN 0"* ]] \
   && pass "up with the emergency password form on warns (in Russian) until it is switched off again" \
   || fail "emergency up: rc=$rc, got: $(tail -n 2 <<<"$out" | tr '\n' ' ')"
+rm -f "$PPM_RUNTIME_DIR/ppm-cli-sso/forgejo-admin-credentials.txt"
+out="$(run sfake "$deploy" --env-file "$sso" git-admin --username git-admin --email git-admin@noreply.git.sso.localhost)" && rc=0 || rc=$?
+((rc == 0)) && [[ "$out" == *"PPM_GIT_LOCAL_SIGNIN 1"* && "$out" == *"PPM_GIT_LOCAL_SIGNIN 0"* ]] && no_secret_in "$out" "$adminpw" \
+  && pass "git-admin with sign-in through PPM: says the password form is hidden and how to open it for this sign-in (and close it)" \
+  || fail "git-admin hint with SSO: rc=$rc, got: $(tail -n 3 <<<"$out" | tr '\n' ' ')"
+rm -f "$PPM_RUNTIME_DIR/ppm-cli-sso/forgejo-admin-credentials.txt"
+out="$(run sfake "$deploy" --env-file "$emergency" git-admin --username git-admin --email git-admin@noreply.git.sso.localhost)" && rc=0 || rc=$?
+((rc == 0)) && [[ "$out" != *"PPM_GIT_LOCAL_SIGNIN 1"* && "$out" == *"PPM_GIT_LOCAL_SIGNIN 0"* ]] \
+  && pass "  ... with the password form already on: no «switch it on», only the reminder to switch it off afterwards" \
+  || fail "  ... git-admin hint with the form on: rc=$rc, got: $(tail -n 3 <<<"$out" | tr '\n' ' ')"
+rm -f "$PPM_RUNTIME_DIR/ppm-cli-sso/forgejo-admin-credentials.txt"
 fresh="$tmp/fresh.env"; run "$envtool" init --domain fresh.localhost --output "$fresh" --project ppm-cli-fresh --release cli >/dev/null
 : >"$fakelog"
 out="$(run sfake "$deploy" --env-file "$fresh" up)" && rc=0 || rc=$?

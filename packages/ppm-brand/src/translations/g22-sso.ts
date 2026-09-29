@@ -56,6 +56,8 @@ export const G22_SSO_TRANSLATIONS = {
     "g22.admin.git_problem_kind_organization": "Organization",
     "g22.admin.git_problem_kind_project": "Project",
     "g22.admin.git_problem_kind_team": "Team",
+    // Round 2 (Minor D-3): was missing.
+    "g22.admin.git_problem_kind_repository": "Repository",
     "g22.admin.git_problem_kind_forgejo": "Git server",
     "g22.admin.git_problem_kind_ppm": "PPM",
   },
@@ -99,6 +101,7 @@ export const G22_SSO_TRANSLATIONS = {
     "g22.admin.git_problem_kind_organization": "Организация",
     "g22.admin.git_problem_kind_project": "Проект",
     "g22.admin.git_problem_kind_team": "Команда",
+    "g22.admin.git_problem_kind_repository": "Репозиторий",
     "g22.admin.git_problem_kind_forgejo": "Git-сервер",
     "g22.admin.git_problem_kind_ppm": "PPM",
   },

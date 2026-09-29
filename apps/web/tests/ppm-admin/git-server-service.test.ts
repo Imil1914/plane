@@ -2,7 +2,9 @@
 // docs/superpowers/plans/2026-09-29-g22-sso/plan.md (that API is built by line S2b — answers are faked here, as
 // forgejo-service.test.ts already does for the sibling «Код» service). Review round 1 (Important #2): `counts` is
 // the plan's fixed five fields (`accounts`/`organizations`/`teams`/`repositories`/`changes`), not an open
-// dictionary — each one `.catch(0)`s independently so a momentarily incomplete answer from S2 still renders.
+// dictionary. Round 2 (reconciled with S2b, live-stack E): each one is `number | null` — `null` means "the sync
+// engine does not know this number yet", not zero (`ppm-git-server-status.helper.ts`'s `formatCount` shows «—» for
+// it) — `.catch(null)` treats anything else unexpected (wrong type, or momentarily missing) the same honest way.
 import { AxiosError, AxiosHeaders } from "axios";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -52,7 +54,24 @@ describe("PPM Git-server status contract", () => {
     });
   });
 
-  it("defaults a count the answer left out to 0, instead of failing the whole status", () => {
+  it("accepts an explicit null count — unknown, not zero", () => {
+    const result = ppmAdminGitServerStatusSchema.parse({
+      configured: true,
+      sso_enabled: true,
+      reachable: true,
+      last_full_sync: {
+        started_at: "2026-09-29T02:00:00+03:00",
+        finished_at: "2026-09-29T02:00:07+03:00",
+        status: "partial",
+        counts: { accounts: 12, organizations: null, teams: 9, repositories: 21, changes: 4 },
+      },
+      problems: [],
+      forgejo_admin_url: null,
+    });
+    expect(result.last_full_sync?.counts.organizations).toBeNull();
+  });
+
+  it("a count the answer left out reads as null (unknown), not 0, instead of failing the whole status", () => {
     const result = ppmAdminGitServerStatusSchema.parse({
       configured: true,
       sso_enabled: true,
@@ -68,10 +87,10 @@ describe("PPM Git-server status contract", () => {
     });
     expect(result.last_full_sync?.counts).toEqual({
       accounts: 12,
-      organizations: 0,
-      teams: 0,
-      repositories: 0,
-      changes: 0,
+      organizations: null,
+      teams: null,
+      repositories: null,
+      changes: null,
     });
   });
 
@@ -119,7 +138,7 @@ describe("PPM Git-server status contract", () => {
     ).toThrow();
   });
 
-  it("a count that is not a number reads as 0 rather than failing the whole status (same .catch(0) resilience)", () => {
+  it("a count that is neither a number nor null reads as null (unknown) rather than failing the whole status", () => {
     const result = ppmAdminGitServerStatusSchema.parse({
       configured: true,
       sso_enabled: true,
@@ -133,7 +152,7 @@ describe("PPM Git-server status contract", () => {
         counts: { accounts: "12", organizations: 3, teams: 9, repositories: 21, changes: 4 },
       },
     });
-    expect(result.last_full_sync?.counts.accounts).toBe(0);
+    expect(result.last_full_sync?.counts.accounts).toBeNull();
     expect(result.last_full_sync?.counts.organizations).toBe(3);
   });
 

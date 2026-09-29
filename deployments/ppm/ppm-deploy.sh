@@ -23,7 +23,9 @@
 #                            ppm-bot (→ ppm.env; --rotate-token renews both tokens), then a first full sync of access
 #   git-admin --username U --email E [--reset-password]
 #                            Forgejo administrator for the owner: random one-time password (changed at the first
-#                            sign-in), written only to .runtime/<project>/forgejo-admin-credentials.txt (600)
+#                            sign-in), written only to .runtime/<project>/forgejo-admin-credentials.txt (600). With
+#                            sign-in through PPM it is the emergency administrator: the Git server's password form is
+#                            hidden until PPM_GIT_LOCAL_SIGNIN=1 + up (RUNBOOK §17.4, §17.14.6)
 #   restart                  stop + start in dependency order (data kept), wait, preflight
 #   release <name> [--allow-git-site-loss]
 #                            switch PPM_RELEASE (upgrade or rollback of the application; data and schema kept). With
@@ -1134,6 +1136,14 @@ cmd_git_admin() {
   password=""
   echo "ppm-deploy: Forgejo administrator $git_admin_username $action; the one-time password is in $creds (mode 600, not printed)."
   echo "ppm-deploy: sign in at $(env_get PPM_GIT_PUBLIC_URL)/ (from outside only after RUNBOOK §7), set your own password, then delete the file (RUNBOOK §17.4)."
+  if ((sso_enabled)); then
+    # With sign-in through PPM the Git server's password form is hidden: this account is the emergency administrator.
+    if [[ "$(env_get PPM_GIT_LOCAL_SIGNIN)" == 1 ]]; then
+      echo "ppm-deploy: the Git server's password form is on (PPM_GIT_LOCAL_SIGNIN=1): sign in with this password now; afterwards hide it again — ./ppm-env.sh set $env_file PPM_GIT_LOCAL_SIGNIN 0, then up (RUNBOOK §17.14.6)."
+    else
+      echo "ppm-deploy: sign-in through PPM is on, so the Git server shows no password form: to sign in with this password, open it for a while — ./ppm-env.sh set $env_file PPM_GIT_LOCAL_SIGNIN 1, then ./ppm-deploy.sh --env-file $env_file up; afterwards PPM_GIT_LOCAL_SIGNIN 0 and up again (RUNBOOK §17.4, §17.14.6)."
+    fi
+  fi
   ((rc == 0)) || die "the password was set, but revoking the temporary token of ppm-bot failed (reason above) — run git-bootstrap"
 }
 

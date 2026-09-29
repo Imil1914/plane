@@ -16,6 +16,7 @@ import { safeGitWebUrl } from "@/components/ppm-git/git-provider-labels";
 import { usePpmTranslation } from "@/hooks/use-ppm-translation";
 import { PpmAdminService, PpmAdminServiceError, type TPpmAdminGitServerProblem } from "@/services/ppm-admin.service";
 import {
+  formatCount,
   GIT_SERVER_COUNT_FIELDS,
   getProblemKindLabelKey,
   getSyncDurationSeconds,
@@ -182,7 +183,8 @@ export function GitServerPanel() {
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
               {GIT_SERVER_COUNT_FIELDS.map(({ key, labelKey }) => (
                 <div key={key} className="rounded-lg border border-subtle bg-layer-1 p-3 text-center">
-                  <p className="text-20 font-semibold text-primary">{data.last_full_sync?.counts[key] ?? 0}</p>
+                  {/* Round 2: null means "not known yet", not zero — formatCount shows "—" for it. */}
+                  <p className="text-20 font-semibold text-primary">{formatCount(data.last_full_sync?.counts[key])}</p>
                   <p className="mt-1 text-11 text-tertiary">{ppmT(labelKey)}</p>
                 </div>
               ))}

@@ -794,8 +794,11 @@ export class PpmGitService extends APIService {
 // G2.1: the contract errors of our Git server in plain Russian. The code wins over the status: a not-configured
 // server answers 400 like any invalid request.
 const PPM_FORGEJO_ERROR_MESSAGES = {
-  // G2.2 review round 1 (#7): under single sign-on a project administrator may also connect (R17) — a flat "only
-  // the PPM administrator" would misinform them about their own 403 (e.g. no Forgejo-admin rights on that org yet).
+  // Round 2 (live-stack E, reconciled with S2b): under single sign-on the reason a project administrator's own
+  // connect attempt was refused now varies by actor (no Forgejo-admin rights on that org, single sign-on off for
+  // their workspace, …) — S2b's own message says which, so it is shown as sent (see the fallback in the function
+  // below) rather than overwritten by one fixed sentence. This stays only as the last resort when the server did
+  // not send one at all.
   forbidden: "Подключать репозитории может только администратор проекта или администратор PPM.",
   notConfigured: "Git-сервер не настроен.",
   rateLimited: "Git-сервер просит подождать. Повторите чуть позже.",
@@ -822,7 +825,7 @@ export function getPpmForgejoErrorMessage({
 }): string {
   if (code === "FORGEJO_NOT_CONFIGURED") return PPM_FORGEJO_ERROR_MESSAGES.notConfigured;
   if (code === "FORGEJO_ACCOUNT_REQUIRED") return PPM_FORGEJO_ERROR_MESSAGES.accountRequired;
-  if (code === "GIT_PERMISSION_DENIED" || status === 403) return PPM_FORGEJO_ERROR_MESSAGES.forbidden;
+  if (code === "GIT_PERMISSION_DENIED" || status === 403) return message || PPM_FORGEJO_ERROR_MESSAGES.forbidden;
   if (code === "GIT_PROVIDER_RATE_LIMITED" || status === 429) return PPM_FORGEJO_ERROR_MESSAGES.rateLimited;
   if (code === "GIT_PROVIDER_UNAVAILABLE" || status === 502) return PPM_FORGEJO_ERROR_MESSAGES.unavailable;
   if (code === "GIT_REPOSITORY_CONFLICT" || status === 409) return PPM_FORGEJO_ERROR_MESSAGES.conflict;

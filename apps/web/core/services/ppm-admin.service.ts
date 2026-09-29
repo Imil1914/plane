@@ -70,6 +70,12 @@ export const ppmAdminUserSchema = z.object({
   workspace_count: z.number().int().nonnegative(),
   project_count: z.number().int().nonnegative(),
   last_active: nullableIsoDateSchema,
+  // G2.2 R15a: switched off by a PPM global administrator (not Plane's own self-deactivation), and which of
+  // «Отключить» / «Включить» the center offers. Defaults keep an answer without them readable — no buttons then.
+  is_suspended: z.boolean().default(false),
+  suspended_at: nullableIsoDateSchema.default(null),
+  can_suspend: z.boolean().default(false),
+  can_resume: z.boolean().default(false),
 });
 
 export const ppmAdminUsersResponseSchema = z.object({
@@ -104,14 +110,18 @@ export const ppmAdminAuditResponseSchema = z.object({
 export const PPM_ADMIN_GIT_SERVER_SYNC_STATUSES = ["ok", "partial", "error"] as const;
 export const ppmAdminGitServerSyncStatusSchema = z.enum(PPM_ADMIN_GIT_SERVER_SYNC_STATUSES);
 
-// Review round 1 (Important #2): the plan fixes exactly these five counts — no longer an open dictionary. `.catch(0)`
-// keeps the panel's five tiles rendering even if S2's answer is momentarily missing one during integration.
+// Review round 1 (Important #2): the plan fixes exactly these five counts — no longer an open dictionary.
+// Round 2 (reconciled with S2b, live-stack E): a count is `number | null` — `null` means the sync engine does not
+// know that number yet, not that it is zero (`formatCount` shows it as «—»). `.catch(null)` treats anything else
+// unexpected (wrong type, or the key missing from a momentarily incomplete answer) the same honest way, instead of
+// fabricating a 0.
+const ppmAdminGitServerCountSchema = z.number().nullable().catch(null);
 const ppmAdminGitServerCountsSchema = z.object({
-  accounts: z.number().catch(0),
-  organizations: z.number().catch(0),
-  teams: z.number().catch(0),
-  repositories: z.number().catch(0),
-  changes: z.number().catch(0),
+  accounts: ppmAdminGitServerCountSchema,
+  organizations: ppmAdminGitServerCountSchema,
+  teams: ppmAdminGitServerCountSchema,
+  repositories: ppmAdminGitServerCountSchema,
+  changes: ppmAdminGitServerCountSchema,
 });
 
 const ppmAdminGitServerLastSyncSchema = z.object({
@@ -214,6 +224,26 @@ export class PpmAdminService extends APIService {
         params: { q: query, page, page_size: 25 },
       });
       return ppmAdminUsersResponseSchema.parse(response.data);
+    } catch (error) {
+      throw normalizeAdminError(error);
+    }
+  }
+
+  /** G2.2 R15a «Отключить»: the person can no longer sign in to PPM and to the Git server. Answers the updated row. */
+  async suspendUser(userId: string): Promise<TPpmAdminUser> {
+    try {
+      const response = await this.post(`/api/ppm/v1/admin/users/${encodeURIComponent(userId)}/suspend/`);
+      return ppmAdminUserSchema.parse(response.data);
+    } catch (error) {
+      throw normalizeAdminError(error);
+    }
+  }
+
+  /** G2.2 R15a «Включить»: sign-in returns, access to code follows with the Git server's sync. Answers the row. */
+  async resumeUser(userId: string): Promise<TPpmAdminUser> {
+    try {
+      const response = await this.post(`/api/ppm/v1/admin/users/${encodeURIComponent(userId)}/resume/`);
+      return ppmAdminUserSchema.parse(response.data);
     } catch (error) {
       throw normalizeAdminError(error);
     }

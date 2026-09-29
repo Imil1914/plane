@@ -7,6 +7,8 @@ from .admin_views import (
     PpmAdminProjectListView,
     PpmAdminReauthenticateView,
     PpmAdminUserListView,
+    PpmAdminUserResumeView,
+    PpmAdminUserSuspendView,
 )
 
 
@@ -19,6 +21,16 @@ urlpatterns = [
         name="ppm-admin-project-enter",
     ),
     path("admin/users/", PpmAdminUserListView.as_view(), name="ppm-admin-users"),
+    path(
+        "admin/users/<uuid:user_id>/suspend/",
+        PpmAdminUserSuspendView.as_view(),
+        name="ppm-admin-user-suspend",
+    ),
+    path(
+        "admin/users/<uuid:user_id>/resume/",
+        PpmAdminUserResumeView.as_view(),
+        name="ppm-admin-user-resume",
+    ),
     path("admin/audit/", PpmAdminAuditListView.as_view(), name="ppm-admin-audit"),
     path("admin/reauthenticate/", PpmAdminReauthenticateView.as_view(), name="ppm-admin-reauthenticate"),
 ]

@@ -2,6 +2,7 @@
 // git-provider-labels.ts's tests for the «Код» page).
 import { describe, expect, it } from "vitest";
 import {
+  formatCount,
   GIT_SERVER_COUNT_FIELDS,
   getProblemKindLabelKey,
   getSyncDurationSeconds,
@@ -47,11 +48,12 @@ describe("GIT_SERVER_COUNT_FIELDS", () => {
 });
 
 describe("getProblemKindLabelKey", () => {
-  it("names the six problem kinds round 1 asks for", () => {
+  it("names the seven problem kinds (round 1's six plus round 2's repository, D-3)", () => {
     expect(getProblemKindLabelKey("account")).toBe("g22.admin.git_problem_kind_account");
     expect(getProblemKindLabelKey("organization")).toBe("g22.admin.git_problem_kind_organization");
     expect(getProblemKindLabelKey("project")).toBe("g22.admin.git_problem_kind_project");
     expect(getProblemKindLabelKey("team")).toBe("g22.admin.git_problem_kind_team");
+    expect(getProblemKindLabelKey("repository")).toBe("g22.admin.git_problem_kind_repository");
     expect(getProblemKindLabelKey("forgejo")).toBe("g22.admin.git_problem_kind_forgejo");
     expect(getProblemKindLabelKey("ppm")).toBe("g22.admin.git_problem_kind_ppm");
   });
@@ -73,6 +75,19 @@ describe("isUuidLike", () => {
     expect(isUuidLike("robot")).toBe(false);
     expect(isUuidLike("lab/robot")).toBe(false);
     expect(isUuidLike("")).toBe(false);
+  });
+});
+
+// Round 2 (live-stack E, reconciled with S2b): a count of null means "not known yet", never displayed as 0.
+describe("formatCount", () => {
+  it("shows the number as-is, including zero", () => {
+    expect(formatCount(0)).toBe("0");
+    expect(formatCount(21)).toBe("21");
+  });
+
+  it("shows an em dash for null or undefined — never fabricates a 0", () => {
+    expect(formatCount(null)).toBe("—");
+    expect(formatCount(undefined)).toBe("—");
   });
 });
 

@@ -132,6 +132,12 @@ describe("wiring: every place that reads next_path after a sign-in", () => {
       /useEffect\(\(\) => \{\s*if \(!shouldRedirectForOidc[^}]*shouldFireOidcRedirectOnce\(hasRedirectedForOidcRef\)\) redirectToPpmOidcNextPath\(nextPath\);\s*\}, \[shouldRedirectForOidc, nextPath\]\);/
     );
     expect(source).toContain("const hasRedirectedForOidcRef = useRef(false);");
+    // Round 2 (Critical D-1, live-stack E): must also require an actual session — otherwise an anonymous visitor on
+    // /?next_path=/auth/oidc/continue/<id>/ never even sees the sign-in form: the effect fired regardless and burned
+    // the (session-bound) id, bouncing back to sign-in until S1's MAX_ANONYMOUS_VISITS gave up with the expired page.
+    expect(source).toContain(
+      "const shouldRedirectForOidc =\n    pageType === EPageTypes.NON_AUTHENTICATED && Boolean(currentUser?.id) && isPpmOidcReturnPath(nextPath);"
+    );
     // The redirect call itself must be inside that effect, not directly in the NON_AUTHENTICATED branch below.
     const effectStart = source.indexOf("useEffect(() => {\n    if (!shouldRedirectForOidc");
     const nonAuthenticatedStart = source.indexOf("if (pageType === EPageTypes.NON_AUTHENTICATED)");
@@ -157,6 +163,35 @@ describe("wiring: every place that reads next_path after a sign-in", () => {
     const source = read("../../core/lib/wrappers/authentication-wrapper.tsx");
     expect(source).toContain("router.push(currentRedirectRoute);");
     expect(source).toContain('router.push("/onboarding");');
+  });
+
+  // Round 2 (Critical D-1): the three scenarios the fix must produce, checked at the source level (no jsdom in this
+  // project — see the file header). Each assertion pins one structural guarantee that together add up to the
+  // required behaviour: anonymous sees the form and nothing redirects; loading shows neither the form nor a
+  // redirect; only an authenticated visit with the exact continuation path redirects, exactly once.
+  describe("anonymous sees the sign-in form, an authenticated visit redirects once, loading redirects never early", () => {
+    const source = read("../../core/lib/wrappers/authentication-wrapper.tsx");
+
+    it("an anonymous visitor (no currentUser.id) cannot reach the redirect: shouldRedirectForOidc is false for them", () => {
+      // Boolean(currentUser?.id) is false while currentUser is undefined (anonymous or still loading) and while it
+      // resolves to a user object without an id — the only way to make the whole && chain true is an actual session.
+      expect(source).toContain("Boolean(currentUser?.id) && isPpmOidcReturnPath(nextPath)");
+    });
+
+    it("the top-level loading gate renders neither the form nor any pageType branch while the session is unresolved", () => {
+      // isUserSWRLoading/isUserLoading/workspacesLoader with !currentUser?.id ⇒ a spinner, not this component's own
+      // NON_AUTHENTICATED branch — so neither the anonymous "show children" branch nor the OIDC redirect's effect
+      // dependency (shouldRedirectForOidc) can be evaluated against a still-loading, not-yet-real currentUser first.
+      const loadingGateStart = source.indexOf("if ((isUserSWRLoading || isUserLoading || workspacesLoader)");
+      const nonAuthenticatedStart = source.indexOf("if (pageType === EPageTypes.NON_AUTHENTICATED)");
+      expect(loadingGateStart).toBeGreaterThan(-1);
+      expect(loadingGateStart).toBeLessThan(nonAuthenticatedStart);
+      expect(source.slice(loadingGateStart, nonAuthenticatedStart)).toContain("!currentUser?.id");
+    });
+
+    it("an authenticated visit redirects exactly once: the effect's own ref guard, re-armed only by a fresh mount", () => {
+      expect(source).toContain("shouldFireOidcRedirectOnce(hasRedirectedForOidcRef)");
+    });
   });
 
   it("form-root.tsx still reads next_path from the URL and forwards it as a prop (unchanged: no client redirect here)", () => {
